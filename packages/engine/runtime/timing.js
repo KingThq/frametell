@@ -22,6 +22,23 @@
     return Math.max(1.3, units(text) / CPS + commas(text) * COMMA + BREATH);
   }
 
+  /**
+   * When a word inside a cue is spoken (absolute seconds). With real voice, cue.k holds per-character onsets in seconds
+   * from the start of the cue's audio (one entry per character of the cue text, Array.from order); without it the onset
+   * is estimated from the spoken units before the word. nth picks a later repeat of the word.
+   */
+  function wordTime(cue, word, nth = 0) {
+    const chars = Array.from(cue.text);
+    let from = 0, idx = -1;
+    for (let n = 0; n <= nth; n++) { idx = cue.text.indexOf(word, from); if (idx < 0) break; from = idx + word.length; }
+    if (idx < 0) return cue.start;   // unknown word: fall back to the cue onset rather than failing the page
+    const ci = Array.from(cue.text.slice(0, idx)).length;
+    if (cue.k && cue.k.length === chars.length) return (cue.audioAt ?? cue.start) + cue.k[ci];
+    const total = units(cue.text) || 1;
+    const spoken = (cue.dur ?? cue.end - cue.start) * 0.92;
+    return cue.start + (units(cue.text.slice(0, idx)) / total) * spoken;
+  }
+
   /** Display form for subtitles: drop trailing soft punctuation. */
   function subText(text) {
     return text.replace(/[，。；：、,.;:]+$/u, '').replace(/——$/u, '');
@@ -48,7 +65,7 @@
         if (v && v.o != null) {
           // cut from a whole-page utterance: the segment already holds its natural pauses (v.o = speech onset inside it)
           const h = ci === pg.cues.length - 1 || v.join ? 0 : Math.min(hold, V.maxHold);   // join: spoken straight into the next cue
-          const cue = { text, sub: subText(text), start: ct + v.o, end: ct + v.d, hold: h, audio: v.f, audioAt: ct, dur: v.d };
+          const cue = { text, sub: subText(text), start: ct + v.o, end: ct + v.d, hold: h, audio: v.f, audioAt: ct, dur: v.d, k: v.k };
           ct += v.d + h;
           return cue;
         }
@@ -56,7 +73,7 @@
           // the page's last cue: no hold, short pause — the page turn itself is the breath
           const lastCue = ci === pg.cues.length - 1;
           const pause = lastCue ? VOICE.pageEnd : /[。？！?!.]$/.test(text) ? VOICE.stop : VOICE.comma, h = lastCue ? 0 : Math.min(hold, V.maxHold);
-          const cue = { text, sub: subText(text), start: ct, end: ct + v.d + pause * 0.9, hold: h, audio: v.f, dur: v.d };
+          const cue = { text, sub: subText(text), start: ct, end: ct + v.d + pause * 0.9, hold: h, audio: v.f, audioAt: ct, dur: v.d, k: v.k };
           ct += v.d + pause + h;
           return cue;
         }
@@ -96,5 +113,5 @@
     })));
   }
 
-  root.TIMING = { CPS, BREATH, LEAD, GAP, FADE, VOICE, units, cueDur, subText, layout, sfxTimes };
+  root.TIMING = { CPS, BREATH, LEAD, GAP, FADE, VOICE, units, cueDur, subText, wordTime, layout, sfxTimes };
 })(typeof window !== 'undefined' ? window : globalThis);

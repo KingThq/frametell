@@ -41,15 +41,24 @@
   }
 
   // ── camera ───────────────────────────────────────────────
+  // key.ease: 'inOut' (default, a calm move) · 'out' (pulse: fast, then settle) · 'slam' (lands past the target, settles back)
+  // key.shake: { amp, dur } — a short deterministic jolt starting at key.at (no target, keeps the current framing)
+  const SLAM = (x) => (x < 0.55 ? lerp(0, 1.08, ease.out(x / 0.55)) : lerp(1.08, 1, ease.inOut((x - 0.55) / 0.45)));
   function camAt(keys, lt) {
     const CX = STAGE.w / 2, CY = STAGE.h / 2;
-    let st = { x: CX, y: CY, s: 1 };
+    let st = { x: CX, y: CY, s: 1 }, jx = 0, jy = 0;
     for (const k of keys) {
       if (lt <= k.at) break;
-      const e = ease.inOut(clamp((lt - k.at) / (k.dur ?? 1.2)));
-      st = { x: lerp(st.x, k.x ?? CX, e), y: lerp(st.y, k.y ?? CY, e), s: lerp(st.s, k.s ?? 1, e) };
+      if (k.shake) {
+        const p = (lt - k.at) / (k.shake.dur ?? 0.25);
+        if (p < 1) { const a = (k.shake.amp ?? 10) * (1 - p); jx += a * Math.sin(p * 47); jy += a * Math.cos(p * 39); }
+        continue;
+      }
+      const x = clamp((lt - k.at) / (k.dur ?? 1.2));
+      const e = k.ease === 'slam' ? SLAM(x) : (ease[k.ease] || ease.inOut)(x);
+      st = { x: lerp(st.x, k.x ?? CX, e), y: lerp(st.y, k.y ?? CY, e), s: k.keepScale ? st.s : lerp(st.s, k.s ?? 1, e) };
     }
-    return st;
+    return { x: st.x - jx / st.s, y: st.y - jy / st.s, s: st.s };
   }
 
   // ── lifecycle ────────────────────────────────────────────

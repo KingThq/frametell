@@ -66,6 +66,8 @@
     }
     // ── time helpers
     c(i, dt = 0) { const q = this.page.cues[Math.min(i, this.page.cues.length - 1)]; return q.start - this.page.start + dt; }
+    /** Page-local time when `word` is spoken in cue i (word-level sync: a number lands exactly as it is said). */
+    cw(i, word, dt = 0, nth = 0) { const q = this.page.cues[Math.min(i, this.page.cues.length - 1)]; return TIMING.wordTime(q, word, nth) - this.page.start + dt; }
     ce(i, dt = 0) { const q = this.page.cues[Math.min(i, this.page.cues.length - 1)]; return q.end - this.page.start + dt; }
     get endT() { return this.page.speechEnd - this.page.start; }
     seed() { return ++this.sh.seed; }
@@ -291,6 +293,13 @@
 
     /** Camera keyframes for the whole page: [{ at, x, y, s, dur }]. */
     cam(keys) { this.sh.cams = keys; }
+    // pulse camera presets (stop, move fast, stop): each returns a key for P.cam([...]). Numbers from
+    // huashu-art-motion's camera table: push 0.28s to 1.18–1.32×, pan 0.30s at the same zoom, slam 0.17s, ≤ 2 shakes per film.
+    push(at, x, y, s = 1.25) { return { at, x, y, s, dur: 0.28, ease: 'out' }; }
+    pan(at, x, y, s) { return s == null ? { at, x, y, keepScale: true, dur: 0.3, ease: 'out' } : { at, x, y, s, dur: 0.3, ease: 'out' }; }
+    slam(at, x, y, s = 1.2) { return { at, x, y, s, dur: 0.17 * 2.2, ease: 'slam' }; }
+    shake(at, amp = 10, dur = 0.25) { return { at, shake: { amp, dur } }; }
+    back(at, dur = 0.5) { return { at, x: STAGE.w / 2, y: STAGE.h / 2, s: 1, dur, ease: 'out' }; }
   }
 
   function applyAct(a, lt) {

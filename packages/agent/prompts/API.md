@@ -1,4 +1,4 @@
-# kit 画面 API 速查（Frametell）
+# 画面 API 速查（Frametell）
 
 ## 写画面（pages/pNN.js）
 
@@ -14,7 +14,7 @@ ENGINE.visual('p22', (P) => {
 ```
 
 **坐标**：画布 1920×1080，左上为原点；内容区大约 x 140–1780、y 180–880（上方是页标题，下方留给字幕）。
-**时间**：页内秒数。`P.c(i, dt)` = 第 i 句开口时刻 + dt；`P.ce(i)` = 第 i 句结束；`P.endT` = 本页口播结束。
+**时间**：页内秒数。`P.c(i, dt)` = 第 i 句开口时刻 + dt；`P.cw(i, '30年', dt)` = 第 i 句念到「30年」的时刻（词级卡点：数字的计数要在念到它时落定，起点写 `P.cw(i, '30年') - 计数时长`）；`P.ce(i)` = 第 i 句结束；`P.endT` = 本页口播结束。
 **颜色**：`ink soft muted faint`（墨色由深到浅）、`blue orange red green purple`，加 `F` 是对应浅色填充（`blueF`），另有 `paper yellow`。
 
 | 原语 | 用法 |
@@ -39,7 +39,8 @@ ENGINE.visual('p22', (P) => {
 | `P.bubble(x,y,w,str,{ side:'l'\|'r' })` / `P.chip` / `P.card(x,y,w,h,{ title })` / `P.keycap(x,y,label,{ press })` / `P.stamp(x,y,str)` / `P.live(x,y,lt=>str)` / `P.pulse(el,t)` | 组件 |
 | `P.layer()` → 子 Builder，`.wrap` 可整体移动/淡出；配合 `P.tick(lt => …)` 做分段切换（例：02/p01） | 一页内换场 |
 | `handle.hide(t, dur)` | 某元素在 t 时淡出 |
-| `P.cam([{ at, x, y, s, dur }])` | 镜头推拉（例：02/p33） |
+| `P.cam([{ at, x, y, s, dur, ease }])` | 镜头关键帧。`ease`：`'inOut'`（默认，平稳）· `'out'`（脉冲：快动后停住）· `'slam'`（冲过头再回落） |
+| `P.push(at, x, y, s=1.25)` / `P.pan(at, x, y)` / `P.slam(at, x, y, s=1.2)` / `P.shake(at, amp=10)` / `P.back(at)` | 脉冲镜头预设，放进 `P.cam([...])`：快推 0.28s、同倍率横移 0.30s、砸入、震镜（每片 ≤ 2 次）、回到全景。停住→快动→停住，不做整页匀速慢推 |
 | 所有原语共有 | `at` 开始时刻、`dur` 描绘时长 |
 
 需要新图标：在 `doodles.js` 的 `F` 里加一个 `name: (u, o) => [...]`（100×100、中心为原点的单位框）。
