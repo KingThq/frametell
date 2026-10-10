@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import { FFMPEG, findChrome } from '@frametell/engine/tools/bins.mjs';
 
-export interface Check { id: 'chrome' | 'ffmpeg' | 'git' | 'node'; ok: boolean; detail: string; fix?: string }
+import type { EnvCheck as Check } from './types.js';
 
 export function checkEnv(): Check[] {
   const chrome = findChrome();

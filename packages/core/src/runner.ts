@@ -8,30 +8,15 @@ import { createProject, linkProject } from '@frametell/engine/tools/project.mjs'
 import { createCatalog, RELAY_BASE_URL } from '@frametell/models';
 import { elevenLabsTts, volcengineTts } from '@frametell/voice';
 import { Director, piRuntime, claudeRuntime, codexRuntime, type AgentRuntime, type StudioEvent, type Storyboard } from '@frametell/agent';
-import { PROJECTS_DIR, loadConfig, type RuntimeId, type VoiceChoice } from './config.js';
+import { PROJECTS_DIR, loadConfig } from './config.js';
+import type { LoggedEvent, ProjectMeta, ProjectSummary, RunStatus } from './types.js';
 
-export interface ProjectMeta {
-  id: string;
-  title: string;
-  createdAt: string;
-  updatedAt: string;
-  style: string;
-  durationSec: number;
-  model: string;
-  runtime: RuntimeId;
-  voice?: VoiceChoice;
-  subtitles: boolean;
-  topic?: string;
-  notes?: string;
-  materials: string[];
-}
-export type RunStatus = 'idle' | 'running' | 'awaiting_approval' | 'done' | 'failed' | 'stopped';
-export type Logged = StudioEvent & { seq: number; at: number };
+export type Logged = LoggedEvent;
 
 const dirOf = (id: string) => path.join(PROJECTS_DIR, id);
 const metaFile = (id: string) => path.join(dirOf(id), '.studio', 'project.json');
 
-export function listProjects(): (ProjectMeta & { status: RunStatus; stage?: string; video?: string })[] {
+export function listProjects(): ProjectSummary[] {
   if (!fs.existsSync(PROJECTS_DIR)) return [];
   return fs.readdirSync(PROJECTS_DIR)
     .filter((id) => fs.existsSync(metaFile(id)))

@@ -5,13 +5,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { CustomProviderConfig } from '@frametell/models';
+import type { PublicSettings, RuntimeId, SettingsPatch, VoiceChoice } from './types.js';
 
 export const DATA_DIR = process.env.FRAMETELL_HOME || path.join(os.homedir(), '.frametell');
 export const PROJECTS_DIR = path.join(DATA_DIR, 'projects');
 const FILE = path.join(DATA_DIR, 'config.json');
 
-export type RuntimeId = 'pi' | 'claude-agent-sdk' | 'codex';
-export interface VoiceChoice { provider: 'volcengine' | 'elevenlabs'; id: string; name?: string }
 
 export interface Config {
   /** API keys by provider id: relay, anthropic, openai, google, openrouter, vercel-ai-gateway, volcengine-ark, … */
@@ -52,7 +51,7 @@ export function saveConfig(c: Config) {
 export const mask = (k?: string) => (!k ? '' : k.length <= 12 ? '••••' : `${k.slice(0, 8)}…${k.slice(-4)}`);
 
 /** What the panel may see: keys reduced to masked hints. */
-export function publicConfig(c: Config) {
+export function publicConfig(c: Config): PublicSettings {
   return {
     keys: Object.fromEntries(Object.entries(c.keys).filter(([, v]) => v).map(([k, v]) => [k, mask(v)])),
     custom: c.custom,
@@ -62,7 +61,7 @@ export function publicConfig(c: Config) {
 }
 
 /** Apply a settings patch from the panel; empty-string keys remove a key, absent keys are left alone. */
-export function patchConfig(c: Config, patch: { keys?: Record<string, string>; tts?: Partial<Config['tts']>; custom?: CustomProviderConfig[]; defaults?: Partial<Config['defaults']> }): Config {
+export function patchConfig(c: Config, patch: SettingsPatch & { custom?: CustomProviderConfig[] }): Config {
   const next = structuredClone(c);
   for (const [k, v] of Object.entries(patch.keys || {})) { if (v) next.keys[k] = v.trim(); else delete next.keys[k]; }
   for (const [k, v] of Object.entries(patch.tts || {}) as [keyof Config['tts'], string][]) { if (v) next.tts[k] = v.trim(); else delete next.tts[k]; }

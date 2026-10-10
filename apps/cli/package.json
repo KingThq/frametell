@@ -21,6 +21,8 @@
     "@frametell/models": "workspace:*",
     "@frametell/voice": "workspace:*",
     "@hono/node-server": "1.19.5",
-    "hono": "4.9.12"
+    "hono": "4.9.12",
+    "@frametell/core": "workspace:*",
+    "@frametell/ui": "workspace:*"
   }
 }

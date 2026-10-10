@@ -1,6 +1,6 @@
 {
-  "name": "@frametell/web",
-  "private": true,
+  "name": "@frametell/ui",
+  "private": false,
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -24,6 +24,12 @@
     "postcss": "8.5.6",
     "tailwindcss": "3.4.17",
     "typescript": "5.9.3",
-    "vite": "7.1.7"
-  }
+    "vite": "7.1.7",
+    "@frametell/core": "workspace:*"
+  },
+  "description": "The Frametell panel (React). Talks to the core through StudioClient: HTTP + SSE in a browser, IPC inside the desktop app.",
+  "license": "MIT",
+  "files": [
+    "dist"
+  ]
 }
