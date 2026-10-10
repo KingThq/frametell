@@ -1,0 +1,109 @@
+/* Engine: lays out pages on the timeline, cross-fades between them, drives camera, the header and subtitles. */
+(function () {
+  const { h, clamp, lerp, smooth, ease, Builder, applyAct } = PV;
+  const visuals = {};
+  let layout, pages = [], frame, stage, chrome, subs;
+
+  function visual(id, fn) { visuals[id] = fn; }
+
+  // ── optional header: META.course · META.no | current section (no page counter) ──
+  function buildChrome(parent) {
+    const el = h('div', 'chrome', null, parent);
+    const meta = SCRIPT.META || {};
+    const no = meta.no ?? (decodeURIComponent(location.pathname).match(/-(\d+)\/index\.html$/) || [])[1] ?? '';
+    const left = h('div', 'ch-left', '<b></b><i>·</i><span class="ch-no"></span><em class="ch-sec"></em>', el);
+    left.querySelector('b').textContent = meta.course ?? '';
+    left.querySelector('.ch-no').textContent = no;
+    return { el, sec: left.querySelector('.ch-sec') };
+  }
+  function updateChrome(t) {
+    let cur = pages[0];
+    for (const p of pages) if (t >= p.pg.start - 0.3) cur = p;
+    const txt = cur.pg.section;
+    if (chrome.sec.textContent !== txt) chrome.sec.textContent = txt;
+    const prev = pages[cur.pg.index - 1];
+    const changed = !prev || prev.pg.section !== txt;
+    chrome.sec.style.opacity = changed ? smooth(cur.pg.start - 0.3, cur.pg.start + 0.4, t).toFixed(3) : '1';
+    chrome.el.style.opacity = smooth(0.2, 1.2, t).toFixed(3);
+    // a camera push-in could slide content under the header: fade in a paper band behind it
+    chrome.el.classList.toggle('masked', cur.sh.cams.length > 0 && t > cur.pg.start + (cur.sh.cams[0].at - 0.2));
+  }
+
+  // ── subtitles ─────────────────────────────────────────────
+  function updateSubs(t) {
+    if (!subs) return;
+    let txt = '';
+    for (const p of pages) {
+      if (t < p.pg.start || t > p.pg.end) continue;
+      for (const c of p.pg.cues) if (t >= c.start && t < c.end) txt = c.sub;
+    }
+    if (subs._t !== txt) { subs._t = txt; subs.firstChild.textContent = txt; subs.style.opacity = txt ? '1' : '0'; }
+  }
+
+  // ── camera ───────────────────────────────────────────────
+  function camAt(keys, lt) {
+    const CX = STAGE.w / 2, CY = STAGE.h / 2;
+    let st = { x: CX, y: CY, s: 1 };
+    for (const k of keys) {
+      if (lt <= k.at) break;
+      const e = ease.inOut(clamp((lt - k.at) / (k.dur ?? 1.2)));
+      st = { x: lerp(st.x, k.x ?? CX, e), y: lerp(st.y, k.y ?? CY, e), s: lerp(st.s, k.s ?? 1, e) };
+    }
+    return st;
+  }
+
+  // ── lifecycle ────────────────────────────────────────────
+  function init(opts = {}) {
+    frame = document.getElementById('frame');
+    stage = document.getElementById('stage');
+    stage.innerHTML = '';
+    pages = [];
+    for (const el of frame.querySelectorAll('.chrome, .subs')) el.remove();
+    layout = TIMING.layout(SCRIPT.PAGES, { ...(SCRIPT.META || {}), voice: SCRIPT.VOICE });
+    const only = opts.only ? new Set(opts.only) : null;
+    for (const pg of layout.pages) {
+      const root = h('div', 'page', null, stage);
+      const cam = h('div', 'cam', null, root);
+      const B = new Builder(pg, cam);
+      const obj = { pg, root, cam, sh: B.sh, B, vis: 0 };
+      if (!only || only.has(pg.id)) {
+        const fn = visuals[pg.id];
+        if (fn) fn(B, pg);
+        else B.title(pg.title);
+      }
+      pages.push(obj);
+    }
+    chrome = (SCRIPT.META || {}).chrome === true ? buildChrome(frame) : null;   // META.chrome: true → series header (META.course · META.no | section)
+    if (opts.subs) { subs = h('div', 'subs', '<span></span>', frame); }
+  }
+
+  function renderAt(t) {
+    const F = Math.min(TIMING.FADE, layout.gap);   // short gaps fade faster, never into the speech
+    for (const p of pages) {
+      const { start, end, index } = p.pg;
+      const last = index === pages.length - 1;
+      const inK = index === 0 ? 1 : smooth(start - F, start, t);
+      const outK = last ? 0 : smooth(end - F, end, t);
+      const vis = inK * (1 - outK);
+      p.vis = vis;
+      if (vis <= 0.001) { if (p.root.style.display !== 'none') p.root.style.display = 'none'; continue; }
+      p.root.style.display = 'block';
+      p.root.style.opacity = vis.toFixed(4);
+      if (SCRIPT.META?.pageMotion !== false) {   // META.pageMotion: false → plain cross-fade (films: the pages do their own transitions)
+        p.root.style.transform = `translate(${(-outK * 36 + (1 - inK) * 24).toFixed(2)}px, 0)`;
+        p.root.style.filter = outK > 0.02 ? `blur(${(outK * 5).toFixed(2)}px)` : 'none';
+      }
+      const lt = t - start;
+      const c = camAt(p.sh.cams, lt);
+      const cx0 = STAGE.w / 2, cy0 = STAGE.h / 2;
+      p.cam.style.transform = c.s === 1 && c.x === cx0 && c.y === cy0 ? '' : `translate(${(cx0 - c.x * c.s).toFixed(2)}px, ${(cy0 - c.y * c.s).toFixed(2)}px) scale(${c.s.toFixed(4)})`;
+      for (const a of p.sh.acts) applyAct(a, lt);
+      for (const fn of p.sh.ticks) fn(lt, t);
+    }
+    if (chrome) updateChrome(t);
+    updateSubs(t);
+    for (const fn of window.FRAME_HOOKS || []) fn(t, layout);   // extras can draw things that live across pages (a host character)
+  }
+
+  window.ENGINE = { visual, init, renderAt, get layout() { return layout; }, get pages() { return pages; } };
+})();

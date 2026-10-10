@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.turbo/
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example
+coverage/
+# local Studio data never belongs in the repo
+.frametell/
+out/

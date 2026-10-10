@@ -1,0 +1,14 @@
+// Registers an episode's clip frame sequences: scans assets/clips/<name>/ and writes extras/clips.js (window.CLIP_FRAMES).
+// Usage (from an episode dir): node ../../kit/tools/clips.mjs — then list 'extras/clips.js' first in META.extras.
+import fs from 'fs';
+import path from 'path';
+import { EP } from './lib.mjs';
+const dir = path.join(EP, 'assets/clips');
+const reg = {};
+for (const name of fs.existsSync(dir) ? fs.readdirSync(dir).sort() : []) {
+  const p = path.join(dir, name);
+  if (fs.statSync(p).isDirectory()) reg[name] = fs.readdirSync(p).filter((f) => /^f\d{3}\.jpg$/.test(f)).length;
+}
+fs.mkdirSync(path.join(EP, 'extras'), { recursive: true });
+fs.writeFileSync(path.join(EP, 'extras/clips.js'), `/* 片段帧数登记（node ../../kit/tools/clips.mjs 生成，别手改） */\nwindow.CLIP_FRAMES = ${JSON.stringify(reg)};\n`);
+console.log(Object.entries(reg).map(([k, v]) => `${k}:${v}`).join(' '));

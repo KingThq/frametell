@@ -1,0 +1,35 @@
+{
+  "name": "@frametell/engine",
+  "version": "0.1.0",
+  "description": "Hand-drawn explainer video engine: page runtime as a pure function of time, components, styles, and the render pipeline.",
+  "license": "MIT",
+  "type": "module",
+  "files": ["boot.js", "runtime", "lib", "template", "tools", "vendor", "README.md"],
+  "exports": {
+    "./package.json": "./package.json",
+    "./tools/*": "./tools/*"
+  },
+  "dependencies": {
+    "@fontsource/caveat": "^5.3.0",
+    "@fontsource/fredoka": "^5.3.0",
+    "@fontsource/jetbrains-mono": "^5.3.0",
+    "@fontsource/zcool-kuaile": "^5.3.0",
+    "@iconify-json/logos": "^1.2.15",
+    "d3": "^7.9.0",
+    "ffmpeg-static": "^5.2.0",
+    "ffprobe-static": "^3.1.0",
+    "gpt-tokenizer": "^4.0.0",
+    "gsap": "^3.15.0",
+    "katex": "^0.18.9",
+    "lxgw-wenkai-webfont": "^1.7.0",
+    "p5": "^2.3.3",
+    "p5.brush": "^2.2.3",
+    "playwright-core": "1.61.1",
+    "roughjs": "^4.6.6",
+    "simple-icons": "^16.33.0",
+    "three": "^0.180.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.10"
+  }
+}

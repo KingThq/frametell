@@ -1,0 +1,100 @@
+/* Speech timing: turns the script into absolute cue / page times. Shared by the browser and node tools. */
+(function (root) {
+  const CPS = 4.3;       // spoken units per second (calm lecture pace)
+  const BREATH = 0.3;    // pause after each cue
+  const COMMA = 0.14;    // extra pause per inner comma/dash
+  const LEAD = 0.5;      // page appears, then the first sentence starts
+  const GAP = 1.5;       // silent hold between pages (speaker's breathing room)
+  const FADE = 0.6;      // cross-fade at the end of the gap
+
+  /** Rough spoken length: CJK char = 1 unit, latin words ~ syllables, digits = 1 each. */
+  function units(text) {
+    let u = 0;
+    for (const ch of text) if (/[一-鿿]/.test(ch)) u += 1;
+    const latin = text.replace(/[一-鿿]/g, ' ').match(/[A-Za-z_]+/g) || [];
+    for (const w of latin) u += Math.max(1, w.replace(/_/g, '').length / 3.2);
+    u += (text.match(/\d/g) || []).length * 0.9;
+    return u;
+  }
+  const commas = (text) => (text.slice(0, -1).match(/[，、；：——,]/g) || []).length;
+
+  function cueDur(text) {
+    return Math.max(1.3, units(text) / CPS + commas(text) * COMMA + BREATH);
+  }
+
+  /** Display form for subtitles: drop trailing soft punctuation. */
+  function subText(text) {
+    return text.replace(/[，。；：、,.;:]+$/u, '').replace(/——$/u, '');
+  }
+
+  // Real voice (voice.js from kit/tools/tts.mjs): cue length = trimmed audio + a natural pause, holds are capped,
+  // pages follow each other closely — no long silences.
+  const VOICE = { lead: 0.2, comma: 0.18, stop: 0.4, pageEnd: 0.3, maxHold: 0.5, gap: 0.3, tail: 1.2 };
+  const voiceOf = (voice, pi, ci, text) => { const v = voice && voice.pages[pi] && voice.pages[pi][ci]; return v && v.t === text ? v : null; };
+
+  /** opts.gap overrides GAP (script.js META.gap); opts.voice = SCRIPT.VOICE switches to real audio durations. */
+  function layout(pages, opts = {}) {
+    const voice = opts.voice || null;
+    const V = { ...VOICE, ...(opts.pace || {}) };   // META.pace: { maxHold, gap } 放宽配音集的停顿（默认很紧凑）
+    const gap = voice ? V.gap : opts.gap ?? GAP;
+    let t = 0;
+    const out = pages.map((pg, idx) => {
+      const start = t;
+      let ct = start + (voice ? VOICE.lead : LEAD);
+      const cues = pg.cues.map((c, ci) => {
+        const text = typeof c === 'string' ? c : c.t;
+        const hold = typeof c === 'string' ? 0 : c.hold || 0;
+        const v = voiceOf(voice, idx, ci, text);
+        if (v && v.o != null) {
+          // cut from a whole-page utterance: the segment already holds its natural pauses (v.o = speech onset inside it)
+          const h = ci === pg.cues.length - 1 || v.join ? 0 : Math.min(hold, V.maxHold);   // join: spoken straight into the next cue
+          const cue = { text, sub: subText(text), start: ct + v.o, end: ct + v.d, hold: h, audio: v.f, audioAt: ct, dur: v.d };
+          ct += v.d + h;
+          return cue;
+        }
+        if (v) {
+          // the page's last cue: no hold, short pause — the page turn itself is the breath
+          const lastCue = ci === pg.cues.length - 1;
+          const pause = lastCue ? VOICE.pageEnd : /[。？！?!.]$/.test(text) ? VOICE.stop : VOICE.comma, h = lastCue ? 0 : Math.min(hold, V.maxHold);
+          const cue = { text, sub: subText(text), start: ct, end: ct + v.d + pause * 0.9, hold: h, audio: v.f, dur: v.d };
+          ct += v.d + pause + h;
+          return cue;
+        }
+        const d = cueDur(text);
+        const cue = { text, sub: subText(text), start: ct, end: ct + d - BREATH * 0.5, hold };
+        ct += d + hold;
+        return cue;
+      });
+      const speechEnd = ct;
+      const after = pg.after || 0;   // 这一页讲完后多停几秒再翻（给画面落定、让人消化）
+      const last = idx === pages.length - 1;
+      const end = speechEnd + after + (last ? (voice ? pg.tail ?? V.tail : 2) : gap);   // pg.tail: longer ending hold on the last page
+      t = end;
+      return { ...pg, index: idx, start, speechEnd, end, cues };
+    });
+    return { pages: out, duration: t, gap };
+  }
+
+  /**
+   * Sound effects / music beds: page.sfx = [{ f, at, until?, vol?, fin?, fout?, loop?, duck?, rate? }] → absolute
+   * [{ f, t0, t1, vol, fin, fout, loop, duck, rate }]. at / until: page seconds, [cueIndex, dt] (cue start + dt), 'end' (page end)
+   * or { page: 'p05', at } (another page). Without until a clip plays once to its natural end. vol in dB.
+   */
+  function sfxTimes(L) {
+    const byId = Object.fromEntries(L.pages.map((p) => [p.id, p]));
+    const when = (pg, a) => {
+      if (a == null) return null;
+      if (typeof a === 'number') return pg.start + a;
+      if (a === 'end') return pg.end;
+      if (Array.isArray(a)) return (pg.cues[a[0]] ? pg.cues[a[0]].start : pg.speechEnd) + (a[1] || 0);
+      if (a.page) { const q = byId[a.page]; return a.at === 'end' || a.at == null ? q.end : when(q, a.at); }
+      return null;
+    };
+    return L.pages.flatMap((pg) => (pg.sfx || []).map((s) => ({
+      f: s.f, t0: when(pg, s.at ?? 0), t1: when(pg, s.until), vol: s.vol ?? 0, fin: s.fin ?? 0, fout: s.fout ?? 0,
+      loop: !!s.loop, duck: s.duck ?? 0, rate: s.rate ?? 1, from: s.from ?? 0,
+    })));
+  }
+
+  root.TIMING = { CPS, BREATH, LEAD, GAP, FADE, VOICE, units, cueDur, subText, layout, sfxTimes };
+})(typeof window !== 'undefined' ? window : globalThis);
