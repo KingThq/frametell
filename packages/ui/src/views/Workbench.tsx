@@ -28,7 +28,7 @@ export function Workbench({ id, openSettings }: { id: string; openSettings: () =
       <TopBar onSettings={openSettings}>
         <a href="#/" className="fs-icon-btn -ml-1 shrink-0" aria-label="返回首页"><ChevronLeft size={16} /></a>
         <h1 className="min-w-0 truncate text-[14px] font-medium">{p?.title ?? ''}</h1>
-        <span className={`shrink-0 text-[12.5px] ${run.video && !running ? 'text-jade' : run.awaitingApproval ? 'text-accent-ink' : 'text-ink-3'}`} aria-live="polite">{status}</span>
+        <span className={`hidden shrink-0 text-[12.5px] sm:inline ${run.video && !running ? 'text-jade' : run.awaitingApproval ? 'text-accent-ink' : 'text-ink-3'}`} aria-live="polite">{status}</span>
         {conn === 'reconnecting' && <span className="shrink-0 rounded-full bg-seal-soft px-2 py-0.5 text-[12px] text-seal" role="status">连接中断，正在重连</span>}
         <span className="ml-auto flex shrink-0 items-center gap-2">
           <span className="hidden font-mono text-[12.5px] text-ink-2 tabular sm:inline" title="本项目已花费">{money(run.cost)}</span>

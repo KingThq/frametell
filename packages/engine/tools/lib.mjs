@@ -49,3 +49,6 @@ export async function openStage(query, launchArgs = []) {
   const duration = await page.evaluate(() => window.__ready);
   return { browser, page, duration };
 }
+
+/** close a stage's browser without ever hanging: Playwright's close() can stall after system Chrome has already exited */
+export const closeStage = (browser, ms = 5000) => Promise.race([browser.close().catch(() => {}), new Promise((r) => setTimeout(r, ms))]);

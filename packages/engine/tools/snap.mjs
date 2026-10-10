@@ -4,7 +4,7 @@
 import fs from 'fs';
 import { execFileSync } from 'child_process';
 import path from 'path';
-import { openStage, OUT, PORTRAIT } from './lib.mjs';
+import { openStage, OUT, PORTRAIT, closeStage } from './lib.mjs';
 import { FFMPEG } from './bins.mjs';
 const args = process.argv.slice(2).filter((a) => a !== '--portrait');
 const oi = args.indexOf('--only');
@@ -33,10 +33,13 @@ for (const t of args.map(Number)) {
   shots.push(f);
   if (!sheet) console.log(f);
 }
-await browser.close();
+await closeStage(browser);
 if (sheet) {
   const out = path.join(dir, sheet + '.jpg'), cols = Math.min(3, shots.length);
   execFileSync(FFMPEG, ['-y', '-loglevel', 'error', '-i', path.join(dir, `.${sheet}-%03d.png`), '-vf', `scale=${PORTRAIT ? 270 : (+process.env.SNAP_TILE || 640)}:-1,tile=${cols}x${Math.ceil(shots.length / cols)}:padding=6:color=white`, '-frames:v', '1', out]);
   for (const f of shots) fs.rmSync(f);
   console.log(out);
 }
+
+// a stalled browser connection must not keep the process alive once the output is out
+process.stdout.write("", () => process.exit(process.exitCode ?? 0));

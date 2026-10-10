@@ -315,7 +315,9 @@ export function Conversation({ run, project, onSelectPage, selected, onPlay }: {
             if (b.kind === 'chapter') return <Chapter key={b.key} b={b} run={run} project={project} onSelectPage={onSelectPage} selected={selected} />;
             const it = b.item;
             if (it.kind === 'user') return <p key={it.key} className="ml-auto w-fit max-w-[88%] whitespace-pre-wrap rounded-2xl rounded-tr-md bg-accent-soft/70 px-4 py-2.5 text-[13.5px] leading-relaxed text-ink ring-1 ring-accent/15 animate-rise">{it.text}</p>;
-            if (it.kind === 'paused') return <PausedCard key={it.key} item={it} run={run} project={project} latest={it === lastPaused} />;
+            if (it.kind === 'paused') return it === lastPaused && run.paused
+              ? <PausedCard key={it.key} item={it} run={run} project={project} latest />
+              : <p key={it.key} className="flex items-center gap-2 text-[12.5px] text-ink-3"><Pause size={13} aria-hidden />{it.reason === 'error' ? '出错停过一次' : '停过一次'}{it.stage ? `（${STAGE_NAME[it.stage]}）` : ''}，之后接着做了</p>;
             if (it.kind === 'done') return run.feed.filter((f) => f.kind === 'done').at(-1) === it ? <DoneCard key={it.key} run={run} project={project} onPlay={onPlay} /> : null;
             if (it.kind === 'note') return <p key={it.key} className="flex items-start gap-2.5 text-[13px] leading-relaxed text-ink-2"><span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-paper ring-1 ring-line"><Crest size={11} /></span>{it.text}</p>;
             return null;

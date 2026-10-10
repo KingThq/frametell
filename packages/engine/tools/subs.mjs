@@ -2,7 +2,7 @@
 // Usage (from an episode dir): node ../../kit/tools/subs.mjs <from> <to>
 import fs from 'fs';
 import path from 'path';
-import { openStage, OUT, PORTRAIT } from './lib.mjs';
+import { openStage, OUT, PORTRAIT, closeStage } from './lib.mjs';
 const [from, to] = [+process.argv[2], +process.argv[3]];
 const sd = path.join(OUT, PORTRAIT ? 'subs-portrait' : 'subs');
 fs.rmSync(sd, { recursive: true, force: true });
@@ -36,4 +36,7 @@ push(blank, to - t);
 lines.push(`file '${blank}'`); // concat demuxer needs the last entry repeated
 fs.writeFileSync(path.join(sd, 'list.txt'), lines.join('\n'));
 console.log('subtitle frames:', cues.length);
-await browser.close();
+await closeStage(browser);
+
+// a stalled browser connection must not keep the process alive once the output is out
+process.stdout.write("", () => process.exit(process.exitCode ?? 0));

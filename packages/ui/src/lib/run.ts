@@ -98,7 +98,11 @@ export function reduce(v: RunView, e: LoggedEvent): RunView {
         r.pages = { ...r.pages, [id]: p };
         return r;
       }
-      if (ev.type === 'text') push({ kind: 'say', key, session: e.session, text: ev.text, at });
+      if (ev.type === 'text') {
+        // DONE / FLAGGED end the agent's check loop; they are protocol, not something to show people
+        const text = ev.text.replace(/(^|\n)\s*(DONE|FLAGGED)\b[^\n]*\s*$/i, '').trim();
+        if (text) push({ kind: 'say', key, session: e.session, text, at });
+      }
       else if (ev.type === 'thinking') push({ kind: 'think', key, session: e.session, text: ev.text, at });
       else if (ev.type === 'tool_start' || ev.type === 'tool_end') {
         const last = r.feed[r.feed.length - 1];

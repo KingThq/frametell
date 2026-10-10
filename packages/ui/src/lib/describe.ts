@@ -10,6 +10,7 @@ function arg(summary: string, key: string): string | undefined {
 }
 
 function aboutPath(p: string, verb: '读' | '写' | '改'): string {
+  if (!p) return verb === '读' ? '读文件' : verb === '写' ? '写文件' : '修改文件';
   if (p.startsWith('materials/')) return verb === '读' ? `读资料《${base(p)}》` : `整理资料《${base(p)}》`;
   if (/(^|\/)storyboard\.json$/.test(p)) return verb === '读' ? '看分镜' : verb === '写' ? '写分镜' : '修改分镜';
   if (/(^|\/)script\.js$/.test(p)) return verb === '读' ? '看口播稿' : verb === '写' ? '写口播稿' : '修改口播稿';

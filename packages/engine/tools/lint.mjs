@@ -3,7 +3,7 @@
 // Per page it also checks the settled state (body fills the content area, text doesn't dominate) and, with
 // --determinism, that a frame renders identically whether reached from the start or from elsewhere on the timeline.
 // node engine/tools/lint.mjs [--only p01,p02] [--step 0.5] [--min-font 24] [--determinism] [--json]  → prints issues; exit 0.
-import { openStage, loadEpisode } from './lib.mjs';
+import { openStage, loadEpisode, closeStage } from './lib.mjs';
 const arg = (k, d) => { const i = process.argv.indexOf('--' + k); return i > 0 ? process.argv[i + 1] : d; };
 const only = arg('only', null), step = +arg('step', 0.5), minFont = +arg('min-font', 24), asJson = process.argv.includes('--json'), determinism = process.argv.includes('--determinism');
 const { L, META } = loadEpisode();
@@ -127,10 +127,13 @@ for (const [i, p] of pages.entries()) {
     for (const f of found) issues.push({ page: p.id, t: +t.toFixed(1), local: +(t - p.start).toFixed(1), msg: f });
   }
 }
-await browser.close();
+await closeStage(browser);
 // collapse repeats of the same message on a page into one line with a time range
 const seen = new Map();
 for (const i of issues) { const k = i.page + '|' + i.msg; const s = seen.get(k); if (s) s.t1 = i.t; else seen.set(k, { ...i, t1: i.t }); }
 if (asJson) console.log(JSON.stringify([...seen.values()]));
 else if (!seen.size) console.log('lint: OK — no layout issues found');
 else { console.log(`lint: ${seen.size} issue(s)`); for (const s of seen.values()) console.log(`  ${s.page} @ ${s.t}s${s.t1 !== s.t ? `–${s.t1}s` : ''} (local ${s.local}s): ${s.msg}`); }
+
+// a stalled browser connection must not keep the process alive once the output is out
+process.stdout.write("", () => process.exit(process.exitCode ?? 0));

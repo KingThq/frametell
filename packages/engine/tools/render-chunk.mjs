@@ -2,7 +2,7 @@
 // HW=1 (render.mjs --hw): encode on the Mac's media engine (h264_videotoolbox) so every CPU core is left for the browsers.
 import { spawn } from 'child_process';
 import path from 'path';
-import { openStage } from './lib.mjs';
+import { openStage, closeStage } from './lib.mjs';
 import { FFMPEG } from './bins.mjs';
 const [f0, f1, fps, out] = [+process.argv[2], +process.argv[3], +process.argv[4], process.argv[5]];
 
@@ -20,4 +20,6 @@ for (let f = f0; f < f1; f++) {
 }
 ff.stdin.end();
 await new Promise((r) => ff.on('close', r));
-await browser.close();
+// browser.close() can hang after Chrome has already gone (seen with system Chrome): the chunk is written, so never wait on it
+await closeStage(browser);
+process.exit(ff.exitCode ?? 0);
