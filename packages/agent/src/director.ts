@@ -69,17 +69,20 @@ export class Director {
     if (!p) return { amount: 0, currency: 'USD' as const };
     return { amount: (u.input * p.input + u.output * p.output + u.cacheRead * p.cacheRead + u.cacheWrite * p.cacheWrite) / 1e6, currency: p.currency };
   }
-  private track(r: TurnResult) {
-    this.state.usage = addUsage(this.state.usage, r.usage);
+  /** usage is counted per model turn as it happens, so the running cost is live even inside a long exchange */
+  private countTurn(u: TokenUsage) {
+    this.state.usage = addUsage(this.state.usage, u);
     this.save();
     this.emit({ type: 'cost', usage: this.state.usage, ...this.cost() });
   }
   private async session(name: string, system: string, maxTurns: number, resume?: string): Promise<AgentSession> {
-    return this.o.runtime.open({ name, system, cwd: this.o.dir, maxTurns, signal: this.o.signal, onEvent: (event) => this.emit({ type: 'agent', session: name, event }) }, resume);
+    return this.o.runtime.open({ name, system, cwd: this.o.dir, maxTurns, signal: this.o.signal, onEvent: (event) => {
+      this.emit({ type: 'agent', session: name, event });
+      if (event.type === 'turn') this.countTurn(event.usage);
+    } }, resume);
   }
   private async send(s: AgentSession, text: string, images?: string[]) {
     const r = await s.send({ text, images });
-    this.track(r);
     if (r.stopReason === 'aborted') throw new DOMException('aborted', 'AbortError');
     return r;
   }

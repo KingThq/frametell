@@ -8,7 +8,7 @@ import { createRequire } from 'node:module';
 import { Hono, type Context } from 'hono';
 import { serve } from '@hono/node-server';
 import { streamSSE } from 'hono/streaming';
-import { getCookie, setCookie } from 'hono/cookie';
+import { getCookie } from 'hono/cookie';
 import { Studio, type LoggedEvent, type NewProjectInput } from '@frametell/core';
 
 const UI_DIR = path.join(path.dirname(createRequire(import.meta.url).resolve('@frametell/ui/package.json')), 'dist');
@@ -41,10 +41,11 @@ export function createServer(studio = new Studio(), opts: { token?: string } = {
 
   app.use('*', async (c, next) => {
     const q = c.req.query('token');
-    if (q === token) setCookie(c, 'fs_token', token, { httpOnly: true, sameSite: 'Strict', path: '/' });
     const ok = q === token || getCookie(c, 'fs_token') === token || c.req.header('x-studio-token') === token;
     if (c.req.path.startsWith('/api') && !ok) return c.json({ error: '需要从 frametell 打开的链接访问' }, 401);
     await next();
+    // handlers may return a raw Response (files, streams): attach the cookie to whatever went out
+    if (q === token) c.res.headers.append('Set-Cookie', `fs_token=${token}; Path=/; HttpOnly; SameSite=Strict`);
   });
   app.onError((e, c) => c.json({ error: e.message }, /不存在/.test(e.message) ? 404 : 400));
 

@@ -10,3 +10,5 @@ coverage/
 # local Studio data never belongs in the repo
 .frametell/
 out/
+packages/ui/dist/
+apps/desktop/release/

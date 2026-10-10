@@ -1,0 +1,28 @@
+/* Frametell tokens — Relay's Ink & Paper, dark by default. RGB triplets so Tailwind can apply alpha. */
+:root {
+  --fs-paper: 245 245 240;  --fs-paper-2: 239 236 228;
+  --fs-surface: 255 255 255; --fs-surface-2: 250 248 243;
+  --fs-ink: 28 25 23; --fs-ink-2: 87 83 78; --fs-ink-3: 115 108 101;
+  --fs-line: 231 229 226; --fs-line-2: 214 211 207;
+  --fs-primary: 41 37 36; --fs-primary-fg: 250 248 243;
+  --fs-accent: 212 165 116; --fs-accent-ink: 156 106 58; --fs-accent-soft: 253 246 238; --fs-accent-fg: 44 33 24;
+  --fs-jade: 62 142 94; --fs-jade-soft: 232 244 236;
+  --fs-seal: 192 68 43; --fs-seal-soft: 252 236 232;
+  --fs-shadow-sm: 0 1px 2px rgb(28 25 23 / 0.05), 0 1px 4px rgb(28 25 23 / 0.04);
+  --fs-shadow-lg: 0 4px 10px rgb(28 25 23 / 0.05), 0 18px 48px rgb(28 25 23 / 0.12);
+  --fs-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  color-scheme: light;
+}
+.dark {
+  --fs-paper: 12 10 9;  --fs-paper-2: 20 18 16;
+  --fs-surface: 24 21 19; --fs-surface-2: 31 28 25;
+  --fs-ink: 245 245 244; --fs-ink-2: 176 169 163; --fs-ink-3: 143 135 128;
+  --fs-line: 41 37 34; --fs-line-2: 61 56 52;
+  --fs-primary: 236 233 228; --fs-primary-fg: 20 18 16;
+  --fs-accent: 224 184 138; --fs-accent-ink: 228 192 150; --fs-accent-soft: 46 36 27; --fs-accent-fg: 44 33 24;
+  --fs-jade: 111 191 142; --fs-jade-soft: 22 38 29;
+  --fs-seal: 226 118 94; --fs-seal-soft: 48 24 19;
+  --fs-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.35);
+  --fs-shadow-lg: 0 18px 48px rgb(0 0 0 / 0.55);
+  color-scheme: dark;
+}
