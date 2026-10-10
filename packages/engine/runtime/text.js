@@ -119,9 +119,10 @@
   /** Page title (top-left) with an accent squiggle underneath. */
   Builder.prototype.title = function (str, o = {}) {
     const at = o.at ?? 0.15;
-    const t = this.text(str, { x: 140, y: 78, size: o.size ?? 56, weight: 700, at, cps: o.cps ?? 11, color: 'ink' });
+    const T = this.hud || this;   // the page title lives on the hud: camera moves never cut it
+    const t = T.text(str, { x: 140, y: 78, size: o.size ?? 56, weight: 700, at, cps: o.cps ?? 11, color: 'ink' });
     const w = o.uw ?? Math.min(760, t.spans.length * (o.size ?? 56) * 0.78);
-    this.underline(142, 160, w, { color: o.accent || 'orange', at: at + t.a.dur * 0.8, dur: 0.6, sw: 3.4 });
+    T.underline(142, 160, w, { color: o.accent || 'orange', at: at + t.a.dur * 0.8, dur: 0.6, sw: 3.4 });
     return t;
   };
 

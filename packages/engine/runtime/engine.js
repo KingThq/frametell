@@ -74,8 +74,11 @@
       const root = h('div', 'page', null, stage);
       root.dataset.page = pg.id;
       const cam = h('div', 'cam', null, root);
+      // hud: above the camera layer and not moved by it — page titles stay put while the camera pushes in
+      const hud = h('div', 'hud', null, root);
       const B = new Builder(pg, cam);
-      const obj = { pg, root, cam, sh: B.sh, B, vis: 0 };
+      B.hud = new Builder(pg, hud, B.sh);
+      const obj = { pg, root, cam, hud, sh: B.sh, B, vis: 0 };
       if (!only || only.has(pg.id)) {
         const fn = visuals[pg.id];
         if (fn) fn(B, pg);
@@ -110,6 +113,8 @@
       const c = camAt(p.sh.cams, lt);
       const cx0 = STAGE.w / 2, cy0 = STAGE.h / 2;
       p.cam.style.transform = c.s === 1 && c.x === cx0 && c.y === cy0 ? '' : `translate(${(cx0 - c.x * c.s).toFixed(2)}px, ${(cy0 - c.y * c.s).toFixed(2)}px) scale(${c.s.toFixed(4)})`;
+      // while the camera is pushed in, a paper band fades in behind the fixed title so content can slide under it
+      p.hud.style.setProperty('--band', clamp((c.s - 1) * 10).toFixed(3));
       for (const a of p.sh.acts) applyAct(a, lt);
       for (const fn of p.sh.ticks) fn(lt, t);
     }

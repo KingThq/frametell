@@ -1,4 +1,5 @@
 /* 暖调叙事插画: flat warm illustration, soft shapes with almost no sketchiness, one metaphor object carried through. */
+window.EXTRA_FONTS = (window.EXTRA_FONTS || []).concat(['600 40px Fredoka', '500 40px Fredoka']);
 window.STYLE = {
   id: 'warm-story',
   roughScale: 0.32, bowScale: 0.4, sw: 3.2, single: true,

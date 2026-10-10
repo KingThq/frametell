@@ -16,6 +16,7 @@
     'lxgw-wenkai-webfont/lxgwwenkai-regular.css', 'lxgw-wenkai-webfont/lxgwwenkai-bold.css',
     '@fontsource/jetbrains-mono/400.css', '@fontsource/jetbrains-mono/600.css',
     '@fontsource/caveat/500.css', '@fontsource/caveat/700.css',
+    '@fontsource/fredoka/500.css', '@fontsource/fredoka/600.css',   // rounded numerals for illustrated styles
   ].map((f) => NM + f).concat(KIT + 'runtime/base.css');
   const meta = (window.SCRIPT && SCRIPT.META) || {};
   // style pack: META.style = 'warm-story' → styles/warm-story/style.css (after base.css) + style.js (before the runtime)
