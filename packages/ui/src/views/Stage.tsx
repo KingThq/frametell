@@ -37,7 +37,7 @@ function usePlayerTime(frame: React.RefObject<HTMLIFrameElement | null>, version
 }
 const seekFrame = (frame: HTMLIFrameElement | null, t: number, play = true) => frame?.contentWindow?.postMessage({ type: 'studio:seek', t, play }, '*');
 
-function Thumb({ p, project, poster, className = '' }: { p?: PageView; project: ProjectView; poster?: string; className?: string }) {
+function Thumb({ p, project, poster, className = '', badge = true }: { p?: PageView; project: ProjectView; poster?: string; className?: string; badge?: boolean }) {
   // project-relative: the page's own settled frame (fresh after a redraw), else a frame cut from the film, else its check sheet
   const src = p?.thumb ? relPath(p.thumb, project.id) : poster ?? (p?.sheet ? relPath(p.sheet, project.id) : undefined);
   const working = p?.status === 'drawing' || p?.status === 'checking';
@@ -50,8 +50,8 @@ function Thumb({ p, project, poster, className = '' }: { p?: PageView; project: 
           <rect x="1" y="1" width="158" height="88" rx="6" fill="none" stroke="rgb(var(--fs-accent))" strokeWidth="2" pathLength="100" strokeDasharray="22 78" className="motion-safe:animate-[trace_1.6s_linear_infinite]" style={{ strokeDashoffset: 100 }} />
         </svg>
       )}
-      {p?.status === 'ok' && <span className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-jade text-paper" aria-hidden><Check size={10} strokeWidth={3} /></span>}
-      {p?.status === 'flagged' && <span className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-seal text-paper" aria-hidden><TriangleAlert size={9} strokeWidth={3} /></span>}
+      {badge && p?.status === 'ok' && <span className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-jade text-paper" aria-hidden><Check size={10} strokeWidth={3} /></span>}
+      {badge && p?.status === 'flagged' && <span className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-seal text-paper" aria-hidden><TriangleAlert size={9} strokeWidth={3} /></span>}
     </span>
   );
 }
@@ -108,26 +108,35 @@ function Film({ run, project, ids, tl, subs, playKey, onFocus }: { run: RunView;
       </div>
       {pages.length > 0 && (
         <div className="mx-auto w-full max-w-[1280px] px-6 pb-5 pt-4">
-          {/* the page lane: each page as wide as its share of the film; the playhead walks across it */}
-          <div className="relative flex gap-1" role="list" aria-label="分页时间带">
+          {/* the page lane: each page as wide as its share of the film, its name beneath; the playhead walks inside the
+              page on screen, which stands out while the others rest a step back */}
+          <div className="flex gap-[3px]" role="list" aria-label="分页时间带">
             {pages.map((pt, i) => {
               const share = total && pt.end != null ? (pt.end - pt.start!) / total : 1 / pages.length;
               const on = cur?.id === pt.id && total > 0;
               const section = run.storyboard?.pages.find((x) => x.id === pt.id)?.section;
+              const pos = on && pt.end != null ? Math.min(1, Math.max(0, (t - pt.start!) / (pt.end - pt.start!))) : 0;
+              const st = run.pages[pt.id]?.status;
               return (
                 <div role="listitem" key={pt.id} style={{ flexGrow: share, flexBasis: 0 }} className="min-w-[44px]">
-                  <button onClick={() => (pt.start != null ? seek(pt.start) : onFocus(pt.id))} aria-label={`跳到第 ${i + 1} 页${section ? `：${section}` : ''}`} title={section}
-                    className={`group relative block h-[58px] w-full overflow-hidden rounded-md ring-offset-2 ring-offset-paper transition-shadow ${on ? 'ring-2 ring-accent' : 'ring-1 ring-line hover:ring-line-2'}`}>
-                    <Thumb p={run.pages[pt.id]} project={project} poster={tl?.posters?.[pt.id]} className="absolute inset-0" />
-                    <span className="absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/70 to-transparent px-2 pb-1 pt-3 text-left text-[11.5px] font-medium text-white">{i + 1} {section}</span>
+                  <button onClick={() => (pt.start != null ? seek(pt.start + 0.6) : onFocus(pt.id))} aria-label={`跳到第 ${i + 1} 页${section ? `：${section}` : ''}`} aria-current={on || undefined} title={section}
+                    className="group block w-full text-left outline-none">
+                    <span className={`relative block h-[60px] overflow-hidden rounded-[9px] bg-paper-2 transition-[filter,box-shadow] duration-200 group-focus-visible:shadow-[0_0_0_2px_rgb(var(--fs-accent))] ${on ? '' : 'brightness-[0.62] saturate-[0.85] group-hover:brightness-90'}`}>
+                      <Thumb p={run.pages[pt.id]} project={project} poster={tl?.posters?.[pt.id]} className="absolute inset-0" badge={false} />
+                      {on && <span className="pointer-events-none absolute inset-0 rounded-[9px] shadow-[inset_0_0_0_1.5px_rgb(var(--fs-accent))]" aria-hidden />}
+                      {on && <span className="pointer-events-none absolute inset-y-0 w-[2px] -translate-x-1/2 bg-accent shadow-[0_0_0_1px_rgb(0_0_0/0.25)]" style={{ left: `${pos * 100}%` }} aria-hidden />}
+                      {st === 'flagged' && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-seal ring-2 ring-black/20" aria-label="有一处要你看看" />}
+                    </span>
+                    <span className={`mt-1.5 flex items-baseline gap-1.5 truncate text-[11.5px] transition-colors ${on ? 'text-ink' : 'text-ink-3 group-hover:text-ink-2'}`}>
+                      <span className="font-mono text-[10.5px] tabular opacity-70">{i + 1}</span><span className="truncate">{section}</span>
+                    </span>
                   </button>
                 </div>
               );
             })}
-            {total > 0 && <span className="pointer-events-none absolute -bottom-1.5 -top-1.5 w-[2px] rounded-full bg-accent shadow-[0_0_0_2px_rgb(var(--fs-paper))]" style={{ left: `${Math.min(100, (t / total) * 100)}%` }} aria-hidden />}
           </div>
           {/* the line being spoken, with the way into this page */}
-          <div className="mt-3.5 flex min-h-[44px] items-start gap-4">
+          <div className="mt-3 flex min-h-[44px] items-start gap-4">
             <p className="min-w-0 flex-1 text-[14px] leading-relaxed text-ink" aria-live="off">
               {cur && <span className="mr-2 text-[12.5px] text-ink-3 tabular">{pageName(cur.id)} · {mmss(t)}</span>}
               {line?.text ?? <span className="text-ink-3">口播写好后，每一句会在这里跟着画面走。</span>}
