@@ -3,6 +3,7 @@ import { ArrowLeft, Captions, CaptionsOff, Check, ChevronLeft, ChevronRight, Dow
 import { client, type PageTiming, type ProjectView, type Timeline } from '../lib/client';
 import { relPath, STAGE_NAME, STAGES, type PageView, type RunView } from '../lib/run';
 import { pageName } from '../lib/describe';
+import { Lightbox } from './Lightbox';
 
 // The workbench is about the film and its pages, each page's picture next to the words it carries: a film view (player,
 // a page lane in proportion to time, the line being spoken), a canvas of page cards, and a focused page to look closely.
@@ -171,18 +172,56 @@ function Canvas({ run, project, ids, tl, onFocus }: { run: RunView; project: Pro
 
 // ── one page, close up ─────────────────────────────────────────────────────────────────────────────────────────────
 
+/** the moment that shows a line: a beat after it starts, once its picture has settled, before the next line */
+const momentOf = (lines: { abs?: number }[], j: number, end: number) => {
+  const a = lines[j].abs ?? 0, b = lines[j + 1]?.abs ?? end;
+  return Math.max(a, Math.min(a + 1.2, a + (b - a) / 2, b - 0.15));
+};
+
+/** full-resolution frames of the film at the given times, cut on demand (a few at a time) */
+function useFrames(project: ProjectView, times: number[], enabled: boolean) {
+  const [paths, setPaths] = useState<Record<string, string>>({});
+  const key = times.map((t) => t.toFixed(1)).join(',');
+  useEffect(() => {
+    if (!enabled || !times.length) return;
+    let live = true;
+    const queue = times.filter((t) => !paths[t.toFixed(1)]);
+    const next = async (): Promise<void> => {
+      const t = queue.shift(); if (t == null || !live) return;
+      try { const f = await client.frame(project.id, t); if (f && live) setPaths((cur) => ({ ...cur, [t.toFixed(1)]: f })); } catch {}
+      return next();
+    };
+    void Promise.all([next(), next(), next()]);
+    return () => { live = false; };
+  }, [project.id, key, enabled]);
+  return (t: number) => paths[t.toFixed(1)];
+}
+
 function Focus({ id, run, project, ids, tl, onFocus, onBack, onCompose }: { id: string; run: RunView; project: ProjectView; ids: string[]; tl: Timeline | null; onFocus: (id: string) => void; onBack: () => void; onCompose: (text: string) => void }) {
   const frame = useRef<HTMLIFrameElement>(null);
+  const screenBox = useRef<HTMLDivElement>(null);
+  const strip = useRef<HTMLDivElement>(null);
+  const cueList = useRef<HTMLOListElement>(null);
   const version = ids.map((x) => `${run.pages[x]?.status ?? ''}${run.pages[x]?.round ?? ''}`).join('|') + (run.video?.path ?? '');
   const { t, playing: running, ready } = usePlayerTime(frame, version);
-  const [sheet, setSheet] = useState(false);
+  const [light, setLight] = useState<{ kind: 'frames' | 'sheet'; i: number } | null>(null);
   const i = ids.indexOf(id), p = run.pages[id], sb = run.storyboard?.pages.find((x) => x.id === id);
   const lines = linesOf(id, tl, run);
   const drawn = p?.status === 'ok' || p?.status === 'flagged' || !!run.video;
   const prev = ids[i - 1], next = ids[i + 1];
   const pt = tl?.pages.find((x) => x.id === id);
-  const playing = lines.filter((l) => l.abs != null && l.abs <= t + 0.05).length - 1;
-  useEffect(() => { setSheet(false); }, [id]);
+  const timed = lines.some((l) => l.abs != null);
+  const moments = useMemo(() => (pt && timed ? lines.map((_, j) => momentOf(lines, j, pt.end)) : []), [pt?.start, pt?.end, lines.length, timed]);
+  const frameAt = useFrames(project, moments, !!run.video);
+  // the line on screen right now: words, its frame and the player all point at the same moment
+  const active = timed ? Math.max(0, lines.filter((l) => l.abs != null && l.abs <= t + 0.05).length - 1) : -1;
+  const inThis = !!pt && t >= pt.start - 0.01 && t < pt.end - 0.01;
+  useEffect(() => { setLight(null); }, [id]);
+  useEffect(() => {
+    if (active < 0 || !inThis) return;
+    strip.current?.querySelector<HTMLElement>(`[data-i="${active}"]`)?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+    cueList.current?.querySelector<HTMLElement>(`[data-i="${active}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [active, inThis]);
   // one player for the whole film: turning a page is a jump, not a reload. While it plays across a page boundary, the
   // focused page follows the picture; turning the page by hand jumps there and keeps playing if it was playing.
   const follow = useRef(false);
@@ -199,7 +238,7 @@ function Focus({ id, run, project, ids, tl, onFocus, onBack, onCompose }: { id: 
   }, [t]);
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement)?.closest('input,textarea,select')) return;
+      if ((e.target as HTMLElement)?.closest('input,textarea,select,dialog')) return;
       if (e.key === 'Escape') onBack();
       else if (e.key === 'ArrowLeft' && prev) onFocus(prev);
       else if (e.key === 'ArrowRight' && next) onFocus(next);
@@ -208,11 +247,15 @@ function Focus({ id, run, project, ids, tl, onFocus, onBack, onCompose }: { id: 
     return () => removeEventListener('keydown', on);
   }, [prev, next, onBack, onFocus]);
 
+  const pageLabel = `第 ${i + 1} 页${sb?.section ? `「${sb.section}」` : ''}`;
+  const frameItems = moments.map((m, j) => ({ src: frameAt(m) ? client.fileUrl(project, frameAt(m)!) : '', title: `${pageLabel} · ${mmss(lines[j]?.abs ?? m)}`, caption: lines[j]?.text }));
+  const sheetItems = p?.sheet ? [{ src: client.fileUrl(project, relPath(p.sheet, project.id)), title: `${pageLabel} · 第 ${p.round} 轮自检截图`, caption: '导演检查这一页时看的截图，每格左下角是它在成片里的时间' }] : [];
+
   let screen: React.ReactNode;
   if (drawn) screen = (
-    <div className="relative h-full w-full">
-      <iframe ref={frame} key={version} title="预览" src={client.fileUrl(project, 'index.html')} sandbox="allow-scripts" className="h-full w-full rounded-xl border-0 bg-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent" />
-      {sheet && p?.sheet && <img src={client.fileUrl(project, relPath(p.sheet, project.id))} alt={`第 ${i + 1} 页第 ${p.round} 轮自检截图`} className="absolute inset-0 h-full w-full rounded-xl bg-paper-2 object-contain" />}
+    <div ref={screenBox} className="group relative h-full w-full overflow-hidden rounded-xl bg-black">
+      <iframe ref={frame} key={version} title="预览" src={client.fileUrl(project, 'index.html')} sandbox="allow-scripts" allowFullScreen className="h-full w-full border-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent" />
+      <button className="fs-lb-btn absolute right-3 top-3 opacity-0 transition-opacity duration-150 focus-visible:opacity-100 group-hover:opacity-100" onClick={() => void screenBox.current?.requestFullscreen?.()} aria-label="全屏看" title="全屏看"><Maximize2 size={15} /></button>
     </div>
   );
   else screen = (
@@ -227,8 +270,9 @@ function Focus({ id, run, project, ids, tl, onFocus, onBack, onCompose }: { id: 
       <div className="flex items-center gap-2 px-5 pt-4">
         <button className="fs-btn fs-btn-ghost fs-btn-sm" onClick={onBack}><ArrowLeft size={14} aria-hidden /> 全部页面</button>
         <h2 className="min-w-0 truncate text-[14px] font-medium"><span className="mr-2 text-ink-3 tabular">第 {i + 1} 页</span>{sb?.section}</h2>
+        {pt && <span className="hidden shrink-0 font-mono text-[11.5px] text-ink-3 tabular sm:inline">{mmss(pt.start)}–{mmss(pt.end)}</span>}
         <span className="ml-auto flex shrink-0 items-center gap-1">
-          {p?.sheet && <button className={`fs-btn fs-btn-sm ${sheet ? 'fs-btn-secondary' : 'fs-btn-ghost'}`} aria-pressed={sheet} onClick={() => setSheet(!sheet)} title="导演检查这一页时看的截图"><Images size={14} aria-hidden /> 自检截图</button>}
+          {sheetItems.length > 0 && <button className="fs-btn fs-btn-ghost fs-btn-sm" onClick={() => setLight({ kind: 'sheet', i: 0 })} title="导演检查这一页时看的截图"><Images size={14} aria-hidden /> 自检截图</button>}
           <button className="fs-icon-btn" disabled={!prev} onClick={() => prev && onFocus(prev)} aria-label="上一页"><ChevronLeft size={16} /></button>
           <span className="w-[42px] text-center text-[12px] text-ink-3 tabular">{i + 1} / {ids.length}</span>
           <button className="fs-icon-btn" disabled={!next} onClick={() => next && onFocus(next)} aria-label="下一页"><ChevronRight size={16} /></button>
@@ -239,26 +283,56 @@ function Focus({ id, run, project, ids, tl, onFocus, onBack, onCompose }: { id: 
           <div className="aspect-video" style={{ width: 'min(100cqw, calc(100cqh * 16 / 9), 1280px)' }}>{screen}</div>
         </div>
       </div>
-      <div className="mx-auto grid w-full max-w-[1280px] gap-x-6 gap-y-3 px-6 pb-5 pt-4 md:grid-cols-[1fr_auto]">
-        <div className="min-w-0">
-          <h3 className="mb-1.5 flex items-center gap-1.5 text-[12px] font-medium text-ink-3"><MessageSquareText size={13} aria-hidden /> 这一页的口播{lines.some((l) => l.at != null) ? ' · 点一句从那里播' : ''}</h3>
-          <ol className="max-h-[132px] space-y-0.5 overflow-y-auto pr-1">
-            {lines.length ? lines.map((l, j) => (
-              <li key={j}>
-                <button disabled={l.at == null || !drawn || sheet} onClick={() => seekFrame(frame.current, l.abs ?? l.at!)}
-                  className={`-mx-2 flex w-[calc(100%+16px)] gap-3 rounded-lg px-2 py-1 text-left text-[13.5px] leading-relaxed transition-colors enabled:hover:bg-ink/[0.04] ${j === playing && drawn && !sheet ? 'bg-accent-soft/50 text-ink' : 'text-ink-2'}`}>
-                  {l.at != null && <span className="w-9 shrink-0 pt-px font-mono text-[11.5px] text-ink-3 tabular">{mmss(l.at)}</span>}
-                  <span>{l.text}</span>
-                </button>
-              </li>
-            )) : <li className="text-[13px] text-ink-3">口播还没写好。</li>}
-          </ol>
-          {p?.status === 'flagged' && p.issues.length > 0 && <p className="mt-2 flex items-start gap-1.5 text-[12.5px] leading-relaxed text-seal"><TriangleAlert size={13} className="mt-0.5 shrink-0" aria-hidden />{p.issues.join('；')}</p>}
-        </div>
-        <div className="flex items-start">
-          <button className="fs-btn fs-btn-secondary" onClick={() => onCompose(`第 ${i + 1} 页：`)}>改这一页</button>
+
+      <div className="mx-auto w-full max-w-[1280px] px-6 pb-5 pt-3">
+        {moments.length > 0 && !!run.video && (
+          <div ref={strip} className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-2 pt-1" role="list" aria-label="这一页的关键画面">
+            {moments.map((m, j) => {
+              const src = frameAt(m), on = j === active && inThis;
+              return (
+                <div key={j} role="listitem" data-i={j} className="group/f relative shrink-0 snap-start">
+                  <button onClick={() => seekFrame(frame.current, m, false)} onDoubleClick={() => src && setLight({ kind: 'frames', i: j })}
+                    aria-label={`${mmss(lines[j]?.abs ?? m)} 这一句的画面：${lines[j]?.text ?? ''}`} aria-current={on || undefined}
+                    className={`relative block aspect-video w-[132px] overflow-hidden rounded-lg bg-paper-2 ring-offset-2 ring-offset-paper transition-[box-shadow,opacity] duration-150 ${on ? 'ring-2 ring-accent' : 'opacity-75 ring-1 ring-line hover:opacity-100'}`}>
+                    {src ? <img src={client.fileUrl(project, src)} alt="" className="h-full w-full object-cover" loading="lazy" />
+                      : <span className="absolute inset-0 animate-pulse bg-ink/[0.06]" aria-hidden />}
+                    <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1 font-mono text-[10px] leading-4 text-white tabular">{mmss(lines[j]?.abs ?? m)}</span>
+                  </button>
+                  {src && <button className="fs-lb-btn absolute right-1 top-1 h-6 w-6 opacity-0 transition-opacity focus-visible:opacity-100 group-hover/f:opacity-100" onClick={() => setLight({ kind: 'frames', i: j })} aria-label="放大看这一帧" title="放大看"><Maximize2 size={11} /></button>}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="mt-2 grid gap-x-6 gap-y-3 md:grid-cols-[1fr_auto]">
+          <div className="min-w-0">
+            <h3 className="mb-1 flex items-center gap-1.5 text-[12px] font-medium text-ink-3"><MessageSquareText size={13} aria-hidden /> 这一页的口播{timed ? ' · 点一句从那里播，时间是在成片里的位置' : ''}</h3>
+            <ol ref={cueList} className="max-h-[148px] space-y-px overflow-y-auto overflow-x-hidden">
+              {lines.length ? lines.map((l, j) => {
+                const on = j === active && inThis && drawn;
+                return (
+                  <li key={j} data-i={j}>
+                    <button disabled={l.abs == null || !drawn} onClick={() => seekFrame(frame.current, l.abs!)}
+                      className={`flex w-full items-baseline gap-3 rounded-lg px-2.5 py-1.5 text-left text-[13.5px] leading-relaxed transition-colors duration-150 enabled:hover:bg-ink/[0.045] ${on ? 'bg-accent-soft/60 text-ink' : 'text-ink-2'}`}>
+                      {l.abs != null && <span className={`w-10 shrink-0 font-mono text-[11.5px] tabular ${on ? 'text-accent-ink' : 'text-ink-3'}`}>{mmss(l.abs)}</span>}
+                      <span className="min-w-0">{l.text}</span>
+                    </button>
+                  </li>
+                );
+              }) : <li className="px-2.5 text-[13px] text-ink-3">口播还没写好。</li>}
+            </ol>
+            {p?.status === 'flagged' && p.issues.length > 0 && <p className="mt-2 flex items-start gap-1.5 text-[12.5px] leading-relaxed text-seal"><TriangleAlert size={13} className="mt-0.5 shrink-0" aria-hidden />{p.issues.join('；')}</p>}
+          </div>
+          <div className="flex items-start">
+            <button className="fs-btn fs-btn-secondary" onClick={() => onCompose(`第 ${i + 1} 页：`)}>改这一页</button>
+          </div>
         </div>
       </div>
+
+      {light && (light.kind === 'sheet' ? sheetItems : frameItems).length > 0 && (
+        <Lightbox items={light.kind === 'sheet' ? sheetItems : frameItems} index={light.i} onIndex={(n) => { setLight({ ...light, i: n }); if (light.kind === 'frames') seekFrame(frame.current, moments[n], false); }} onClose={() => setLight(null)} />
+      )}
     </div>
   );
 }

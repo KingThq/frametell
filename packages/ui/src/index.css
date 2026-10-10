@@ -16,6 +16,7 @@
   ::-webkit-scrollbar { width: 8px; height: 8px; }
   ::-webkit-scrollbar-thumb { background: rgb(var(--fs-ink) / 0.12); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
   ::-webkit-scrollbar-thumb:hover { background-color: rgb(var(--fs-ink) / 0.22); }
+  ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
 }
 
 @layer components {
@@ -31,6 +32,8 @@
   .fs-btn-accent { @apply bg-accent text-accent-fg hover:brightness-105; box-shadow: 0 1px 0 rgb(255 255 255 / 0.35) inset, 0 1px 2px rgb(156 106 58 / 0.25); }
   .fs-btn-secondary { @apply border border-line bg-surface text-ink hover:border-line-2 hover:bg-surface-2; box-shadow: var(--fs-shadow-sm); }
   .fs-btn-ghost { @apply text-ink-2 hover:bg-ink/[0.06] hover:text-ink; }
+  /* buttons on the dark lightbox, whatever the theme */
+  .fs-lb-btn { @apply inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white/85 backdrop-blur transition-colors duration-150 hover:bg-white/20 hover:text-white disabled:opacity-30; }
   .fs-icon-btn { @apply inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-3 transition-colors duration-150 hover:bg-ink/[0.07] hover:text-ink; }
   .fs-card { @apply rounded-2xl border border-line bg-surface; box-shadow: var(--fs-shadow-sm); }
   .fs-input {

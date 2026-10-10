@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Page focus: a strip of full-resolution key frames, one per narration line, linked both ways with the lines and the player — whatever is on screen is highlighted in both.
+- Page focus: a lightbox to read any frame or the self-check sheet in detail (click to zoom where you point, drag to pan, wheel zoom, ←/→ to step), and a full-screen button on the player.
 - API: `GET /api/projects/:id/frame?t=` (and the desktop `frame` method) cuts a full-resolution 1920×1080 frame from the finished film, cached until the film changes.
 - Workbench: drag the divider between the conversation and the stage to resize them, like VS Code; double-click resets, arrow keys nudge, and the width is remembered.
 - Settings: dedicated cards for the official Claude (Anthropic) and OpenAI APIs, each with an optional relay base URL.
@@ -31,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Page focus: narration times are positions in the film, matching the frames and the player, instead of offsets within the page; the time column is no longer clipped and the stray scrollbar corner is gone.
 - Codex talks to gateways over HTTP only, instead of failing five WebSocket attempts per turn.
 - Turning a page in the focus view seeks the film instead of reloading the player.
 - Renders no longer stall when the browser hangs on close.
