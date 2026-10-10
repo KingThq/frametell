@@ -216,6 +216,11 @@ function Focus({ id, run, project, ids, tl, onFocus, onBack, onRef }: { id: stri
   const prev = ids[i - 1], next = ids[i + 1];
   const pt = tl?.pages.find((x) => x.id === id);
   const timed = lines.some((l) => l.abs != null);
+  // the player boots straight onto the page it opens on (past the cross-fade from the page before); later turns seek
+  const startAt = useRef(0);
+  const booted = useRef('');
+  if (pt && booted.current !== version) { booted.current = version; startAt.current = Math.min(pt.start + 0.6, pt.end - 0.1); }
+  const poster = p?.thumb ? relPath(p.thumb, project.id) : tl?.posters?.[id];
   const moments = useMemo(() => (pt && timed ? lines.map((_, j) => momentOf(lines, j, pt.end)) : []), [pt?.start, pt?.end, lines.length, timed]);
   const frameAt = useFrames(project, moments, !!run.video);
   // the line on screen right now: words, its frame and the player all point at the same moment
@@ -261,8 +266,11 @@ function Focus({ id, run, project, ids, tl, onFocus, onBack, onRef }: { id: stri
 
   let screen: React.ReactNode;
   if (drawn) screen = (
-    <div ref={screenBox} className="group relative h-full w-full overflow-hidden rounded-xl bg-black">
-      <iframe ref={frame} key={version} title="预览" src={client.fileUrl(project, 'index.html')} sandbox="allow-scripts" allowFullScreen className="h-full w-full border-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent" />
+    <div ref={screenBox} className="group relative h-full w-full overflow-hidden rounded-xl bg-paper-2">
+      {/* until the player has drawn this page, its picture stands in; the player then fades in already on it */}
+      {!ready && poster && <img src={client.fileUrl(project, poster)} alt="" className="absolute inset-0 h-full w-full object-contain" />}
+      {pt && <iframe ref={frame} key={version} title="预览" src={`${client.fileUrl(project, 'index.html')}?from=${startAt.current.toFixed(2)}`} sandbox="allow-scripts" allowFullScreen
+        className={`relative h-full w-full border-0 transition-opacity duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${ready ? 'opacity-100' : 'opacity-0'}`} />}
       <button className="fs-lb-btn absolute right-3 top-3 opacity-0 transition-opacity duration-150 focus-visible:opacity-100 group-hover:opacity-100" onClick={() => void screenBox.current?.requestFullscreen?.()} aria-label="全屏看" title="全屏看"><Maximize2 size={15} /></button>
     </div>
   );
