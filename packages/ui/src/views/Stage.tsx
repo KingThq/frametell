@@ -140,7 +140,7 @@ function Film({ run, project, ids, tl, subs, playKey, onFocus }: { run: RunView;
 
 // ── the canvas: every page, its picture and its words ──────────────────────────────────────────────────────────────
 
-function Canvas({ run, project, ids, tl, onFocus }: { run: RunView; project: ProjectView; ids: string[]; tl: Timeline | null; onFocus: (id: string) => void }) {
+function Canvas({ run, project, ids, tl, onFocus, onRef }: { run: RunView; project: ProjectView; ids: string[]; tl: Timeline | null; onFocus: (id: string) => void; onRef: (r: Ref) => void }) {
   if (!ids.length) return <p className="px-6 py-10 text-center text-[13px] text-ink-3">分镜写好后，每一页会排在这里。</p>;
   return (
     <div className="h-full overflow-y-auto px-6 py-5">
@@ -149,7 +149,11 @@ function Canvas({ run, project, ids, tl, onFocus }: { run: RunView; project: Pro
           const p = run.pages[id], sb = run.storyboard?.pages.find((x) => x.id === id), pt = tl?.pages.find((x) => x.id === id);
           const lines = linesOf(id, tl, run);
           return (
-            <li key={id}>
+            <li key={id} className="group/c relative">
+              <button onClick={() => onRef({ kind: 'page', page: id, label: `第 ${i + 1} 页${sb?.section ? `「${sb.section}」` : ''}`, thumb: p?.thumb ? relPath(p.thumb, project.id) : tl?.posters?.[id] })}
+                className="fs-lb-btn absolute right-2 top-2 z-10 h-7 w-auto gap-1 px-2.5 text-[11.5px] opacity-0 transition-opacity focus-visible:opacity-100 group-hover/c:opacity-100" title="把这一页加到对话">
+                <Quote size={11} aria-hidden /> 引用
+              </button>
               <button onClick={() => onFocus(id)} className="group flex h-full w-full flex-col overflow-hidden rounded-xl border border-line bg-surface text-left transition-[border-color,transform] duration-200 hover:-translate-y-px hover:border-line-2">
                 <Thumb p={p} project={project} poster={tl?.posters?.[id]} className="aspect-video w-full border-b border-line" />
                 <span className="flex flex-1 flex-col px-3.5 pb-3.5 pt-3">
@@ -383,7 +387,7 @@ export function Stage({ run, project, selected, onSelect, playKey, onRef }: { ru
       <div className="min-h-0 flex-1">
         {focused ? <Focus id={focused} run={run} project={project} ids={ids} tl={tl} onFocus={onSelect} onBack={() => { onSelect(undefined); setView('pages'); }} onRef={onRef} />
           : view === 'film' ? <Film run={run} project={project} ids={ids} tl={tl} subs={subs} playKey={playKey} onFocus={onSelect} />
-          : <Canvas run={run} project={project} ids={ids} tl={tl} onFocus={onSelect} />}
+          : <Canvas run={run} project={project} ids={ids} tl={tl} onFocus={onSelect} onRef={onRef} />}
       </div>
     </div>
   );
