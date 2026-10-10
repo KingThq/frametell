@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronRight, CircleDashed, Clapperboard, Download, Loader2, Pause, Play, TriangleAlert } from 'lucide-react';
 import { client, type ProjectView } from '../lib/client';
-import { clock, money, relPath, STAGE_NAME, STAGES, type FeedItem, type PageView, type RunView, type Stage, type Storyboard, isWorking } from '../lib/run';
+import { clock, film, finished, money, relPath, STAGE_NAME, STAGES, type FeedItem, type PageView, type RunView, type Stage, type Storyboard, isWorking } from '../lib/run';
 import { pageName, summarizeTools } from '../lib/describe';
 import { useNow } from '../lib/hooks';
 import { Crest } from '../components/Logo';
 import { STYLE_NAME } from '../lib/styles';
 import { Composer, RefChip } from './Composer';
+import { ExportControls } from './Export';
 import type { Ref } from '../lib/refs';
 
 // ── small pieces ────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -158,11 +159,12 @@ function PausedCard({ item, run, project, latest }: { item: Extract<FeedItem, { 
 function DoneCard({ run, project, onPlay }: { run: RunView; project: ProjectView; onPlay: () => void }) {
   const ids = run.pageOrder;
   const poster = ids.map((id) => run.pages[id]?.thumb).find(Boolean);
-  const took = run.startedAt && run.activeAt ? clock(run.activeAt - run.startedAt) : undefined;
+  const took = run.startedAt && run.activeAt ? clock((run.ready?.at ?? run.activeAt) - run.startedAt) : undefined;
+  const seconds = run.ready?.duration ?? run.video?.duration;
   return (
     <div className="overflow-hidden rounded-2xl border border-jade/30 bg-surface animate-rise">
       {poster && (
-        <button onClick={onPlay} className="group relative block aspect-video w-full overflow-hidden" aria-label="播放成片">
+        <button onClick={onPlay} className="group relative block aspect-video w-full overflow-hidden" aria-label="播放">
           <img src={client.fileUrl(project, relPath(poster, project.id))} alt="" className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.02]" />
           <span className="absolute inset-0 flex items-center justify-center bg-black/20 transition-colors group-hover:bg-black/30">
             <span className="flex h-12 w-12 items-center justify-center rounded-full bg-paper/90 text-ink shadow-lg"><Play size={20} className="translate-x-px" aria-hidden /></span>
@@ -171,13 +173,32 @@ function DoneCard({ run, project, onPlay }: { run: RunView; project: ProjectView
       )}
       <div className="px-4 py-4">
         <p className="font-display text-[22px] leading-tight text-ink">你的视频好了</p>
-        <p className="mt-1.5 text-[12.5px] text-ink-3 tabular">{run.video ? `${Math.round(run.video.duration)} 秒` : ''}{took ? ` · 做了 ${took}` : ''} · 花费 {money(run.cost)}</p>
+        <p className="mt-1.5 text-[12.5px] text-ink-3 tabular">{seconds ? `${Math.round(seconds)} 秒` : ''}{took ? ` · 做了 ${took}` : ''} · 花费 {money(run.cost)}</p>
         <div className="mt-3.5 flex flex-wrap gap-2">
           <button className="fs-btn fs-btn-accent" onClick={onPlay}><Clapperboard size={14} aria-hidden /> 播放</button>
-          {run.video && <a className="fs-btn fs-btn-secondary" href={client.fileUrl(project, relPath(run.video.path, project.id))} download><Download size={14} aria-hidden /> 下载成片</a>}
+          <ExportControls run={run} project={project} />
         </div>
-        <p className="mt-3 text-[12.5px] text-ink-3">想改哪里？直接在下面说，只重画要改的那几页。</p>
+        <p className="mt-3 text-[12.5px] text-ink-3">想改哪里？直接在下面说，只重画要改的那几页，改完马上能看；要发出去时再导出 mp4。</p>
       </div>
+    </div>
+  );
+}
+
+/** an export in the conversation: one line, with the files when it is done */
+function ExportLine({ it, project }: { it: Extract<FeedItem, { kind: 'export' }>; project: ProjectView }) {
+  const now = useNow(it.status === 'running');
+  const took = clock((it.endedAt ?? now) - it.at);
+  return (
+    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-2 text-[12.5px] animate-rise">
+      {it.status === 'running' ? <Loader2 size={14} className="animate-spin text-accent-ink" aria-hidden /> : it.status === 'done' ? <Check size={14} className="text-jade" aria-hidden /> : <TriangleAlert size={14} className="text-seal" aria-hidden />}
+      <span className={it.status === 'failed' ? 'text-seal' : 'text-ink-2'}>{it.status === 'running' ? '正在导出 mp4' : it.status === 'done' ? '导出好了' : it.detail ?? '导出没成功'}</span>
+      <span className="text-ink-3 tabular">{took}</span>
+      {it.status === 'done' && it.video && (
+        <span className="flex gap-1.5">
+          <a className="fs-btn fs-btn-ghost fs-btn-sm" href={client.fileUrl(project, relPath(it.video, project.id))} download><Download size={13} aria-hidden /> 带字幕</a>
+          {it.noSubs && <a className="fs-btn fs-btn-ghost fs-btn-sm" href={client.fileUrl(project, relPath(it.noSubs, project.id))} download><Download size={13} aria-hidden /> 无字幕</a>}
+        </span>
+      )}
     </div>
   );
 }
@@ -190,7 +211,7 @@ type Block = { kind: 'chapter'; stage: Stage; items: FeedItem[]; key: string; la
 function blocks(feed: FeedItem[]): Block[] {
   const out: Block[] = [];
   for (const it of feed) {
-    const loose = it.kind === 'user' || it.kind === 'paused' || it.kind === 'done' || (it.kind === 'stage' && it.status === 'running');
+    const loose = it.kind === 'user' || it.kind === 'paused' || it.kind === 'done' || it.kind === 'ready' || it.kind === 'export' || (it.kind === 'stage' && it.status === 'running');
     const stage = it.kind === 'stage' ? it.stage : it.stage;
     const last = out[out.length - 1];
     // the director working outside a stage (planning a change to the finished film) gets a chapter of its own
@@ -285,24 +306,26 @@ function NowBar({ run }: { run: RunView }) {
   const running = isWorking(run);
   const now = useNow(running);
   const todo = run.pageOrder.filter((id) => !['ok', 'flagged', 'failed'].includes(run.pages[id]?.status ?? 'queued')).length;
-  const pages = run.video ? Math.max(todo, 1) : run.pageOrder.length || run.storyboard?.pages.length || 5;
+  const pages = finished(run) ? Math.max(todo, 1) : run.pageOrder.length || run.storyboard?.pages.length || 5;
   let left = 0;
-  if (running && run.current) {
+  if (running && run.current && !run.exporting) {
     const i = STAGES.indexOf(run.current!);
     const cur = run.stages[run.current!];
     left = Math.max(30, ESTIMATE[run.current!](pages) - (cur.startedAt ? (now - cur.startedAt) / 1000 : 0)) + STAGES.slice(i + 1).reduce((a, s) => a + ESTIMATE[s](pages), 0);
   }
   const busyPage = run.pageOrder.find((id) => run.pages[id]?.status === 'checking' || run.pages[id]?.status === 'drawing');
   if (running && !run.current) left = 0;
+  const seconds = Math.round(run.ready?.duration ?? run.video?.duration ?? 0);
   const text = run.revising ? '导演在看要改哪几页'
-    : run.video && !running ? `成片完成 · ${Math.round(run.video.duration)} 秒`
+    : run.exporting ? '正在导出 mp4'
+    : finished(run) && !running ? `片子好了 · ${seconds} 秒${run.stale ? ' · 改过之后还没导出' : ''}`
     : run.awaitingApproval ? '等你确认分镜'
     : run.paused ? '已暂停'
     : running ? `${STAGE_DOING[run.current!]}${run.current === 'pages' && busyPage ? ` · ${pageName(busyPage)}${run.pages[busyPage].status === 'checking' ? '在自己检查' : '在画'}` : ''}`
     : '准备开始';
   return (
     <div className="flex items-center gap-2.5 px-5 py-2.5 text-[12.5px]" aria-live="polite">
-      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${running ? 'animate-breathe bg-accent' : run.awaitingApproval ? 'bg-accent' : run.video ? 'bg-jade' : 'bg-line-2'}`} aria-hidden />
+      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${running ? 'animate-breathe bg-accent' : run.awaitingApproval ? 'bg-accent' : finished(run) ? 'bg-jade' : 'bg-line-2'}`} aria-hidden />
       <span className={`min-w-0 flex-1 truncate ${run.awaitingApproval ? 'text-accent-ink' : 'text-ink-2'}`}>{text}</span>
       {running && left > 0 && <span className="shrink-0 text-ink-3 tabular">约还需 {left < 90 ? '1 分钟' : `${Math.round(left / 60)} 分钟`}</span>}
       <span className="shrink-0 font-mono text-ink-3 tabular" title="本项目已花费">{money(run.cost)}</span>
@@ -351,7 +374,8 @@ export function Conversation({ run, project, onSelectPage, selected, onPlay }: {
             if (it.kind === 'paused') return it === lastPaused && run.paused
               ? <PausedCard key={it.key} item={it} run={run} project={project} latest />
               : <p key={it.key} className="flex items-center gap-2 text-[12.5px] text-ink-3"><Pause size={13} aria-hidden />{it.reason === 'error' ? '出错停过一次' : '停过一次'}{it.stage ? `（${STAGE_NAME[it.stage]}）` : ''}，之后接着做了</p>;
-            if (it.kind === 'done') return run.feed.filter((f) => f.kind === 'done').at(-1) === it ? <DoneCard key={it.key} run={run} project={project} onPlay={onPlay} /> : null;
+            if (it.kind === 'done' || it.kind === 'ready') return run.feed.filter((f) => f.kind === 'done' || f.kind === 'ready').at(-1) === it ? <DoneCard key={it.key} run={run} project={project} onPlay={onPlay} /> : null;
+            if (it.kind === 'export') return <ExportLine key={it.key} it={it} project={project} />;
             if (it.kind === 'note') return <p key={it.key} className="flex items-start gap-2.5 text-[13px] leading-relaxed text-ink-2"><span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-paper ring-1 ring-line"><Crest size={11} /></span>{it.text}</p>;
             return null;
           })}

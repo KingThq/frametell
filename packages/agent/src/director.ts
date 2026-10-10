@@ -33,6 +33,8 @@ interface State {
   pages: Record<string, PageState>;
   usage: TokenUsage;
   video?: string;
+  /** the mp4 shows the film as it is now (false once a revision changes a page, until the next export) */
+  exported?: boolean;
   /** what the user told the director while it worked; each session picks up the notes it hasn't seen yet */
   notes?: string[];
   cursors?: Record<string, number>;
@@ -279,9 +281,8 @@ export class Director {
     const issues = this.project.lint(undefined, ['--determinism']);
     const flagged = Object.entries(this.state.pages).filter(([, s]) => s.status === 'flagged').map(([id, s]) => `${id}（${s.issues.join('，')}）`);
     if (!issues.length && !flagged.length) {
-      this.state.stage = 'render'; this.save();
       this.emit({ type: 'stage', stage: 'review', status: 'skipped', detail: '全片 lint 通过，各页自检通过' });
-      return;
+      return this.ready();
     }
     const tl = this.project.timeline();
     const sheet = this.project.snap('review', tl.pages.flatMap((p) => [(p.start + p.end) / 2, p.end - 0.35]), undefined, 400);
@@ -292,21 +293,27 @@ export class Director {
       if (/^DONE\b/i.test(r.text.trim())) break;
     }
     await s.close();
-    this.state.stage = 'render'; this.save();
     this.emit({ type: 'stage', stage: 'review', status: 'done' });
+    return this.ready();
   }
 
-  // ── ⑥ render ─────────────────────────────────────────────────────────────────────────────────
+  /** drawn and checked: the live preview is the film. Rendering an mp4 waits for an export */
+  private ready() {
+    this.state.stage = 'done'; this.save();
+    this.emit({ type: 'ready', duration: this.project.timeline().duration });
+  }
+
+  // ── ⑥ render (export) ────────────────────────────────────────────────────────────────────────
+  /** the film as mp4, on export. The stage is left as it was: exporting is not a step of making the film */
   async render(o: { workers?: number } = {}) {
     this.emit({ type: 'stage', stage: 'render', status: 'start' });
-    this.state.stage = 'render'; this.save();
     this.serverMeta();
     // a narrated film must carry its narration: check before spending minutes on frames
     if (this.o.voice && !/\bvoice:\s*\{/.test(this.project.read('script.js'))) this.fail('render', 'script.js 里丢了配音设置（META.voice），已停止渲染');
     const out = await this.project.render({ workers: o.workers, signal: this.o.signal, onLine: (line) => { if (!line.startsWith('[chunk')) this.emit({ type: 'render', line }); } });
     const g = this.project.gate(out.withSubs);
     this.emit({ type: 'gate', red: g.red, blank: g.gates.find((x) => x.key === 'blank')?.value ?? [], report: g.report.map((r) => ({ name: r.name, value: r.value, unit: r.unit })) });
-    this.state.stage = 'done'; this.state.video = out.withSubs; this.save();
+    this.state.video = out.withSubs; this.state.exported = true; this.save();
     this.emit({ type: 'stage', stage: 'render', status: 'done' });
     this.emit({ type: 'done', video: out.withSubs, videoNoSubs: out.noSubs, duration: g.duration });
     return out;
@@ -314,7 +321,8 @@ export class Director {
 
   /**
    * A change to a finished film: the planner decides which pages it touches and how, those pages are redrawn from their
-   * current code, then the film is checked and rendered again. Everything else is kept as it is.
+   * current code, then the film is checked again and plays in the preview. Everything else is kept as it is; the mp4
+   * waits for the next export.
    */
   async revise(request: string) {
     this.emit({ type: 'note', text: '收到，我先看看要改哪几页' });
@@ -336,12 +344,12 @@ ${request}
     this.serverMeta();
     if (this.o.tts && this.o.voice) await narrate(this.o.dir, { tts: this.o.tts, voice: this.o.voice, signal: this.o.signal });   // cached pages cost nothing
     this.state.revision = Object.fromEntries(plan.pages.map((p) => [p.id, p.note]));
+    this.state.exported = false;
     for (const id of ids) this.state.pages[id] = { status: 'queued', rounds: 0, issues: [] };
     this.state.stage = 'pages'; this.save();
     await this.pages(ids);
     this.state.revision = undefined; this.save();
     await this.review();
-    return this.render();
   }
 
   /** Whole run. `approve` is called with the storyboard and resolves with optional feedback (the user's edits). */
@@ -352,9 +360,11 @@ ${request}
     if (this.state.stage === 'narrate') await this.narrate();
     if (this.state.stage === 'pages') await this.pages();
     if (this.state.stage === 'review') await this.review();
-    if (this.state.stage === 'render') return this.render();
-    return { withSubs: this.state.video!, noSubs: this.state.video!.replace('有字幕', '无字幕') };
+    if (this.state.stage === 'render') this.ready();   // a run saved before exports were separate: it is ready to preview
   }
+
+  /** the exported mp4 if it shows the film as it is now */
+  get exported(): string | undefined { return this.state.exported !== false && this.state.video ? this.state.video : undefined; }
 }
 
 export const projectFile = (dir: string, rel: string) => path.join(dir, rel);

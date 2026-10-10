@@ -87,6 +87,9 @@ class Runner {
   /** notes the user left while nothing was running; handed to the director when the run continues */
   private parked: string[] = [];
   private director?: Director;
+  /** an export is running; change requests that arrive meanwhile wait for it */
+  private exporting = false;
+  private afterExport: string[] = [];
   status: RunStatus = 'idle';
   private log: string;
 
@@ -96,7 +99,11 @@ class Runner {
       const lines = fs.readFileSync(this.log, 'utf8').trim().split('\n').filter(Boolean);
       this.seq = lines.length;
       const last = lines.length ? (JSON.parse(lines[lines.length - 1]) as Logged) : undefined;
-      this.status = last?.type === 'done' ? 'done' : last?.type === 'approval' ? 'awaiting_approval' : lines.length ? 'stopped' : 'idle';
+      this.status = last?.type === 'approval' ? 'awaiting_approval' : this.stateStage() === 'done' ? 'done' : lines.length ? 'stopped' : 'idle';
+      // an export cut short by the app closing: the film is still there to preview, the export can simply run again
+      if (this.status === 'done' && last?.type === 'stage' && last.stage === 'render' && last.status === 'start' && !heldElsewhere(this.id)) {
+        this.emit({ type: 'stage', stage: 'render', status: 'failed', detail: '导出被打断了，可以重新导出' });
+      }
       // a run that was in progress when its process went away (app closed, crash): say so in the log, so every client
       // shows it as paused with a way to continue, instead of a stage that never ends
       if (this.status === 'stopped' && last && last.type !== 'paused' && !heldElsewhere(this.id)) {
@@ -113,7 +120,7 @@ class Runner {
     const st = path.join(dirOf(this.id), '.studio', 'state.json');
     const s = fs.existsSync(st) ? JSON.parse(fs.readFileSync(st, 'utf8')) : {};
     const status: RunStatus = this.status !== 'running' && heldElsewhere(this.id) ? 'running' : this.status;
-    return { status, stage: s.stage as string | undefined, video: s.video ? path.relative(dirOf(this.id), s.video) : undefined };
+    return { status, stage: s.stage as string | undefined, video: s.video ? path.relative(dirOf(this.id), s.video) : undefined, stale: s.video ? s.exported === false : undefined };
   }
 
   private emit = (e: StudioEvent) => {
@@ -154,8 +161,15 @@ class Runner {
   /** a change to a finished film, in the user's words */
   revise(request: string) { return this.launch((d) => d.revise(request)); }
 
+  /** render the finished film to mp4 (only on request: the live preview is the film until then) */
+  export(): boolean {
+    if (this.status === 'running' || this.stateStage() !== 'done') return false;
+    void this.launch((d) => d.render(), { exporting: true });
+    return true;
+  }
+
   /** build the director and run `task` with it: one run at a time, across processes; the outcome is always logged */
-  private async launch(task: (d: Director) => Promise<unknown>) {
+  private async launch(task: (d: Director) => Promise<unknown>, o: { exporting?: boolean } = {}) {
     if (this.status === 'running') return;
     const other = heldElsewhere(this.id);
     if (other) { this.emit({ type: 'error', message: `这个项目正在另一个 Frametell 窗口里制作（进程 ${other}），请在那里继续` }); return; }
@@ -190,11 +204,22 @@ class Runner {
       return;
     }
     this.director = director;
+    this.exporting = !!o.exporting;
     for (const n of this.parked.splice(0)) director.message(n);
-    task(director).finally(() => { release(); this.director = undefined; })
-      .then(() => { this.status = 'done'; writeMeta(readMeta(this.id)); })
+    const next = () => { const w = this.afterExport.splice(0); if (w.length) void this.revise(w.join('\n')); };
+    task(director).finally(() => { release(); this.director = undefined; this.exporting = false; })
+      .then(() => { this.status = 'done'; writeMeta(readMeta(this.id)); if (o.exporting) next(); })
       .catch((e: Error) => {
         const stage = this.stateStage();
+        // a failed or cancelled export leaves a finished film: say what happened to the export, nothing is paused
+        if (o.exporting) {
+          const aborted = e.name === 'AbortError' || !!this.abort?.signal.aborted;
+          this.status = 'done';
+          if (!aborted) this.emit({ type: 'error', message: e.message });
+          this.emit({ type: 'stage', stage: 'render', status: 'failed', detail: aborted ? '已取消导出' : `导出失败：${e.message}` });
+          next();
+          return;
+        }
         if (e.name === 'AbortError' || this.abort?.signal.aborted) { this.status = 'stopped'; this.emit({ type: 'paused', reason: 'user', stage }); }
         else { this.status = 'failed'; this.emit({ type: 'error', message: e.message }); this.emit({ type: 'paused', reason: 'error', stage, message: e.message }); }
       });
@@ -219,6 +244,11 @@ class Runner {
     this.emit({ type: 'user', text: said, ...(refs.length ? { refs } : {}) });
     const text = withRefs(said, refs);   // what the director reads: the references, then the words
     if (this.gate || this.status === 'awaiting_approval') return this.approve(text);
+    if (this.status === 'running' && this.exporting) {
+      this.afterExport.push(text);
+      this.emit({ type: 'note', text: '记下了，导出完就接着改' });
+      return true;
+    }
     if (this.status === 'running' && this.director) {
       this.director.message(text);
       this.emit({ type: 'note', text: '收到，接下来的步骤会照这个来' });

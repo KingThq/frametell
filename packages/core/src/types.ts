@@ -27,7 +27,8 @@ export interface ProjectMeta {
   notes?: string;
   materials: string[];
 }
-export interface ProjectSummary extends ProjectMeta { status: RunStatus; stage?: string; video?: string }
+/** `stale`: the exported mp4 is older than the film (a revision changed it since); the preview shows the film as it is */
+export interface ProjectSummary extends ProjectMeta { status: RunStatus; stage?: string; video?: string; stale?: boolean }
 
 export interface NewProjectInput {
   title?: string;

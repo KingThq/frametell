@@ -110,15 +110,20 @@ export class Studio {
   }
   private timelines = new Map<string, { stamp: string; value: Timeline | null }>();
 
-  /** a full-resolution frame of the finished film (the no-subtitle cut) at `t` seconds: a project-relative path */
-  async frame(id: string, t: number): Promise<string | null> {
+  /** full-resolution frames of the film at `times` (project-relative): from the mp4 when it is current, else live */
+  async frames(id: string, times: number[]): Promise<string[]> {
     const dir = projectDir(id);
-    const film = (() => { try { return fs.readdirSync(path.join(dir, 'out')).find((f) => f.endsWith('-无字幕.mp4')); } catch { return undefined; } })();
-    if (!film || !Number.isFinite(t) || t < 0) return null;
-    return new Project(dir).still(path.join(dir, 'out', film), t);
+    const ts = times.filter((t) => Number.isFinite(t) && t >= 0).slice(0, 40);
+    if (!ts.length) return [];
+    let st: { video?: string; exported?: boolean } = {};
+    try { st = JSON.parse(fs.readFileSync(path.join(dir, '.studio', 'state.json'), 'utf8')); } catch {}
+    const cut = st.video && st.exported !== false ? st.video.replace('有字幕', '无字幕') : undefined;
+    return new Project(dir).stills(ts, cut && fs.existsSync(cut) ? cut : undefined);
   }
 
   start(id: string) { return runner(id).start(); }
+  /** render the finished film to mp4; false when something is running or the film isn't finished */
+  export(id: string) { return runner(id).export(); }
   approve(id: string, feedback?: string) { return runner(id).approve(feedback); }
   stop(id: string) { runner(id).stop(); }
   /** talk to the director: storyboard feedback, a note mid-run, or a change to the finished film */

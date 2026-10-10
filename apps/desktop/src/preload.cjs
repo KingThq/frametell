@@ -27,7 +27,8 @@ contextBridge.exposeInMainWorld('studioBridge', {
   say: (id, text, refs) => call('say', id, text, refs),
   attach: async (id, file) => call('attach', id, file.name, new Uint8Array(await file.arrayBuffer())),
   timeline: (id) => call('timeline', id),
-  frame: (id, t) => call('frame', id, t),
+  frames: (id, times) => call('frames', id, times),
+  export: (id) => call('export', id),
   subscribe: (id, since, onEvent, onState) => {
     const subId = Math.random().toString(36).slice(2);
     let last = since;

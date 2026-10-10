@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ArrowUp, FileText, Film, Layers, Loader2, Paperclip, Plus, Quote, TriangleAlert, X } from 'lucide-react';
 import { client, type ProjectView } from '../lib/client';
 import { refKey, toSend, type Ref } from '../lib/refs';
-import type { RunView } from '../lib/run';
+import { finished, type RunView } from '../lib/run';
 import { Lightbox, type LightItem } from './Lightbox';
 
 // The message box to the director. Above the words sits a tray of references — the pages, lines and frames picked on
@@ -100,7 +100,7 @@ export function Composer({ run, project, viewing }: { run: RunView; project: Pro
   const suggest = viewing && !items.some((x) => x.key === refKey(viewing)) ? viewing : undefined;
 
   const placeholder = run.awaitingApproval ? '想改分镜的哪里？比如「第 3 页换成天平的比喻」'
-    : run.video && !run.current ? (items.length ? '想怎么改？' : '想改哪里？可以把右边的页、口播、画面加进来')
+    : finished(run) && !run.current ? (items.length ? '想怎么改？' : '想改哪里？可以把右边的页、口播、画面加进来')
     : run.paused ? '继续之前，想调整什么？'
     : run.current ? '给导演留言，比如「节奏再慢一点」'
     : '说点什么…';

@@ -64,7 +64,8 @@ async function run(argv: string[]) {
     else if (e.type === 'error') console.log(`[${sec(t0)}] ✗ ${e.message}`);
   };
   const director = new Director({ dir, runtime, style, brief: { durationSec: +(o.duration || 60), topic: o.topic }, tts, voice, prices: { ...info.cost, currency: info.currency }, concurrency: +(o.concurrency || 3), emit });
-  const out = await director.run();
+  await director.run();
+  const out = await director.render();   // the CLI's run ends with the mp4
   const u = director.usage, c = director.cost();
   console.log(`\n完成 ${sec(t0).trim()} · 成片 ${out.withSubs}`);
   console.log(`token：输入 ${u.input} · 缓存读 ${u.cacheRead} · 缓存写 ${u.cacheWrite} · 输出 ${u.output} · 约 ${c.currency === 'CNY' ? '¥' : '$'}${c.amount.toFixed(2)}`);

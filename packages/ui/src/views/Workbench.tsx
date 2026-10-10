@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ChevronLeft, Pause, Play } from 'lucide-react';
 import { client, type ProjectView } from '../lib/client';
 import { useLoad, useRun } from '../lib/hooks';
-import { isWorking, money, STAGE_NAME, type RunView } from '../lib/run';
+import { finished, isWorking, money, STAGE_NAME, type RunView } from '../lib/run';
 import { TopBar } from '../components/TopBar';
 import { Conversation } from './Conversation';
 import { Stage } from './Stage';
@@ -78,7 +78,7 @@ export function Workbench({ id, openSettings }: { id: string; openSettings: () =
   useEffect(() => { document.title = project.data ? `${project.data.title} · Frametell` : 'Frametell'; }, [project.data?.title]);
 
   const running = isWorking(run);
-  const status = run.revising ? '修改中' : run.video && !running ? '已完成' : run.awaitingApproval ? '等你确认分镜' : run.paused ? '已暂停' : run.current ? `${STAGE_NAME[run.current]}中` : '准备中';
+  const status = run.revising ? '修改中' : run.exporting ? '导出中' : finished(run) && !running ? '已完成' : run.awaitingApproval ? '等你确认分镜' : run.paused ? '已暂停' : run.current ? `${STAGE_NAME[run.current]}中` : '准备中';
   const play = () => { setSelected(undefined); setPane('stage'); setPlayKey((k) => k + 1); };
 
   if (project.error) return (
@@ -90,7 +90,7 @@ export function Workbench({ id, openSettings }: { id: string; openSettings: () =
       <TopBar onSettings={openSettings}>
         <a href="#/" className="fs-icon-btn -ml-1 shrink-0" aria-label="返回首页"><ChevronLeft size={16} /></a>
         <h1 className="min-w-0 truncate text-[14px] font-medium">{p?.title ?? ''}</h1>
-        <span className={`hidden shrink-0 text-[12.5px] sm:inline ${run.video && !running ? 'text-jade' : run.awaitingApproval ? 'text-accent-ink' : 'text-ink-3'}`} aria-live="polite">{status}</span>
+        <span className={`hidden shrink-0 text-[12.5px] sm:inline ${finished(run) && !running ? 'text-jade' : run.awaitingApproval ? 'text-accent-ink' : 'text-ink-3'}`} aria-live="polite">{status}</span>
         {conn === 'reconnecting' && <span className="shrink-0 rounded-full bg-seal-soft px-2 py-0.5 text-[12px] text-seal" role="status">连接中断，正在重连</span>}
         <span className="ml-auto flex shrink-0 items-center gap-2">
           {p && <CostChip run={run} project={p} />}

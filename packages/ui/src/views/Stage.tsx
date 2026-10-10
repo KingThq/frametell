@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Captions, CaptionsOff, Check, ChevronLeft, ChevronRight, Download, Images, Maximize2, MessageSquareText, Quote, TriangleAlert } from 'lucide-react';
 import { client, type PageTiming, type ProjectView, type Timeline } from '../lib/client';
-import { relPath, STAGE_NAME, STAGES, type PageView, type RunView } from '../lib/run';
+import { film, finished, relPath, STAGE_NAME, STAGES, type PageView, type RunView } from '../lib/run';
+import { ExportControls } from './Export';
 import { pageName } from '../lib/describe';
 import { Lightbox } from './Lightbox';
 import { clip, type Ref } from '../lib/refs';
@@ -71,15 +72,16 @@ function Film({ run, project, ids, tl, subs, playKey, onFocus }: { run: RunView;
   const [vt, setVt] = useState(0);
   const ft = usePlayerTime(frame).t;
   const okCount = ids.filter((id) => ['ok', 'flagged'].includes(run.pages[id]?.status)).length;
-  const t = run.video ? vt : ft;
+  const cut = film(run);
+  const t = cut ? vt : ft;
   const seek = (s: number) => { if (video.current) { video.current.currentTime = s; void video.current.play().catch(() => {}); } else seekFrame(frame.current, s); };
 
   let screen: React.ReactNode;
-  if (run.video) {
-    const src = subs ? run.video.path : run.video.noSubs;
+  if (cut) {
+    const src = subs ? cut.path : cut.noSubs;
     screen = <video ref={video} key={`${src}-${playKey ?? 0}`} controls autoPlay={!!playKey} onTimeUpdate={(e) => setVt(e.currentTarget.currentTime)} className="h-full w-full rounded-xl bg-black object-contain" src={client.fileUrl(project, relPath(src, project.id))} />;
   } else if (okCount > 0) {
-    screen = <iframe ref={frame} key={okCount} title="预览：已经画好的页面" src={client.fileUrl(project, 'index.html')} sandbox="allow-scripts" className="h-full w-full rounded-xl border-0 bg-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent" />;
+    screen = <iframe ref={frame} key={ids.map((x) => `${run.pages[x]?.status ?? ''}${run.pages[x]?.round ?? ''}`).join('|')} title="预览：已经画好的页面" src={client.fileUrl(project, 'index.html')} sandbox="allow-scripts" className="h-full w-full rounded-xl border-0 bg-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent" />;
   } else {
     const current = STAGES.find((s) => run.stages[s].status === 'running');
     screen = (
@@ -183,22 +185,17 @@ const momentOf = (lines: { abs?: number }[], j: number, end: number) => {
   return Math.max(a, Math.min(a + 1.2, a + (b - a) / 2, b - 0.15));
 };
 
-/** full-resolution frames of the film at the given times, cut on demand (a few at a time) */
-function useFrames(project: ProjectView, times: number[], enabled: boolean) {
+/** full-resolution frames of the film at the given times, cut in one go; again whenever the film changes */
+function useFrames(project: ProjectView, times: number[], enabled: boolean, version = '') {
   const [paths, setPaths] = useState<Record<string, string>>({});
   const key = times.map((t) => t.toFixed(1)).join(',');
   useEffect(() => {
+    setPaths({});
     if (!enabled || !times.length) return;
     let live = true;
-    const queue = times.filter((t) => !paths[t.toFixed(1)]);
-    const next = async (): Promise<void> => {
-      const t = queue.shift(); if (t == null || !live) return;
-      try { const f = await client.frame(project.id, t); if (f && live) setPaths((cur) => ({ ...cur, [t.toFixed(1)]: f })); } catch {}
-      return next();
-    };
-    void Promise.all([next(), next(), next()]);
+    client.frames(project.id, times).then((list) => live && setPaths(Object.fromEntries(times.map((t, i) => [t.toFixed(1), list[i]])))).catch(() => {});
     return () => { live = false; };
-  }, [project.id, key, enabled]);
+  }, [project.id, key, enabled, version]);
   return (t: number) => paths[t.toFixed(1)];
 }
 
@@ -207,12 +204,12 @@ function Focus({ id, run, project, ids, tl, onFocus, onBack, onRef }: { id: stri
   const screenBox = useRef<HTMLDivElement>(null);
   const strip = useRef<HTMLDivElement>(null);
   const cueList = useRef<HTMLOListElement>(null);
-  const version = ids.map((x) => `${run.pages[x]?.status ?? ''}${run.pages[x]?.round ?? ''}`).join('|') + (run.video?.path ?? '');
+  const version = ids.map((x) => `${run.pages[x]?.status ?? ''}${run.pages[x]?.round ?? ''}`).join('|') + (run.ready?.at ?? run.video?.path ?? '');
   const { t, playing: running, ready } = usePlayerTime(frame, version);
   const [light, setLight] = useState<{ kind: 'frames' | 'sheet'; i: number } | null>(null);
   const i = ids.indexOf(id), p = run.pages[id], sb = run.storyboard?.pages.find((x) => x.id === id);
   const lines = linesOf(id, tl, run);
-  const drawn = p?.status === 'ok' || p?.status === 'flagged' || !!run.video;
+  const drawn = p?.status === 'ok' || p?.status === 'flagged' || finished(run);
   const prev = ids[i - 1], next = ids[i + 1];
   const pt = tl?.pages.find((x) => x.id === id);
   const timed = lines.some((l) => l.abs != null);
@@ -222,7 +219,7 @@ function Focus({ id, run, project, ids, tl, onFocus, onBack, onRef }: { id: stri
   if (pt && booted.current !== version) { booted.current = version; startAt.current = Math.min(pt.start + 0.6, pt.end - 0.1); }
   const poster = p?.thumb ? relPath(p.thumb, project.id) : tl?.posters?.[id];
   const moments = useMemo(() => (pt && timed ? lines.map((_, j) => momentOf(lines, j, pt.end)) : []), [pt?.start, pt?.end, lines.length, timed]);
-  const frameAt = useFrames(project, moments, !!run.video);
+  const frameAt = useFrames(project, moments, finished(run), version);
   // the line on screen right now: words, its frame and the player all point at the same moment
   const active = timed ? Math.max(0, lines.filter((l) => l.abs != null && l.abs <= t + 0.05).length - 1) : -1;
   const inThis = !!pt && t >= pt.start - 0.01 && t < pt.end - 0.01;
@@ -301,7 +298,7 @@ function Focus({ id, run, project, ids, tl, onFocus, onBack, onRef }: { id: stri
       </div>
 
       <div className="mx-auto w-full max-w-[1280px] px-6 pb-5 pt-3">
-        {moments.length > 0 && !!run.video && (
+        {moments.length > 0 && finished(run) && (
           <div ref={strip} className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-2 pt-1" role="list" aria-label="这一页的关键画面">
             {moments.map((m, j) => {
               const src = frameAt(m), on = j === active && inThis;
@@ -366,11 +363,12 @@ export function Stage({ run, project, selected, onSelect, playKey, onRef }: { ru
   const [view, setView] = useState<'film' | 'pages'>('film');
   const [subs, setSubs] = useState(true);
   const ids = run.pageOrder.length ? run.pageOrder : run.storyboard?.pages.map((p) => p.id) || [];
-  const tlKey = `${run.stages.script.status}-${run.stages.narrate.status}-${run.stages.render.status}-${run.video?.path ?? ''}`;
+  const tlKey = `${run.stages.script.status}-${run.stages.narrate.status}-${run.ready?.at ?? ''}-${run.video?.path ?? ''}`;
   const tl = useTimeline(project.id, tlKey);
   useEffect(() => { if (playKey) { onSelect(undefined); setView('film'); } }, [playKey]);   // 「播放」from the conversation
   const focused = useMemo(() => (selected && ids.includes(selected) ? selected : undefined), [selected, ids]);
-  const cut = run.video ? (subs ? run.video.path : run.video.noSubs) : undefined;
+  const exported = film(run);
+  const cut = exported ? (subs ? exported.path : exported.noSubs) : undefined;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -382,7 +380,8 @@ export function Stage({ run, project, selected, onSelect, playKey, onRef }: { ru
                 className={`rounded-md px-3 py-1 text-[12.5px] font-medium transition-colors ${view === k ? 'bg-surface text-ink shadow-sm' : 'text-ink-3 hover:text-ink'}`}>{l}</button>
             ))}
           </div>
-          {run.video && cut && (
+          {!cut && finished(run) && <span className="ml-auto flex items-center gap-2"><span className="hidden text-[12px] text-ink-3 md:inline">{run.stale ? '这是改过之后的样子' : '这是实时预览'}</span><ExportControls run={run} project={project} size="fs-btn-sm" /></span>}
+          {cut && (
             <span className="ml-auto flex items-center gap-1.5">
               <button className="fs-btn fs-btn-ghost fs-btn-sm" aria-pressed={subs} onClick={() => setSubs(!subs)} title={subs ? '正在看带字幕的版本' : '正在看无字幕的版本'}>
                 {subs ? <Captions size={14} aria-hidden /> : <CaptionsOff size={14} aria-hidden />}{subs ? '字幕：开' : '字幕：关'}

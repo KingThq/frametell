@@ -24,6 +24,10 @@ export type FeedItem = In & (
   | { kind: 'approval'; key: string; storyboard: Storyboard; at: number }
   | { kind: 'pages'; key: string; at: number }
   | { kind: 'error'; key: string; message: string; at: number }
+  /** the film is finished and plays in the preview (newer runs; older logs go straight to `done`) */
+  | { kind: 'ready'; key: string; duration: number; at: number }
+  /** an mp4 export: running, then done with the file, or failed */
+  | { kind: 'export'; key: string; status: 'running' | 'done' | 'failed'; detail?: string; video?: string; noSubs?: string; at: number; endedAt?: number }
   | { kind: 'done'; key: string; video: string; duration: number; at: number });
 
 export interface PageView {
@@ -50,6 +54,12 @@ export interface RunView {
   cost?: { amount: number; currency: 'CNY' | 'USD'; usage: Ev<'cost'>['usage'] };
   gate?: Ev<'gate'>;
   video?: { path: string; noSubs: string; duration: number };
+  /** the film is finished: drawn, checked, playable in the live preview */
+  ready?: { duration: number; at: number };
+  /** the exported mp4 is older than the film (a revision changed it since) */
+  stale?: boolean;
+  /** an mp4 export in progress, since when */
+  exporting?: number;
   error?: string;
   /** set while the run is stopped (paused by the user, interrupted, or failed); cleared when it continues */
   paused?: { reason: 'user' | 'interrupted' | 'error'; message?: string; at: number };
@@ -83,12 +93,22 @@ export function reduce(v: RunView, e: LoggedEvent): RunView {
   const push = (item: FeedItem) => { r.feed = [...r.feed, { ...item, stage: item.stage ?? stage } as FeedItem]; };
   switch (e.type) {
     case 'stage': {
+      // after the film is finished, rendering is an export, not a step of making it: one line in the conversation
+      if (e.stage === 'render' && r.ready) {
+        if (e.status === 'start') { r.exporting = at; r.error = undefined; push({ kind: 'export', key, status: 'running', at }); }
+        else {
+          r.exporting = undefined;
+          const i = r.feed.map((f) => f.kind === 'export' && f.status === 'running').lastIndexOf(true);
+          if (i >= 0 && e.status === 'failed') r.feed = r.feed.map((f, j) => (j === i ? { ...f, status: 'failed', detail: e.detail, endedAt: at } as FeedItem : f));
+        }
+        return r;
+      }
       const s = { ...r.stages[e.stage] };
       if (e.status === 'start') { s.status = 'running'; s.startedAt = at; s.endedAt = undefined; r.current = e.stage; r.paused = undefined; r.revising = undefined; r.startedAt ??= at; }
       else { s.status = e.status; s.endedAt = at; s.detail = e.detail; if (r.current === e.stage) r.current = undefined; r.activity = undefined; }
       r.stages = { ...r.stages, [e.stage]: s };
       // one page list per round of drawing: a revision after the film gets its own
-      const lastDone = r.feed.map((f) => f.kind).lastIndexOf('done');
+      const lastDone = r.feed.map((f) => f.kind === 'done' || f.kind === 'ready').lastIndexOf(true);
       if (e.stage === 'pages' && e.status === 'start' && !r.feed.slice(lastDone + 1).some((f) => f.kind === 'pages')) push({ kind: 'pages', key, at, stage: 'pages' });
       else if (e.stage !== 'pages' || e.status !== 'start') push({ kind: 'stage', key, stage: e.stage, status: s.status, detail: e.detail, at });
       if (e.stage === 'script' && e.status === 'start') r.awaitingApproval = false;
@@ -157,7 +177,7 @@ export function reduce(v: RunView, e: LoggedEvent): RunView {
     case 'error': r.error = e.message; push({ kind: 'error', key, message: e.message, at }); return r;
     case 'user':
       if (r.awaitingApproval) r.awaitingApproval = false;   // at the storyboard, saying something is the change request
-      else if (r.video && !r.current) r.revising = at;            // after the film, it is a change request
+      else if ((r.ready || r.video) && !r.current && !r.exporting) r.revising = at;   // after the film, it is a change request
       push({ kind: 'user', key, text: e.text, refs: e.refs, at }); return r;
     case 'note': push({ kind: 'note', key, text: e.text, at }); return r;
     case 'paused': {
@@ -172,13 +192,27 @@ export function reduce(v: RunView, e: LoggedEvent): RunView {
       push({ kind: 'paused', key, reason: e.reason, message: e.message, at });
       return r;
     }
-    case 'done':
-      r.video = { path: e.video, noSubs: e.videoNoSubs, duration: e.duration };
+    case 'ready':
+      r.ready = { duration: e.duration, at };
+      r.stale = !!r.video;
       r.paused = undefined;
       r.activity = undefined;
       r.revising = undefined;
-      push({ kind: 'done', key, video: e.video, duration: e.duration, at });
+      r.current = undefined;
+      push({ kind: 'ready', key, duration: e.duration, at });
       return r;
+    case 'done': {
+      r.video = { path: e.video, noSubs: e.videoNoSubs, duration: e.duration };
+      r.stale = false;
+      r.exporting = undefined;
+      r.paused = undefined;
+      r.activity = undefined;
+      r.revising = undefined;
+      const i = r.feed.map((f) => f.kind === 'export' && f.status === 'running').lastIndexOf(true);
+      if (i >= 0) r.feed = r.feed.map((f, j) => (j === i ? { ...f, status: 'done', video: e.video, noSubs: e.videoNoSubs, endedAt: at } as FeedItem : f));
+      else push({ kind: 'done', key, video: e.video, duration: e.duration, at });   // a run from before exports were separate
+      return r;
+    }
     default: return r;
   }
 }
@@ -195,4 +229,8 @@ export const money = (c?: { amount: number; currency: 'CNY' | 'USD' }, currency:
 export const clock = (ms: number) => { const s = Math.max(0, Math.round(ms / 1000)); return s < 60 ? `${s} 秒` : `${Math.floor(s / 60)} 分 ${String(s % 60).padStart(2, '0')} 秒`; };
 
 /** something is being made right now (a stage, or the director planning a change to the finished film) */
-export const isWorking = (r: RunView) => (!!r.current && !r.awaitingApproval) || !!r.revising;
+export const isWorking = (r: RunView) => (!!r.current && !r.awaitingApproval) || !!r.revising || !!r.exporting;
+/** the film is finished (whether or not an mp4 of it exists) */
+export const finished = (r: RunView) => !!r.ready || !!r.video;
+/** the exported mp4, when it shows the film as it is now */
+export const film = (r: RunView) => (r.video && !r.stale ? r.video : undefined);

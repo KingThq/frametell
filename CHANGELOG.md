@@ -31,6 +31,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **A finished film is previewed live; mp4 is made only on export.** Making a film or revising one now ends once the pages are drawn and checked — the live player is the film, with its voice. 「导出 mp4」 renders on request (「导出最新版」 once a revision has changed the film); change requests sent during an export wait for it. A revision therefore no longer waits for a full render. The CLI's `run` still ends with an mp4.
+- Page focus: key frames come from the exported mp4 when it is current, else straight from the live film in one headless pass, so a revised page shows its new pictures without an export.
+- API: `GET /api/projects/:id/frames?t=` (batch) replaces `/frame`; `POST /api/projects/:id/export` starts an export; project summaries carry `stale` when the mp4 is older than the film.
 - Composer: rebuilt as a card with the reference tray, an attach button, a drop target and a toolbar, instead of a single line.
 - The CLI server keeps its panel token per data directory, so a restart no longer locks out a panel that is already open.
 - Page agents receive their component reference and a worked example up front instead of searching the engine.

@@ -72,12 +72,13 @@ export function createServer(studio = new Studio(), opts: { token?: string } = {
     return c.json({ ...meta, previewBase: previewBase(meta.id) }, 201);
   });
   app.get('/api/projects/:id/timeline', (c) => c.json(studio.timeline(c.req.param('id'))));
-  app.get('/api/projects/:id/frame', async (c) => c.json({ path: await studio.frame(c.req.param('id'), Number(c.req.query('t'))) }));
+  app.get('/api/projects/:id/frames', async (c) => c.json({ paths: await studio.frames(c.req.param('id'), String(c.req.query('t') || '').split(',').map(Number)) }));
   app.post('/api/projects/:id/start', async (c) => { await studio.start(c.req.param('id')); return c.json({ ok: true }); });
   app.post('/api/projects/:id/approve', async (c) => {
     const { feedback } = (await c.req.json().catch(() => ({}))) as { feedback?: string };
     return c.json({ ok: studio.approve(c.req.param('id'), feedback) });
   });
+  app.post('/api/projects/:id/export', (c) => c.json({ ok: studio.export(c.req.param('id')) }));
   app.post('/api/projects/:id/stop', (c) => { studio.stop(c.req.param('id')); return c.json({ ok: true }); });
   app.post('/api/projects/:id/say', async (c) => {
     const { text, refs } = (await c.req.json().catch(() => ({}))) as { text?: string; refs?: unknown };

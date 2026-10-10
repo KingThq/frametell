@@ -1,5 +1,6 @@
 // The orchestrator's hands on a project: engine tools (lint, snap, timeline, render, film gate) and git history.
 import fs from 'node:fs';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { execFile, spawn, spawnSync } from 'node:child_process';
 import { ENGINE_DIR, linkProject } from '@frametell/engine/tools/project.mjs';
@@ -15,6 +16,9 @@ export interface LintIssue { page: string; t: number; t1: number; local: number;
 export interface Beat { at: string; object: string; action: string; camera?: string; text?: string }
 export interface StoryPage { id: string; section: string; say: string; core?: boolean; beats: Beat[] }
 export interface Storyboard { title: string; summary: string; durationSec?: number; style: string; cast: string; pages: StoryPage[] }
+
+/** run a program to completion without blocking the process */
+const run = (cmd: string, args: string[], cwd?: string) => new Promise<void>((ok, fail) => execFile(cmd, args, { cwd, timeout: 120_000 }, (e, _o, err) => (e ? fail(new Error(String(err || e.message).slice(0, 1000))) : ok())));
 
 function tool(dir: string, name: string, args: string[], opts: { timeoutMs?: number; env?: Record<string, string> } = {}) {
   const r = spawnSync(process.execPath, [path.join(ENGINE_DIR, 'tools', name), ...args], {
@@ -48,13 +52,36 @@ export class Project {
    * One settled frame per page (0.4 s before it ends), cut from the finished film and kept in out/thumbs; for pages
    * whose run predates per-page thumbnails. Returns project-relative paths by page id.
    */
-  /** a full-resolution frame of the film at `t` seconds (cut once, kept until the film changes), project-relative */
-  async still(video: string, t: number): Promise<string> {
-    const rel = `out/frames/${Math.round(t * 10)}.jpg`, abs = path.join(this.dir, rel);
-    if (fs.existsSync(abs) && fs.statSync(abs).mtimeMs >= fs.statSync(video).mtimeMs) return rel;
-    fs.mkdirSync(path.dirname(abs), { recursive: true });
-    await new Promise<void>((ok, fail) => execFile(FFMPEG, ['-y', '-loglevel', 'error', '-ss', t.toFixed(2), '-i', video, '-frames:v', '1', '-q:v', '2', abs], (e) => (e ? fail(e) : ok())));
-    return rel;
+  /**
+   * Full-resolution frames at `times` (project-relative jpgs). From the exported mp4 when it is current, else drawn by
+   * the live film itself in one headless pass — a frame of the preview never waits for an export. Both are cached.
+   */
+  async stills(times: number[], video?: string): Promise<string[]> {
+    const ts = times.map((t) => Math.max(0, Math.round(t * 10) / 10));
+    const dir = path.join(this.dir, 'out', 'frames');
+    fs.mkdirSync(dir, { recursive: true });
+    if (video) {
+      const vt = fs.statSync(video).mtimeMs;
+      return Promise.all(ts.map(async (t) => {
+        const rel = `out/frames/${Math.round(t * 10)}.jpg`, abs = path.join(this.dir, rel);
+        if (!fs.existsSync(abs) || fs.statSync(abs).mtimeMs < vt) await run(FFMPEG, ['-y', '-loglevel', 'error', '-ss', t.toFixed(2), '-i', video, '-frames:v', '1', '-q:v', '2', abs]);
+        return rel;
+      }));
+    }
+    // the film as it is now: its script, voice and pages; any change gives new names, so old frames are never shown
+    const files = ['script.js', 'voice.js', ...fs.readdirSync(this.file('pages')).map((f) => `pages/${f}`)];
+    const stamp = createHash('sha1').update(files.map((f) => { try { return `${f}:${fs.statSync(this.file(f)).mtimeMs}`; } catch { return f; } }).join('|')).digest('hex').slice(0, 10);
+    const rel = (t: number) => `out/frames/live-${stamp}-${Math.round(t * 10)}.jpg`;
+    const todo = [...new Set(ts.filter((t) => !fs.existsSync(path.join(this.dir, rel(t)))))];
+    if (todo.length) {
+      await run(process.execPath, [path.join(ENGINE_DIR, 'tools', 'snap.mjs'), ...todo.map((t) => t.toFixed(1))], this.dir);
+      await Promise.all(todo.map(async (t) => {
+        const png = this.file(`out/snap/snap-${t}.png`);
+        await run(FFMPEG, ['-y', '-loglevel', 'error', '-i', png, '-q:v', '2', path.join(this.dir, rel(t))]);
+        fs.rmSync(png, { force: true });
+      }));
+    }
+    return ts.map(rel);
   }
 
   posters(video: string, pages: PageTiming[]): Record<string, string> {

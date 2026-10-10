@@ -26,8 +26,10 @@ export interface StudioClient {
   attach(id: string, file: File): Promise<UserRef>;
   /** pages with their narration lines and times; null until the script exists */
   timeline(id: string): Promise<Timeline | null>;
-  /** a full-resolution frame of the finished film at `t` seconds, as a project-relative path */
-  frame(id: string, t: number): Promise<string | null>;
+  /** full-resolution frames of the film at `times`, as project-relative paths (from the mp4 when current, else live) */
+  frames(id: string, times: number[]): Promise<string[]>;
+  /** render the finished film to mp4 */
+  export(id: string): Promise<boolean>;
   /** replay after `since`, then live; returns unsubscribe */
   subscribe(id: string, since: number, onEvent: (e: LoggedEvent) => void, onState?: (s: 'open' | 'reconnecting') => void): () => void;
   /** where a narrator's sample can be played */
@@ -67,7 +69,8 @@ export const httpClient: StudioClient = {
   approve: async (id, feedback) => (await call<{ ok: boolean }>('POST', `/api/projects/${id}/approve`, { feedback })).ok,
   stop: async (id) => { await call('POST', `/api/projects/${id}/stop`); },
   timeline: (id) => call<Timeline | null>('GET', `/api/projects/${id}/timeline`),
-  frame: async (id, t) => (await call<{ path: string | null }>('GET', `/api/projects/${id}/frame?t=${t.toFixed(2)}`)).path,
+  export: async (id) => (await call<{ ok: boolean }>('POST', `/api/projects/${id}/export`)).ok,
+  frames: async (id, times) => (await call<{ paths: string[] }>('GET', `/api/projects/${id}/frames?t=${times.map((t) => t.toFixed(1)).join(',')}`)).paths,
   say: async (id, text, refs) => (await call<{ ok: boolean }>('POST', `/api/projects/${id}/say`, { text, refs })).ok,
   attach: async (id, file) => { const f = new FormData(); f.append('file', file); return call<UserRef>('POST', `/api/projects/${id}/attach`, f); },
   subscribe(id, since, onEvent, onState) {
