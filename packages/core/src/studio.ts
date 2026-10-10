@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createCatalog } from '@frametell/models';
 import { elevenLabsTts, listElevenLabsVoices, volcengineTts, VOLCENGINE_VOICES } from '@frametell/voice';
-import { STYLES } from '@frametell/agent';
+import { Project, STYLES, type Timeline } from '@frametell/agent';
 import { DATA_DIR, loadConfig, patchConfig, publicConfig, saveConfig } from './config.js';
 import { listProjects, newProject, projectDir, readMeta, runner } from './runner.js';
 import { checkEnv } from './env.js';
@@ -75,6 +75,28 @@ export class Studio {
     void runner(meta.id).start();
     return meta;
   }
+
+  /**
+   * Pages with their narration lines and times (from script.js + voice.js), for the page canvas; null until the script
+   * exists. Cached on the two files' mtimes, since computing it loads the engine.
+   */
+  timeline(id: string): Timeline | null {
+    const dir = projectDir(id);
+    const film = (() => { try { return fs.readdirSync(path.join(dir, 'out')).find((f) => f.endsWith('-无字幕.mp4')); } catch { return undefined; } })();
+    const stamp = ['script.js', 'voice.js', film ? `out/${film}` : ''].map((f) => { try { return f ? fs.statSync(path.join(dir, f)).mtimeMs : 0; } catch { return 0; } }).join('|');
+    if (stamp.startsWith('0|')) return null;
+    const hit = this.timelines.get(id);
+    if (hit?.stamp === stamp) return hit.value;
+    let value: Timeline | null = null;
+    try {
+      const project = new Project(dir);
+      value = project.timeline();
+      if (film) value.posters = project.posters(path.join(dir, 'out', film), value.pages);
+    } catch { value = null; }
+    this.timelines.set(id, { stamp, value });
+    return value;
+  }
+  private timelines = new Map<string, { stamp: string; value: Timeline | null }>();
 
   start(id: string) { return runner(id).start(); }
   approve(id: string, feedback?: string) { return runner(id).approve(feedback); }

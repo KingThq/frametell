@@ -71,6 +71,7 @@ export function createServer(studio = new Studio(), opts: { token?: string } = {
     const meta = studio.createProject(input, files);
     return c.json({ ...meta, previewBase: previewBase(meta.id) }, 201);
   });
+  app.get('/api/projects/:id/timeline', (c) => c.json(studio.timeline(c.req.param('id'))));
   app.post('/api/projects/:id/start', async (c) => { await studio.start(c.req.param('id')); return c.json({ ok: true }); });
   app.post('/api/projects/:id/approve', async (c) => {
     const { feedback } = (await c.req.json().catch(() => ({}))) as { feedback?: string };

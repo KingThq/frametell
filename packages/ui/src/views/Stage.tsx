@@ -1,119 +1,83 @@
-import { useMemo, useState } from 'react';
-import { Check, Download, FolderOpen, Loader2, TriangleAlert } from 'lucide-react';
-import { client, type ProjectView } from '../lib/client';
-import { clock, money, relPath, STAGE_NAME, STAGES, type PageView, type RunView } from '../lib/run';
-import { useNow } from '../lib/hooks';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowLeft, Captions, CaptionsOff, Check, ChevronLeft, ChevronRight, Download, Images, Maximize2, MessageSquareText, TriangleAlert } from 'lucide-react';
+import { client, type PageTiming, type ProjectView, type Timeline } from '../lib/client';
+import { relPath, STAGE_NAME, STAGES, type PageView, type RunView } from '../lib/run';
+import { pageName } from '../lib/describe';
 
-/** one page in the film strip; while it is being drawn a caramel line travels its border */
-function Tile({ p, project, index, selected, onClick, section }: { p?: PageView; project: ProjectView; index: number; selected: boolean; onClick: () => void; section?: string }) {
-  const status = p?.status ?? 'queued';
-  const working = status === 'drawing' || status === 'checking';
-  const src = p?.thumb ?? p?.sheet;   // a single settled frame once the page is done; the latest check sheet before that
-  const thumb = src ? client.fileUrl(project, relPath(src, project.id)) : undefined;
+// The workbench is about the film and its pages, each page's picture next to the words it carries: a film view (player,
+// a page lane in proportion to time, the line being spoken), a canvas of page cards, and a focused page to look closely.
+
+const STATUS_TEXT: Record<PageView['status'], string> = { queued: '排队', drawing: '正在画', checking: '自己检查中', ok: '画好了', flagged: '有一处要你看看', failed: '没画出来' };
+const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
+/** the timeline (pages, lines, times) refetched whenever the script, the voice or the film changes */
+function useTimeline(id: string, key: string) {
+  const [tl, setTl] = useState<Timeline | null>(null);
+  useEffect(() => { let live = true; client.timeline(id).then((t) => live && setTl(t)).catch(() => {}); return () => { live = false; }; }, [id, key]);
+  return tl;
+}
+
+/** time reported by an embedded engine player (postMessage studio:time) */
+function usePlayerTime(frame: React.RefObject<HTMLIFrameElement | null>, version = '') {
+  const [st, setSt] = useState({ t: 0, playing: false, ready: false });
+  useEffect(() => setSt({ t: 0, playing: false, ready: false }), [version]);   // a reloaded player starts over
+  useEffect(() => {
+    const on = (e: MessageEvent) => {
+      if (e.source !== frame.current?.contentWindow) return;
+      if (e.data?.type === 'studio:time') setSt((s) => ({ ...s, t: e.data.t, playing: !!e.data.playing }));
+      else if (e.data?.type === 'studio:ready') setSt((s) => ({ ...s, ready: true }));
+    };
+    addEventListener('message', on);
+    return () => removeEventListener('message', on);
+  }, [frame]);
+  return st;
+}
+const seekFrame = (frame: HTMLIFrameElement | null, t: number, play = true) => frame?.contentWindow?.postMessage({ type: 'studio:seek', t, play }, '*');
+
+function Thumb({ p, project, poster, className = '' }: { p?: PageView; project: ProjectView; poster?: string; className?: string }) {
+  // a frame from the finished film, else the settled frame the page agent left, else its latest check sheet
+  const src = poster ?? p?.thumb ?? p?.sheet;
+  const working = p?.status === 'drawing' || p?.status === 'checking';
   return (
-    <button onClick={onClick} aria-pressed={selected} title={section} aria-label={`第 ${index + 1} 页${section ? `：${section}` : ''}，${({ queued: '排队', drawing: '正在画', checking: '自己检查中', ok: '画好了', flagged: '有一处要你看看', failed: '没画出来' } as const)[status]}`}
-      className={`group relative aspect-video w-[132px] shrink-0 overflow-hidden rounded-lg text-left transition-[transform,box-shadow] duration-200 ease-out ${selected ? 'ring-2 ring-accent ring-offset-2 ring-offset-paper' : 'hover:-translate-y-px'} ${status === 'queued' ? 'border border-dashed border-line-2 bg-paper-2/40' : 'border border-line bg-paper-2'}`}>
-      {thumb && <img src={thumb} alt="" className="absolute inset-0 h-full w-full object-cover object-left-top opacity-0 transition-opacity duration-500 [&.loaded]:opacity-100" onLoad={(e) => e.currentTarget.classList.add('loaded')} />}
+    <span className={`block overflow-hidden bg-paper-2 ${className.includes('absolute') ? '' : 'relative'} ${className}`}>
+      {src && <img src={client.fileUrl(project, relPath(src, project.id))} alt="" className="absolute inset-0 h-full w-full object-cover object-left-top opacity-0 transition-opacity duration-500 [&.loaded]:opacity-100" ref={(el) => { if (el?.complete && el.naturalWidth) el.classList.add('loaded'); }} onLoad={(e) => e.currentTarget.classList.add('loaded')} />}
+      {!src && <span className="absolute inset-0 flex items-center justify-center text-[12px] text-ink-3">{working ? '正在画' : '排队'}</span>}
       {working && (
-        <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 132 74.25" preserveAspectRatio="none" aria-hidden>
-          <rect x="1" y="1" width="130" height="72.25" rx="7" fill="none" stroke="rgb(var(--fs-accent))" strokeWidth="2" pathLength="100" strokeDasharray="22 78" className="motion-safe:animate-[trace_1.6s_linear_infinite]" style={{ strokeDashoffset: 100 }} />
+        <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 160 90" preserveAspectRatio="none" aria-hidden>
+          <rect x="1" y="1" width="158" height="88" rx="6" fill="none" stroke="rgb(var(--fs-accent))" strokeWidth="2" pathLength="100" strokeDasharray="22 78" className="motion-safe:animate-[trace_1.6s_linear_infinite]" style={{ strokeDashoffset: 100 }} />
         </svg>
       )}
-      <span className="absolute bottom-1 left-1.5 rounded bg-black/60 px-1.5 py-px font-mono text-[11px] text-white tabular">{index + 1}</span>
-      {status === 'ok' && <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-jade text-paper" aria-label="完成"><Check size={10} strokeWidth={3} /></span>}
-      {status === 'flagged' && <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-seal text-paper" aria-label="需要关注"><TriangleAlert size={9} strokeWidth={3} /></span>}
-      {status === 'queued' && <span className="absolute inset-0 flex items-center justify-center text-[11px] text-ink-3">排队</span>}
-    </button>
+      {p?.status === 'ok' && <span className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-jade text-paper" aria-hidden><Check size={10} strokeWidth={3} /></span>}
+      {p?.status === 'flagged' && <span className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-seal text-paper" aria-hidden><TriangleAlert size={9} strokeWidth={3} /></span>}
+    </span>
   );
 }
 
-function Progress({ run, project }: { run: RunView; project: ProjectView }) {
-  const now = useNow(STAGES.some((s) => run.stages[s].status === 'running'));
-  return (
-    <div className="grid gap-6 sm:grid-cols-[1fr_auto]">
-      <ol className="space-y-2.5">
-        {STAGES.map((s) => {
-          const st = run.stages[s];
-          const took = st.startedAt ? (st.endedAt ?? now) - st.startedAt : 0;
-          return (
-            <li key={s} className="flex items-center gap-3 text-[13px]">
-              <span className="w-4">
-                {st.status === 'done' ? <Check size={14} className="text-jade" /> : st.status === 'running' ? <Loader2 size={14} className="animate-spin text-accent" /> : st.status === 'failed' ? <TriangleAlert size={14} className="text-seal" /> : <span className="mx-auto block h-1.5 w-1.5 rounded-full bg-line-2" />}
-              </span>
-              <span className={st.status === 'pending' ? 'text-ink-3' : 'text-ink'}>{STAGE_NAME[s]}</span>
-              <span className="h-px flex-1 bg-line" />
-              <span className="font-mono text-[12px] text-ink-3 tabular">{st.status === 'skipped' ? '跳过' : took ? clock(took) : ''}</span>
-            </li>
-          );
-        })}
-      </ol>
-      <dl className="grid min-w-[180px] content-start gap-3 text-[12.5px]">
-        <div><dt className="text-ink-3">已花费</dt><dd className="mt-0.5 font-mono text-[18px] text-ink tabular">{money(run.cost)}</dd></div>
-        <div><dt className="text-ink-3">模型</dt><dd className="mt-0.5 text-ink-2">{project.model.split('/').pop()}</dd></div>
-        {run.cost && <div><dt className="text-ink-3">token</dt><dd className="mt-0.5 font-mono text-[11.5px] text-ink-2 tabular">输入 {fmtK(run.cost.usage.input + run.cost.usage.cacheRead)} · 输出 {fmtK(run.cost.usage.output)}</dd><dd className="text-[11.5px] text-ink-3">缓存命中 {pct(run.cost.usage.cacheRead, run.cost.usage.input + run.cost.usage.cacheRead)}</dd></div>}
-      </dl>
-    </div>
-  );
-}
-const fmtK = (n: number) => (n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'K' : String(n));
-const pct = (a: number, b: number) => (b ? Math.round((100 * a) / b) + '%' : '—');
-
-function StoryboardTab({ run }: { run: RunView }) {
-  if (!run.storyboard) return <p className="text-[13px] text-ink-3">分镜写好后会出现在这里。</p>;
-  return (
-    <ol className="space-y-4">
-      {run.storyboard.pages.map((p, i) => (
-        <li key={p.id} className="grid grid-cols-[28px_1fr] gap-3">
-          <span className="font-mono text-[12px] text-ink-3 tabular">{String(i + 1).padStart(2, '0')}</span>
-          <div>
-            <p className="text-[13.5px] font-medium">{p.section}</p>
-            <p className="mt-1 max-w-[70ch] text-[12.5px] leading-relaxed text-ink-2">{p.say}</p>
-            <ul className="mt-2 space-y-1">{(p.beats || []).map((b, j) => <li key={j} className="text-[12px] leading-relaxed text-ink-3"><span className="mr-2 font-mono text-[11px]">{b.at}</span>{b.object} — {b.action}{b.text ? `「${b.text}」` : ''}</li>)}</ul>
-          </div>
-        </li>
-      ))}
-    </ol>
-  );
+/** the lines of a page: the voiced cues once the script exists, the storyboard's say before that */
+function linesOf(id: string, tl: Timeline | null, run: RunView): { text: string; at?: number; abs?: number }[] {
+  const pt = tl?.pages.find((p) => p.id === id);
+  if (pt?.cues.length) return pt.cues.map((c) => ({ text: c.text, at: c.at, abs: c.abs }));
+  const say = run.storyboard?.pages.find((p) => p.id === id)?.say;
+  return say ? [{ text: say }] : [];
 }
 
-function ExportTab({ run, project }: { run: RunView; project: ProjectView }) {
-  if (!run.video) return <p className="text-[13px] text-ink-3">渲染完成后，可以在这里下载成片。</p>;
-  const files = [{ label: '成片（带字幕）', rel: relPath(run.video.path, project.id) }, { label: '成片（无字幕）', rel: relPath(run.video.noSubs, project.id) }];
-  return (
-    <div className="space-y-3">
-      {files.map((f) => (
-        <a key={f.rel} href={client.fileUrl(project, f.rel)} download className="flex items-center justify-between rounded-xl border border-line px-4 py-3 text-[13px] transition-colors hover:border-line-2 hover:bg-surface-2">
-          <span>{f.label}<span className="ml-2 text-ink-3">MP4 · 1080p · {Math.round(run.video!.duration)} 秒</span></span>
-          <Download size={15} className="text-ink-3" />
-        </a>
-      ))}
-      <p className="flex items-center gap-1.5 pt-1 text-[12px] text-ink-3"><FolderOpen size={13} /> 项目文件夹：~/.frametell/projects/{project.id}</p>
-    </div>
-  );
-}
+// ── film view ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
-export function Stage({ run, project, selected, onSelect, playKey }: { run: RunView; project: ProjectView; selected?: string; onSelect: (id?: string) => void; playKey?: number }) {
-  const [tab, setTab] = useState<'progress' | 'storyboard' | 'export'>('progress');
-  const ids = run.pageOrder.length ? run.pageOrder : run.storyboard?.pages.map((p) => p.id) || [];
+function Film({ run, project, ids, tl, subs, playKey, onFocus }: { run: RunView; project: ProjectView; ids: string[]; tl: Timeline | null; subs: boolean; playKey?: number; onFocus: (id: string) => void }) {
+  const video = useRef<HTMLVideoElement>(null);
+  const frame = useRef<HTMLIFrameElement>(null);
+  const [vt, setVt] = useState(0);
+  const ft = usePlayerTime(frame).t;
   const okCount = ids.filter((id) => ['ok', 'flagged'].includes(run.pages[id]?.status)).length;
-  const sel = selected ? run.pages[selected] : undefined;
-  const preview = useMemo(() => client.fileUrl(project, 'index.html'), [project.id, project.previewBase]);
+  const t = run.video ? vt : ft;
+  const seek = (s: number) => { if (video.current) { video.current.currentTime = s; void video.current.play().catch(() => {}); } else seekFrame(frame.current, s); };
 
   let screen: React.ReactNode;
-  if (sel?.sheet) {
-    screen = (
-      <figure className="flex h-full flex-col">
-        <img src={client.fileUrl(project, relPath(sel.sheet, project.id))} alt={`${sel.id} 第 ${sel.round} 轮检查截图`} className="min-h-0 flex-1 rounded-xl object-contain" />
-        <figcaption className="mt-3 flex items-start justify-between gap-4 text-[12.5px]">
-          <span className="text-ink-2"><span className="font-mono text-ink-3">{sel.id}</span> · 第 {sel.round} 轮自检截图{sel.issues.length ? ` · ${sel.issues.length} 个待改问题` : ''}</span>
-          <button className="fs-btn fs-btn-ghost fs-btn-sm -mt-1" onClick={() => onSelect(undefined)}>回到预览</button>
-        </figcaption>
-      </figure>
-    );
-  } else if (run.video) {
-    screen = <video key={run.video.path} controls autoPlay={!!playKey} className="h-full w-full rounded-xl bg-black object-contain" src={client.fileUrl(project, relPath(run.video.path, project.id))} />;
+  if (run.video) {
+    const src = subs ? run.video.path : run.video.noSubs;
+    screen = <video ref={video} key={`${src}-${playKey ?? 0}`} controls autoPlay={!!playKey} onTimeUpdate={(e) => setVt(e.currentTarget.currentTime)} className="h-full w-full rounded-xl bg-black object-contain" src={client.fileUrl(project, relPath(src, project.id))} />;
   } else if (okCount > 0) {
-    screen = <iframe key={okCount} title="预览：已经画好的页面" src={preview} sandbox="allow-scripts" className="h-full w-full rounded-xl border-0 bg-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent" />;
+    screen = <iframe ref={frame} key={okCount} title="预览：已经画好的页面" src={client.fileUrl(project, 'index.html')} sandbox="allow-scripts" className="h-full w-full rounded-xl border-0 bg-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent" />;
   } else {
     const current = STAGES.find((s) => run.stages[s].status === 'running');
     screen = (
@@ -124,6 +88,12 @@ export function Stage({ run, project, selected, onSelect, playKey }: { run: RunV
     );
   }
 
+  const pages: (PageTiming | { id: string; start?: undefined; end?: undefined })[] = tl?.pages.length ? tl.pages : ids.map((id) => ({ id }));
+  const total = tl?.duration || 0;
+  const cur = tl?.pages.find((p) => t >= p.start && t < p.end) ?? tl?.pages[0];
+  const line = cur?.cues.filter((c) => c.abs <= t + 0.05).at(-1) ?? cur?.cues[0];
+  const curIndex = cur ? ids.indexOf(cur.id) : -1;
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* the screen fills the space it has at 16:9: a size container lets it fit both width and height */}
@@ -132,27 +102,203 @@ export function Stage({ run, project, selected, onSelect, playKey }: { run: RunV
           <div className="aspect-video" style={{ width: 'min(100cqw, calc(100cqh * 16 / 9), 1280px)' }}>{screen}</div>
         </div>
       </div>
-      {ids.length > 0 && (
-        <div className="px-6 pt-4">
-          <div className="flex gap-2.5 overflow-x-auto pb-1" role="list" aria-label="分页">
-            {ids.map((id, i) => <div role="listitem" key={id}><Tile p={run.pages[id]} index={i} project={project} selected={selected === id} section={run.storyboard?.pages.find((p) => p.id === id)?.section} onClick={() => onSelect(selected === id ? undefined : id)} /></div>)}
+      {pages.length > 0 && (
+        <div className="mx-auto w-full max-w-[1280px] px-6 pb-5 pt-4">
+          {/* the page lane: each page as wide as its share of the film; the playhead walks across it */}
+          <div className="relative flex gap-1" role="list" aria-label="分页时间带">
+            {pages.map((pt, i) => {
+              const share = total && pt.end != null ? (pt.end - pt.start!) / total : 1 / pages.length;
+              const on = cur?.id === pt.id && total > 0;
+              const section = run.storyboard?.pages.find((x) => x.id === pt.id)?.section;
+              return (
+                <div role="listitem" key={pt.id} style={{ flexGrow: share, flexBasis: 0 }} className="min-w-[44px]">
+                  <button onClick={() => (pt.start != null ? seek(pt.start) : onFocus(pt.id))} aria-label={`跳到第 ${i + 1} 页${section ? `：${section}` : ''}`} title={section}
+                    className={`group relative block h-[58px] w-full overflow-hidden rounded-md ring-offset-2 ring-offset-paper transition-shadow ${on ? 'ring-2 ring-accent' : 'ring-1 ring-line hover:ring-line-2'}`}>
+                    <Thumb p={run.pages[pt.id]} project={project} poster={tl?.posters?.[pt.id]} className="absolute inset-0" />
+                    <span className="absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/70 to-transparent px-2 pb-1 pt-3 text-left text-[11.5px] font-medium text-white">{i + 1} {section}</span>
+                  </button>
+                </div>
+              );
+            })}
+            {total > 0 && <span className="pointer-events-none absolute -bottom-1.5 -top-1.5 w-[2px] rounded-full bg-accent shadow-[0_0_0_2px_rgb(var(--fs-paper))]" style={{ left: `${Math.min(100, (t / total) * 100)}%` }} aria-hidden />}
+          </div>
+          {/* the line being spoken, with the way into this page */}
+          <div className="mt-3.5 flex min-h-[44px] items-start gap-4">
+            <p className="min-w-0 flex-1 text-[14px] leading-relaxed text-ink" aria-live="off">
+              {cur && <span className="mr-2 text-[12.5px] text-ink-3 tabular">{pageName(cur.id)} · {mmss(t)}</span>}
+              {line?.text ?? <span className="text-ink-3">口播写好后，每一句会在这里跟着画面走。</span>}
+            </p>
+            {cur && curIndex >= 0 && <button className="fs-btn fs-btn-secondary fs-btn-sm shrink-0" onClick={() => onFocus(cur.id)}><Maximize2 size={13} aria-hidden /> 细看这一页</button>}
           </div>
         </div>
       )}
-      <div className="mt-4 border-t border-line">
-        <div className="flex gap-1 px-5" role="tablist" aria-label="工作台信息"
-          onKeyDown={(e) => { const order = ['progress', 'storyboard', 'export'] as const; const i = order.indexOf(tab); if (e.key === 'ArrowRight') setTab(order[(i + 1) % 3]); if (e.key === 'ArrowLeft') setTab(order[(i + 2) % 3]); }}>
-          {([['progress', '进度'], ['storyboard', '分镜'], ['export', '导出']] as const).map(([k, l]) => (
-            <button key={k} role="tab" id={`tab-${k}`} aria-controls="stage-panel" tabIndex={tab === k ? 0 : -1} aria-selected={tab === k} onClick={() => setTab(k)}
-              className={`relative px-3 py-2.5 text-[13px] font-medium transition-colors ${tab === k ? 'text-ink' : 'text-ink-3 hover:text-ink'}`}>
-              {l}{k === 'export' && run.video ? <span className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-jade align-middle" /> : null}
-              <span className={`absolute inset-x-2 bottom-0 h-[2px] rounded-full bg-ink transition-opacity ${tab === k ? 'opacity-100' : 'opacity-0'}`} />
-            </button>
-          ))}
+    </div>
+  );
+}
+
+// ── the canvas: every page, its picture and its words ──────────────────────────────────────────────────────────────
+
+function Canvas({ run, project, ids, tl, onFocus }: { run: RunView; project: ProjectView; ids: string[]; tl: Timeline | null; onFocus: (id: string) => void }) {
+  if (!ids.length) return <p className="px-6 py-10 text-center text-[13px] text-ink-3">分镜写好后，每一页会排在这里。</p>;
+  return (
+    <div className="h-full overflow-y-auto px-6 py-5">
+      <ol className="mx-auto grid max-w-[1280px] gap-4 [grid-template-columns:repeat(auto-fill,minmax(280px,1fr))]">
+        {ids.map((id, i) => {
+          const p = run.pages[id], sb = run.storyboard?.pages.find((x) => x.id === id), pt = tl?.pages.find((x) => x.id === id);
+          const lines = linesOf(id, tl, run);
+          return (
+            <li key={id}>
+              <button onClick={() => onFocus(id)} className="group flex h-full w-full flex-col overflow-hidden rounded-xl border border-line bg-surface text-left transition-[border-color,transform] duration-200 hover:-translate-y-px hover:border-line-2">
+                <Thumb p={p} project={project} poster={tl?.posters?.[id]} className="aspect-video w-full border-b border-line" />
+                <span className="flex flex-1 flex-col px-3.5 pb-3.5 pt-3">
+                  <span className="flex items-baseline gap-2">
+                    <span className="text-[12px] text-ink-3 tabular">{i + 1}</span>
+                    <span className="min-w-0 flex-1 truncate text-[13.5px] font-medium text-ink">{sb?.section ?? pageName(id)}</span>
+                    {pt && <span className="shrink-0 font-mono text-[11.5px] text-ink-3 tabular">{mmss(pt.start)}–{mmss(pt.end)}</span>}
+                  </span>
+                  <span className="mt-2 line-clamp-4 text-[12.5px] leading-[1.7] text-ink-2">{lines.map((l) => l.text).join('') || '这一页的口播还没写好'}</span>
+                  {p?.status === 'flagged' && p.issues[0] && <span className="mt-2 text-[12px] leading-relaxed text-seal">{p.issues[0]}</span>}
+                  {p && p.status !== 'ok' && p.status !== 'flagged' && <span className="mt-2 text-[12px] text-accent-ink">{STATUS_TEXT[p.status]}</span>}
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
+
+// ── one page, close up ─────────────────────────────────────────────────────────────────────────────────────────────
+
+function Focus({ id, run, project, ids, tl, onFocus, onBack, onCompose }: { id: string; run: RunView; project: ProjectView; ids: string[]; tl: Timeline | null; onFocus: (id: string) => void; onBack: () => void; onCompose: (text: string) => void }) {
+  const frame = useRef<HTMLIFrameElement>(null);
+  const version = ids.map((x) => `${run.pages[x]?.status ?? ''}${run.pages[x]?.round ?? ''}`).join('|') + (run.video?.path ?? '');
+  const { t, playing: running, ready } = usePlayerTime(frame, version);
+  const [sheet, setSheet] = useState(false);
+  const i = ids.indexOf(id), p = run.pages[id], sb = run.storyboard?.pages.find((x) => x.id === id);
+  const lines = linesOf(id, tl, run);
+  const drawn = p?.status === 'ok' || p?.status === 'flagged' || !!run.video;
+  const prev = ids[i - 1], next = ids[i + 1];
+  const pt = tl?.pages.find((x) => x.id === id);
+  const playing = lines.filter((l) => l.abs != null && l.abs <= t + 0.05).length - 1;
+  useEffect(() => { setSheet(false); }, [id]);
+  // one player for the whole film: turning a page is a jump, not a reload. While it plays across a page boundary, the
+  // focused page follows the picture; turning the page by hand jumps there and keeps playing if it was playing.
+  const follow = useRef(false);
+  const inPage = (x: PageTiming | undefined) => !!x && t >= x.start - 0.01 && t < x.end - 0.01;
+  useEffect(() => {
+    if (!ready || !pt) return;
+    if (follow.current) { follow.current = false; return; }
+    if (!inPage(pt)) seekFrame(frame.current, Math.min(pt.start + 0.6, pt.end - 0.1), running);   // past the cross-fade from the page before
+  }, [ready, id, pt?.start]);
+  useEffect(() => {
+    if (!running || !tl || inPage(pt)) return;
+    const now = tl.pages.find((x) => t >= x.start && t < x.end);
+    if (now && now.id !== id) { follow.current = true; onFocus(now.id); }
+  }, [t]);
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement)?.closest('input,textarea,select')) return;
+      if (e.key === 'Escape') onBack();
+      else if (e.key === 'ArrowLeft' && prev) onFocus(prev);
+      else if (e.key === 'ArrowRight' && next) onFocus(next);
+    };
+    addEventListener('keydown', on);
+    return () => removeEventListener('keydown', on);
+  }, [prev, next, onBack, onFocus]);
+
+  let screen: React.ReactNode;
+  if (drawn) screen = (
+    <div className="relative h-full w-full">
+      <iframe ref={frame} key={version} title="预览" src={client.fileUrl(project, 'index.html')} sandbox="allow-scripts" className="h-full w-full rounded-xl border-0 bg-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent" />
+      {sheet && p?.sheet && <img src={client.fileUrl(project, relPath(p.sheet, project.id))} alt={`第 ${i + 1} 页第 ${p.round} 轮自检截图`} className="absolute inset-0 h-full w-full rounded-xl bg-paper-2 object-contain" />}
+    </div>
+  );
+  else screen = (
+    <div className="flex h-full flex-col items-center justify-center rounded-xl border border-dashed border-line-2 bg-paper-2/50 px-8 text-center">
+      <span className="font-display text-[22px] text-ink-2">{p ? STATUS_TEXT[p.status] : '还没开始画'}</span>
+      {!!sb?.beats?.length && <ul className="mt-4 max-w-[52ch] space-y-1.5 text-left text-[12.5px] leading-relaxed text-ink-3">{sb.beats.map((b, j) => <li key={j}><span className="mr-2 font-mono text-[11.5px]">{b.at}</span>{b.object}：{b.action}</li>)}</ul>}
+    </div>
+  );
+
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex items-center gap-2 px-5 pt-4">
+        <button className="fs-btn fs-btn-ghost fs-btn-sm" onClick={onBack}><ArrowLeft size={14} aria-hidden /> 全部页面</button>
+        <h2 className="min-w-0 truncate text-[14px] font-medium"><span className="mr-2 text-ink-3 tabular">第 {i + 1} 页</span>{sb?.section}</h2>
+        <span className="ml-auto flex shrink-0 items-center gap-1">
+          {p?.sheet && <button className={`fs-btn fs-btn-sm ${sheet ? 'fs-btn-secondary' : 'fs-btn-ghost'}`} aria-pressed={sheet} onClick={() => setSheet(!sheet)} title="导演检查这一页时看的截图"><Images size={14} aria-hidden /> 自检截图</button>}
+          <button className="fs-icon-btn" disabled={!prev} onClick={() => prev && onFocus(prev)} aria-label="上一页"><ChevronLeft size={16} /></button>
+          <span className="w-[42px] text-center text-[12px] text-ink-3 tabular">{i + 1} / {ids.length}</span>
+          <button className="fs-icon-btn" disabled={!next} onClick={() => next && onFocus(next)} aria-label="下一页"><ChevronRight size={16} /></button>
+        </span>
+      </div>
+      <div className="min-h-0 flex-1 px-6 pt-3 [container-type:size]">
+        <div className="mx-auto flex h-full items-center justify-center">
+          <div className="aspect-video" style={{ width: 'min(100cqw, calc(100cqh * 16 / 9), 1280px)' }}>{screen}</div>
         </div>
-        <div className="h-[220px] overflow-y-auto px-6 py-4" role="tabpanel" id="stage-panel" aria-labelledby={`tab-${tab}`}>
-          {tab === 'progress' ? <Progress run={run} project={project} /> : tab === 'storyboard' ? <StoryboardTab run={run} /> : <ExportTab run={run} project={project} />}
+      </div>
+      <div className="mx-auto grid w-full max-w-[1280px] gap-x-6 gap-y-3 px-6 pb-5 pt-4 md:grid-cols-[1fr_auto]">
+        <div className="min-w-0">
+          <h3 className="mb-1.5 flex items-center gap-1.5 text-[12px] font-medium text-ink-3"><MessageSquareText size={13} aria-hidden /> 这一页的口播{lines.some((l) => l.at != null) ? ' · 点一句从那里播' : ''}</h3>
+          <ol className="max-h-[132px] space-y-0.5 overflow-y-auto pr-1">
+            {lines.length ? lines.map((l, j) => (
+              <li key={j}>
+                <button disabled={l.at == null || !drawn || sheet} onClick={() => seekFrame(frame.current, l.abs ?? l.at!)}
+                  className={`-mx-2 flex w-[calc(100%+16px)] gap-3 rounded-lg px-2 py-1 text-left text-[13.5px] leading-relaxed transition-colors enabled:hover:bg-ink/[0.04] ${j === playing && drawn && !sheet ? 'bg-accent-soft/50 text-ink' : 'text-ink-2'}`}>
+                  {l.at != null && <span className="w-9 shrink-0 pt-px font-mono text-[11.5px] text-ink-3 tabular">{mmss(l.at)}</span>}
+                  <span>{l.text}</span>
+                </button>
+              </li>
+            )) : <li className="text-[13px] text-ink-3">口播还没写好。</li>}
+          </ol>
+          {p?.status === 'flagged' && p.issues.length > 0 && <p className="mt-2 flex items-start gap-1.5 text-[12.5px] leading-relaxed text-seal"><TriangleAlert size={13} className="mt-0.5 shrink-0" aria-hidden />{p.issues.join('；')}</p>}
         </div>
+        <div className="flex items-start">
+          <button className="fs-btn fs-btn-secondary" onClick={() => onCompose(`第 ${i + 1} 页：`)}>改这一页</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── the workbench ──────────────────────────────────────────────────────────────────────────────────────────────────
+
+export function Stage({ run, project, selected, onSelect, playKey, onCompose }: { run: RunView; project: ProjectView; selected?: string; onSelect: (id?: string) => void; playKey?: number; onCompose: (text: string) => void }) {
+  const [view, setView] = useState<'film' | 'pages'>('film');
+  const [subs, setSubs] = useState(true);
+  const ids = run.pageOrder.length ? run.pageOrder : run.storyboard?.pages.map((p) => p.id) || [];
+  const tlKey = `${run.stages.script.status}-${run.stages.narrate.status}-${run.stages.render.status}-${run.video?.path ?? ''}`;
+  const tl = useTimeline(project.id, tlKey);
+  useEffect(() => { if (playKey) { onSelect(undefined); setView('film'); } }, [playKey]);   // 「播放」from the conversation
+  const focused = useMemo(() => (selected && ids.includes(selected) ? selected : undefined), [selected, ids]);
+  const cut = run.video ? (subs ? run.video.path : run.video.noSubs) : undefined;
+
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      {!focused && (
+        <div className="flex items-center gap-3 px-5 pt-4">
+          <div className="flex rounded-lg bg-ink/[0.05] p-0.5" role="tablist" aria-label="工作台视图">
+            {([['film', '成片'], ['pages', `逐页${ids.length ? ` · ${ids.length}` : ''}`]] as const).map(([k, l]) => (
+              <button key={k} role="tab" aria-selected={view === k} onClick={() => setView(k)}
+                className={`rounded-md px-3 py-1 text-[12.5px] font-medium transition-colors ${view === k ? 'bg-surface text-ink shadow-sm' : 'text-ink-3 hover:text-ink'}`}>{l}</button>
+            ))}
+          </div>
+          {run.video && cut && (
+            <span className="ml-auto flex items-center gap-1.5">
+              <button className="fs-btn fs-btn-ghost fs-btn-sm" aria-pressed={subs} onClick={() => setSubs(!subs)} title={subs ? '正在看带字幕的版本' : '正在看无字幕的版本'}>
+                {subs ? <Captions size={14} aria-hidden /> : <CaptionsOff size={14} aria-hidden />}{subs ? '字幕：开' : '字幕：关'}
+              </button>
+              <a className="fs-btn fs-btn-secondary fs-btn-sm" href={client.fileUrl(project, relPath(cut, project.id))} download><Download size={13} aria-hidden /> 下载{subs ? '带字幕版' : '无字幕版'}</a>
+            </span>
+          )}
+        </div>
+      )}
+      <div className="min-h-0 flex-1">
+        {focused ? <Focus id={focused} run={run} project={project} ids={ids} tl={tl} onFocus={onSelect} onBack={() => { onSelect(undefined); setView('pages'); }} onCompose={onCompose} />
+          : view === 'film' ? <Film run={run} project={project} ids={ids} tl={tl} subs={subs} playKey={playKey} onFocus={onSelect} />
+          : <Canvas run={run} project={project} ids={ids} tl={tl} onFocus={onSelect} />}
       </div>
     </div>
   );

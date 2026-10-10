@@ -263,6 +263,12 @@ function Composer({ run, project }: { run: RunView; project: ProjectView }) {
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
+  // 「改这一页」on the workbench starts a message here
+  useEffect(() => {
+    const on = (e: Event) => { const t = (e as CustomEvent<string>).detail; setText((cur) => (cur.trim() ? cur : t)); requestAnimationFrame(() => { const el = ref.current; if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }); };
+    addEventListener('studio:compose', on);
+    return () => removeEventListener('studio:compose', on);
+  }, []);
   const placeholder = run.awaitingApproval ? '想改分镜的哪里？比如「第 3 页换成天平的比喻」'
     : run.video && !run.current ? '想改哪里？比如「第 2 页的数字大一点」'
     : run.paused ? '继续之前，想调整什么？'

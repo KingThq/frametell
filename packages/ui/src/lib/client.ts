@@ -1,10 +1,10 @@
 // StudioClient: everything the panel can ask of the core. In a browser it speaks HTTP + SSE to the local server; inside
 // the desktop app the preload script exposes the same methods as `window.studioBridge` over IPC.
 import type {
-  EnvCheck, LoggedEvent, ModelInfo, NewProjectInput, ProjectSummary, PublicSettings, SettingsPatch, StyleInfo, Voice,
+  EnvCheck, LoggedEvent, ModelInfo, NewProjectInput, PageTiming, ProjectSummary, PublicSettings, SettingsPatch, StyleInfo, Timeline, Voice,
 } from '@frametell/core/types';
 
-export type { EnvCheck, LoggedEvent, ModelInfo, NewProjectInput, ProjectSummary, PublicSettings, SettingsPatch, StyleInfo, Voice };
+export type { EnvCheck, LoggedEvent, ModelInfo, NewProjectInput, PageTiming, ProjectSummary, PublicSettings, SettingsPatch, StyleInfo, Timeline, Voice };
 export type ProjectView = ProjectSummary & { previewBase: string };
 
 export interface StudioClient {
@@ -22,6 +22,8 @@ export interface StudioClient {
   stop(id: string): Promise<void>;
   /** talk to the director: storyboard feedback, a note mid-run, or a change to the finished film */
   say(id: string, text: string): Promise<boolean>;
+  /** pages with their narration lines and times; null until the script exists */
+  timeline(id: string): Promise<Timeline | null>;
   /** replay after `since`, then live; returns unsubscribe */
   subscribe(id: string, since: number, onEvent: (e: LoggedEvent) => void, onState?: (s: 'open' | 'reconnecting') => void): () => void;
   /** where a narrator's sample can be played */
@@ -60,6 +62,7 @@ export const httpClient: StudioClient = {
   start: async (id) => { await call('POST', `/api/projects/${id}/start`); },
   approve: async (id, feedback) => (await call<{ ok: boolean }>('POST', `/api/projects/${id}/approve`, { feedback })).ok,
   stop: async (id) => { await call('POST', `/api/projects/${id}/stop`); },
+  timeline: (id) => call<Timeline | null>('GET', `/api/projects/${id}/timeline`),
   say: async (id, text) => (await call<{ ok: boolean }>('POST', `/api/projects/${id}/say`, { text })).ok,
   subscribe(id, since, onEvent, onState) {
     let last = since;

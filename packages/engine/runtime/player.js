@@ -61,6 +61,7 @@
     document.body.appendChild(hint);
     const $ = (id) => document.getElementById(id);
     const seek = $('pv-seek');
+    const embedded = window.parent !== window;
     seek.max = dur.toFixed(2);
 
     const show = () => {
@@ -68,6 +69,7 @@
       seek.value = t.toFixed(2);
       $('pv-time').textContent = `${fmt(t)} / ${fmt(dur)}`;
       $('pv-play').textContent = playing ? '❚❚' : '▶';
+      if (embedded) parent.postMessage({ type: 'studio:time', t, playing }, '*');   // the Studio panel follows along
     };
     const loop = (now) => {
       if (!playing) return;
@@ -98,9 +100,16 @@
       else if (e.code === 'ArrowLeft') jump(t - 5);
       else if (e.code === 'KeyF') fullscreen();
     });
+    // 嵌在 Studio 面板里：面板可以跳到某句、开始或暂停（{ type: 'studio:seek', t, play }）
+    addEventListener('message', (e) => {
+      const m = e.data;
+      if (m?.type === 'studio:seek') { jump(+m.t || 0); if (m.play && !playing) play(); }
+      else if (m?.type === 'studio:pause') pause();
+    });
     // 播放时鼠标不动 2 秒，控制条自动隐藏
     let idle;
     addEventListener('mousemove', () => { bar.classList.remove('idle'); clearTimeout(idle); idle = setTimeout(() => playing && bar.classList.add('idle'), 2000); });
     show();
+    if (embedded) parent.postMessage({ type: 'studio:ready', duration: dur }, '*');
   };
 })();
