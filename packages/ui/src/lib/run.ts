@@ -1,6 +1,7 @@
 // Folds the event stream into what the workbench shows. The director (storyboard, script, review) speaks in the
 // conversation; page sessions run in parallel, so each page is summarized in one row instead of interleaving.
 import type { LoggedEvent } from './client';
+import { describeTool, pageName } from './describe';
 
 type Ev<T extends LoggedEvent['type']> = Extract<LoggedEvent, { type: T }>;
 export type Stage = Ev<'stage'>['stage'];
@@ -54,6 +55,10 @@ export interface RunView {
   paused?: { reason: 'user' | 'interrupted' | 'error'; message?: string; at: number };
   /** the stage that is running now */
   current?: Stage;
+  /** set from a change request on a finished film until the redraw starts: the director is deciding which pages to redo */
+  revising?: number;
+  /** what the director (or a page agent) is doing right now, in plain words, and since when */
+  activity?: { text: string; at: number };
   /** when the run (or its latest continuation) started, for elapsed time */
   startedAt?: number;
   /** the last moment anything happened (for "working…" indicators) */
@@ -79,10 +84,12 @@ export function reduce(v: RunView, e: LoggedEvent): RunView {
   switch (e.type) {
     case 'stage': {
       const s = { ...r.stages[e.stage] };
-      if (e.status === 'start') { s.status = 'running'; s.startedAt = at; s.endedAt = undefined; r.current = e.stage; r.paused = undefined; r.startedAt ??= at; }
-      else { s.status = e.status; s.endedAt = at; s.detail = e.detail; if (r.current === e.stage) r.current = undefined; }
+      if (e.status === 'start') { s.status = 'running'; s.startedAt = at; s.endedAt = undefined; r.current = e.stage; r.paused = undefined; r.revising = undefined; r.startedAt ??= at; }
+      else { s.status = e.status; s.endedAt = at; s.detail = e.detail; if (r.current === e.stage) r.current = undefined; r.activity = undefined; }
       r.stages = { ...r.stages, [e.stage]: s };
-      if (e.stage === 'pages' && e.status === 'start' && !r.feed.some((f) => f.kind === 'pages')) push({ kind: 'pages', key, at, stage: 'pages' });
+      // one page list per round of drawing: a revision after the film gets its own
+      const lastDone = r.feed.map((f) => f.kind).lastIndexOf('done');
+      if (e.stage === 'pages' && e.status === 'start' && !r.feed.slice(lastDone + 1).some((f) => f.kind === 'pages')) push({ kind: 'pages', key, at, stage: 'pages' });
       else if (e.stage !== 'pages' || e.status !== 'start') push({ kind: 'stage', key, stage: e.stage, status: s.status, detail: e.detail, at });
       if (e.stage === 'script' && e.status === 'start') r.awaitingApproval = false;
       if (e.status === 'start') r.error = undefined;
@@ -90,6 +97,14 @@ export function reduce(v: RunView, e: LoggedEvent): RunView {
     }
     case 'agent': {
       const ev = e.event;
+      const who = isPage(e.session) ? `${pageName(e.session.slice(5))} · ` : '';
+      if (ev.type === 'tool_start') {
+        const said = describeTool(ev.name, ev.summary);
+        // inside a page session, writing code is drawing the page whatever the path summary kept
+        r.activity = { text: who + (who && /^(写|修改)文件$|^(画|修改)第/.test(said) ? (said.startsWith('修改') ? '在改画面' : '在画画面') : said), at };
+      }
+      else if (ev.type === 'thinking') r.activity = { text: who + '在想', at };
+      else if (ev.type === 'text' && !who) r.activity = { text: '在写', at };
       if (isPage(e.session)) {
         const id = e.session.slice(5);
         const p = r.pages[id] ? { ...r.pages[id] } : newPage(id, r);
@@ -142,12 +157,15 @@ export function reduce(v: RunView, e: LoggedEvent): RunView {
     case 'error': r.error = e.message; push({ kind: 'error', key, message: e.message, at }); return r;
     case 'user':
       if (r.awaitingApproval) r.awaitingApproval = false;   // at the storyboard, saying something is the change request
+      else if (r.video && !r.current) r.revising = at;            // after the film, it is a change request
       push({ kind: 'user', key, text: e.text, at }); return r;
     case 'note': push({ kind: 'note', key, text: e.text, at }); return r;
     case 'paused': {
       // close whatever was running: its timer stops, and the chapter reads as stopped rather than in progress
       r.stages = Object.fromEntries(Object.entries(r.stages).map(([k, s]) => [k, s.status === 'running' ? { ...s, status: 'stopped' as StageStatus, endedAt: at } : s])) as RunView['stages'];
       r.current = undefined;
+      r.activity = undefined;
+      r.revising = undefined;
       r.paused = { reason: e.reason, message: e.message, at };
       r.pages = Object.fromEntries(Object.entries(r.pages).map(([k, p]) => [k, p.status === 'drawing' || p.status === 'checking' ? { ...p, status: 'queued' as PageStatus } : p]));
       if (e.reason === 'error' && r.feed.at(-1)?.kind === 'error') r.feed = r.feed.slice(0, -1);   // the paused card carries the message
@@ -157,6 +175,8 @@ export function reduce(v: RunView, e: LoggedEvent): RunView {
     case 'done':
       r.video = { path: e.video, noSubs: e.videoNoSubs, duration: e.duration };
       r.paused = undefined;
+      r.activity = undefined;
+      r.revising = undefined;
       push({ kind: 'done', key, video: e.video, duration: e.duration, at });
       return r;
     default: return r;
@@ -173,3 +193,6 @@ export const relPath = (abs: string, projectId: string) => { const i = abs.index
 
 export const money = (c?: { amount: number; currency: 'CNY' | 'USD' }, currency: 'CNY' | 'USD' = 'CNY') => { const cur = c?.currency ?? currency, a = c?.amount ?? 0; return `${cur === 'CNY' ? '¥' : '$'}${a < 10 ? a.toFixed(2) : a.toFixed(1)}`; };
 export const clock = (ms: number) => { const s = Math.max(0, Math.round(ms / 1000)); return s < 60 ? `${s} 秒` : `${Math.floor(s / 60)} 分 ${String(s % 60).padStart(2, '0')} 秒`; };
+
+/** something is being made right now (a stage, or the director planning a change to the finished film) */
+export const isWorking = (r: RunView) => (!!r.current && !r.awaitingApproval) || !!r.revising;

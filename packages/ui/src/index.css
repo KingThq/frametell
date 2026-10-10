@@ -47,6 +47,13 @@
   .tabular { font-variant-numeric: lining-nums tabular-nums; }
 }
 
+/* live text: a soft band of light passes over words that are still happening */
+.fs-shimmer {
+  background: linear-gradient(90deg, rgb(var(--fs-ink-2)) 0%, rgb(var(--fs-ink-2)) 40%, rgb(var(--fs-ink)) 50%, rgb(var(--fs-ink-2)) 60%, rgb(var(--fs-ink-2)) 100%) 0 0 / 250% 100%;
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: shimmer 2.2s linear infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
 }

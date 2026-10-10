@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ChevronLeft, Pause, Play } from 'lucide-react';
 import { client, type ProjectView } from '../lib/client';
 import { useLoad, useRun } from '../lib/hooks';
-import { money, STAGE_NAME, type RunView } from '../lib/run';
+import { isWorking, money, STAGE_NAME, type RunView } from '../lib/run';
 import { TopBar } from '../components/TopBar';
 import { Conversation } from './Conversation';
 import { Stage } from './Stage';
@@ -48,8 +48,8 @@ export function Workbench({ id, openSettings }: { id: string; openSettings: () =
   const [pane, setPane] = useState<'talk' | 'stage'>('talk');   // narrow windows show one pane at a time
   useEffect(() => { document.title = project.data ? `${project.data.title} · Frametell` : 'Frametell'; }, [project.data?.title]);
 
-  const running = !!run.current && !run.awaitingApproval;
-  const status = run.video && !running ? '已完成' : run.awaitingApproval ? '等你确认分镜' : run.paused ? '已暂停' : run.current ? `${STAGE_NAME[run.current]}中` : '准备中';
+  const running = isWorking(run);
+  const status = run.revising ? '修改中' : run.video && !running ? '已完成' : run.awaitingApproval ? '等你确认分镜' : run.paused ? '已暂停' : run.current ? `${STAGE_NAME[run.current]}中` : '准备中';
   const play = () => { setSelected(undefined); setPane('stage'); setPlayKey((k) => k + 1); };
 
   if (project.error) return (

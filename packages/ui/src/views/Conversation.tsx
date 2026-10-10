@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowUp, Check, ChevronRight, CircleDashed, Clapperboard, Download, Loader2, Pause, Play, TriangleAlert } from 'lucide-react';
 import { client, type ProjectView } from '../lib/client';
-import { clock, money, relPath, STAGE_NAME, STAGES, type FeedItem, type PageView, type RunView, type Stage, type Storyboard } from '../lib/run';
+import { clock, money, relPath, STAGE_NAME, STAGES, type FeedItem, type PageView, type RunView, type Stage, type Storyboard, isWorking } from '../lib/run';
 import { pageName, summarizeTools } from '../lib/describe';
 import { useNow } from '../lib/hooks';
 import { Crest } from '../components/Logo';
@@ -182,7 +182,7 @@ function DoneCard({ run, project, onPlay }: { run: RunView; project: ProjectView
 
 // ── the conversation ────────────────────────────────────────────────────────────────────────────────────────────────
 
-type Block = { kind: 'chapter'; stage: Stage; items: FeedItem[]; key: string } | { kind: 'item'; item: FeedItem };
+type Block = { kind: 'chapter'; stage: Stage; items: FeedItem[]; key: string; latest?: boolean } | { kind: 'work'; items: FeedItem[]; key: string } | { kind: 'item'; item: FeedItem };
 
 /** group the feed into stage chapters; user messages, notes and outcomes stay in the flow between them */
 function blocks(feed: FeedItem[]): Block[] {
@@ -190,16 +190,61 @@ function blocks(feed: FeedItem[]): Block[] {
   for (const it of feed) {
     const loose = it.kind === 'user' || it.kind === 'paused' || it.kind === 'done' || (it.kind === 'stage' && it.status === 'running');
     const stage = it.kind === 'stage' ? it.stage : it.stage;
-    if (loose || !stage) { out.push({ kind: 'item', item: it }); continue; }
     const last = out[out.length - 1];
+    // the director working outside a stage (planning a change to the finished film) gets a chapter of its own
+    if (!loose && !stage && (it.kind === 'say' || it.kind === 'think' || it.kind === 'tools')) {
+      if (last?.kind === 'work') last.items.push(it); else out.push({ kind: 'work', items: [it], key: `w-${it.key}` });
+      continue;
+    }
+    if (loose || !stage) { out.push({ kind: 'item', item: it }); continue; }
     if (last?.kind === 'chapter' && last.stage === stage) last.items.push(it);
     else out.push({ kind: 'chapter', stage, items: [it], key: `c-${it.key}` });
   }
+  // a stage can run again (a revision redraws pages): only its latest chapter is live, earlier ones are history
+  const seen = new Set<Stage>();
+  for (let i = out.length - 1; i >= 0; i--) { const b = out[i]; if (b.kind === 'chapter' && !seen.has(b.stage)) { b.latest = true; seen.add(b.stage); } }
   return out;
 }
 
+/** the director planning a change: what it read and decided, folded like a stage */
+function WorkChapter({ b, live }: { b: Extract<Block, { kind: 'work' }>; live: boolean }) {
+  return (
+    <section aria-label="修改计划">
+      <header className="flex items-center gap-2.5">
+        <StageMark n={0} status={live ? 'running' : 'done'} />
+        <h3 className="text-[13.5px] font-semibold text-ink">修改计划</h3>
+        <span className={`truncate text-[12.5px] ${live ? 'text-accent-ink' : 'text-ink-3'}`}>{live ? '在看要改哪几页' : ''}</span>
+      </header>
+      <div className="ml-2.5 mt-2.5 space-y-3 border-l border-line pb-1 pl-[22px]">
+        {b.items.filter((i): i is Extract<FeedItem, { kind: 'say' }> => i.kind === 'say').map((it) => <Said key={it.key} text={it.text} />)}
+        <Process items={b.items} />
+      </div>
+    </section>
+  );
+}
+
+/** the last line of the conversation while something is being made: who is doing what, right now, for how long */
+function LiveLine({ run }: { run: RunView }) {
+  const now = useNow(true);
+  const a = run.activity;
+  const text = a?.text ?? (run.revising ? '在看要改哪几页' : run.current ? STAGE_DOING[run.current] : '准备中');
+  const since = a?.at ?? run.revising ?? (run.current ? run.stages[run.current].startedAt : undefined);
+  const secs = since ? Math.max(0, Math.round((now - since) / 1000)) : 0;
+  return (
+    <div className="flex items-center gap-2.5 animate-fade" role="status">
+      <span className="relative flex h-5 w-5 shrink-0 items-center justify-center" aria-hidden>
+        <span className="absolute inset-0 rounded-full bg-accent/40 motion-safe:animate-halo" />
+        <span className="relative flex h-5 w-5 items-center justify-center rounded-full bg-paper ring-1 ring-accent/50"><Crest size={11} /></span>
+      </span>
+      <span className="fs-shimmer min-w-0 truncate text-[13px]">{text}…</span>
+      {secs > 2 && <span className="shrink-0 text-[12px] text-ink-3 tabular">{secs < 60 ? `${secs} 秒` : clock(secs * 1000)}</span>}
+    </div>
+  );
+}
+
 function Chapter({ b, run, project, onSelectPage, selected }: { b: Extract<Block, { kind: 'chapter' }>; run: RunView; project: ProjectView; onSelectPage: (id: string) => void; selected?: string }) {
-  const st = run.stages[b.stage];
+  const live = run.stages[b.stage];
+  const st = b.latest ? live : { ...live, status: 'done' as const, startedAt: undefined, endedAt: undefined };
   const n = STAGES.indexOf(b.stage) + 1;
   const now = useNow(st.status === 'running');
   const took = st.startedAt ? clock((st.endedAt ?? now) - st.startedAt) : undefined;
@@ -220,6 +265,7 @@ function Chapter({ b, run, project, onSelectPage, selected }: { b: Extract<Block
             ? <p key={it.key} className="flex items-center gap-1.5 text-[12.5px] text-jade"><Check size={13} aria-hidden /> 分镜检查通过</p>
             : <p key={it.key} className="text-[12.5px] leading-relaxed text-ink-3">检查出 {it.reds} 处要改{it.yellows ? `、${it.yellows} 处提醒` : ''}，导演正在修改</p>;
           if (it.kind === 'approval') return <Approval key={it.key} sb={it.storyboard} project={project} active={run.awaitingApproval && approvals.at(-1) === it} />;
+          if (it.kind === 'pages' && !b.latest) return <p key={it.key} className="text-[12.5px] text-ink-3">{run.pageOrder.length} 页都画好了</p>;
           if (it.kind === 'pages') return <Pages key={it.key} run={run} onSelect={onSelectPage} selected={selected} />;
           if (it.kind === 'error') return <p key={it.key} className="flex items-start gap-1.5 text-[12.5px] leading-relaxed text-seal"><TriangleAlert size={13} className="mt-0.5 shrink-0" aria-hidden />{it.message}</p>;
           return null;
@@ -234,17 +280,20 @@ const ESTIMATE: Record<Stage, (pages: number) => number> = { storyboard: () => 1
 
 /** the line above the composer: what is happening now, how long it has taken, about how long is left */
 function NowBar({ run }: { run: RunView }) {
-  const running = !!run.current && !run.awaitingApproval;
+  const running = isWorking(run);
   const now = useNow(running);
-  const pages = run.pageOrder.length || run.storyboard?.pages.length || 5;
+  const todo = run.pageOrder.filter((id) => !['ok', 'flagged', 'failed'].includes(run.pages[id]?.status ?? 'queued')).length;
+  const pages = run.video ? Math.max(todo, 1) : run.pageOrder.length || run.storyboard?.pages.length || 5;
   let left = 0;
-  if (running) {
+  if (running && run.current) {
     const i = STAGES.indexOf(run.current!);
     const cur = run.stages[run.current!];
     left = Math.max(30, ESTIMATE[run.current!](pages) - (cur.startedAt ? (now - cur.startedAt) / 1000 : 0)) + STAGES.slice(i + 1).reduce((a, s) => a + ESTIMATE[s](pages), 0);
   }
   const busyPage = run.pageOrder.find((id) => run.pages[id]?.status === 'checking' || run.pages[id]?.status === 'drawing');
-  const text = run.video && !running ? `成片完成 · ${Math.round(run.video.duration)} 秒`
+  if (running && !run.current) left = 0;
+  const text = run.revising ? '导演在看要改哪几页'
+    : run.video && !running ? `成片完成 · ${Math.round(run.video.duration)} 秒`
     : run.awaitingApproval ? '等你确认分镜'
     : run.paused ? '已暂停'
     : running ? `${STAGE_DOING[run.current!]}${run.current === 'pages' && busyPage ? ` · ${pageName(busyPage)}${run.pages[busyPage].status === 'checking' ? '在自己检查' : '在画'}` : ''}`
@@ -253,7 +302,7 @@ function NowBar({ run }: { run: RunView }) {
     <div className="flex items-center gap-2.5 px-5 py-2.5 text-[12.5px]" aria-live="polite">
       <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${running ? 'animate-breathe bg-accent' : run.awaitingApproval ? 'bg-accent' : run.video ? 'bg-jade' : 'bg-line-2'}`} aria-hidden />
       <span className={`min-w-0 flex-1 truncate ${run.awaitingApproval ? 'text-accent-ink' : 'text-ink-2'}`}>{text}</span>
-      {running && <span className="shrink-0 text-ink-3 tabular">约还需 {left < 90 ? '1 分钟' : `${Math.round(left / 60)} 分钟`}</span>}
+      {running && left > 0 && <span className="shrink-0 text-ink-3 tabular">约还需 {left < 90 ? '1 分钟' : `${Math.round(left / 60)} 分钟`}</span>}
       <span className="shrink-0 font-mono text-ink-3 tabular" title="本项目已花费">{money(run.cost)}</span>
     </div>
   );
@@ -300,7 +349,7 @@ function Composer({ run, project }: { run: RunView; project: ProjectView }) {
 export function Conversation({ run, project, onSelectPage, selected, onPlay }: { run: RunView; project: ProjectView; onSelectPage: (id: string) => void; selected?: string; onPlay: () => void }) {
   const box = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
-  useEffect(() => { const el = box.current; if (el && stick.current) el.scrollTop = el.scrollHeight; }, [run.feed.length, run.pages, run.stages]);
+  useEffect(() => { const el = box.current; if (el && stick.current) el.scrollTop = el.scrollHeight; }, [run.feed.length, run.pages, run.stages, run.activity, run.revising]);
   const list = useMemo(() => blocks(run.feed), [run.feed]);
   const lastPaused = [...run.feed].reverse().find((f) => f.kind === 'paused');
   return (
@@ -318,6 +367,7 @@ export function Conversation({ run, project, onSelectPage, selected, onPlay }: {
             </p>
           </div>
           {list.map((b) => {
+            if (b.kind === 'work') return <WorkChapter key={b.key} b={b} live={!!run.revising && b === list.filter((x) => x.kind === 'work').at(-1)} />;
             if (b.kind === 'chapter') return <Chapter key={b.key} b={b} run={run} project={project} onSelectPage={onSelectPage} selected={selected} />;
             const it = b.item;
             if (it.kind === 'user') return <p key={it.key} className="ml-auto w-fit max-w-[88%] whitespace-pre-wrap rounded-2xl rounded-tr-md bg-accent-soft/70 px-4 py-2.5 text-[13.5px] leading-relaxed text-ink ring-1 ring-accent/15 animate-rise">{it.text}</p>;
@@ -328,6 +378,7 @@ export function Conversation({ run, project, onSelectPage, selected, onPlay }: {
             if (it.kind === 'note') return <p key={it.key} className="flex items-start gap-2.5 text-[13px] leading-relaxed text-ink-2"><span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-paper ring-1 ring-line"><Crest size={11} /></span>{it.text}</p>;
             return null;
           })}
+          {isWorking(run) && <LiveLine run={run} />}
         </div>
       </div>
       <div className="border-t border-line bg-paper-2">

@@ -35,12 +35,12 @@ function usePlayerTime(frame: React.RefObject<HTMLIFrameElement | null>, version
 const seekFrame = (frame: HTMLIFrameElement | null, t: number, play = true) => frame?.contentWindow?.postMessage({ type: 'studio:seek', t, play }, '*');
 
 function Thumb({ p, project, poster, className = '' }: { p?: PageView; project: ProjectView; poster?: string; className?: string }) {
-  // a frame from the finished film, else the settled frame the page agent left, else its latest check sheet
-  const src = poster ?? p?.thumb ?? p?.sheet;
+  // project-relative: the page's own settled frame (fresh after a redraw), else a frame cut from the film, else its check sheet
+  const src = p?.thumb ? relPath(p.thumb, project.id) : poster ?? (p?.sheet ? relPath(p.sheet, project.id) : undefined);
   const working = p?.status === 'drawing' || p?.status === 'checking';
   return (
     <span className={`block overflow-hidden bg-paper-2 ${className.includes('absolute') ? '' : 'relative'} ${className}`}>
-      {src && <img src={client.fileUrl(project, relPath(src, project.id))} alt="" className="absolute inset-0 h-full w-full object-cover object-left-top opacity-0 transition-opacity duration-500 [&.loaded]:opacity-100" ref={(el) => { if (el?.complete && el.naturalWidth) el.classList.add('loaded'); }} onLoad={(e) => e.currentTarget.classList.add('loaded')} />}
+      {src && <img src={client.fileUrl(project, src)} alt="" className="absolute inset-0 h-full w-full object-cover object-left-top opacity-0 transition-opacity duration-500 [&.loaded]:opacity-100" ref={(el) => { if (el?.complete && el.naturalWidth) el.classList.add('loaded'); }} onLoad={(e) => e.currentTarget.classList.add('loaded')} />}
       {!src && <span className="absolute inset-0 flex items-center justify-center text-[12px] text-ink-3">{working ? '正在画' : '排队'}</span>}
       {working && (
         <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 160 90" preserveAspectRatio="none" aria-hidden>
