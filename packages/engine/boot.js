@@ -8,7 +8,10 @@
   const portrait = /[?&]portrait(&|=|$)/.test(location.search);
   window.STAGE = portrait ? { w: 1080, h: 1920, portrait: true } : { w: 1920, h: 1080, portrait: false };
   const KIT = document.currentScript.src.replace(/boot\.js(\?.*)?$/, '');
-  const NM = KIT + 'node_modules/';
+  // browser libraries and fonts: the project's engine_modules/ link (where npm or pnpm actually installed them), named by
+  // <meta name="engine-modules">; falls back to the engine's own node_modules/
+  const nmMeta = document.querySelector('meta[name="engine-modules"]');
+  const NM = nmMeta ? new URL(nmMeta.content, location.href).href : KIT + 'node_modules/';
   const css = [
     'lxgw-wenkai-webfont/lxgwwenkai-regular.css', 'lxgw-wenkai-webfont/lxgwwenkai-bold.css',
     '@fontsource/jetbrains-mono/400.css', '@fontsource/jetbrains-mono/600.css',
