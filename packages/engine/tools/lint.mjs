@@ -4,11 +4,34 @@
 import { openStage, loadEpisode } from './lib.mjs';
 const arg = (k, d) => { const i = process.argv.indexOf('--' + k); return i > 0 ? process.argv[i + 1] : d; };
 const only = arg('only', null), step = +arg('step', 0.5), minFont = +arg('min-font', 24), asJson = process.argv.includes('--json');
-const { L } = loadEpisode();
+const { L, META } = loadEpisode();
+L.meta = META;
 const pages = L.pages.filter((p) => !only || only.split(',').includes(p.id));
 const { browser, page } = await openStage('render' + (only ? '&only=' + only : ''));
 const issues = [];
-for (const p of pages) {
+// how much of a page is on screen at time t: visible strokes, text, images (the page's own elements only)
+const inkAt = (id, t) => page.evaluate(({ id, t }) => {
+  ENGINE.renderAt(t);
+  const root = document.querySelector(`#stage .page[data-page="${id}"]`);
+  if (!root) return -1;
+  const op = (n) => { let o = 1; for (; n && n !== root.parentElement; n = n.parentElement) { const cs = getComputedStyle(n); if (cs.display === 'none' || cs.visibility === 'hidden') return 0; o *= +cs.opacity; } return o; };
+  let n = 0;
+  for (const el of root.querySelectorAll('path, line, rect, circle, ellipse, polyline, polygon, img, canvas, .tx')) {
+    const r = el.getBoundingClientRect();
+    if (r.width * r.height < 4 || op(el) < 0.3) continue;
+    if (el.classList.contains('tx') && ![...el.querySelectorAll('.ch')].concat(el.querySelector('.ch') ? [] : [el]).some((c) => op(c) >= 0.3 && c.textContent.trim())) continue;
+    n++;
+  }
+  return n;
+}, { id, t });
+for (const [i, p] of pages.entries()) {
+  // page turns cross-fade: the incoming page must already show something, and the outgoing one must not have cleared
+  // itself, or the viewer sees empty paper between pages
+  const index = L.pages.indexOf(p);
+  if (index > 0 && (await inkAt(p.id, p.start + (L.meta?.fadeDelay ?? 0.3) + 0.1)) === 0)
+    issues.push({ page: p.id, t: +(p.start + 0.2).toFixed(1), local: 0.2, msg: 'empty opening: nothing is on screen as the page turns in — draw the first beat\'s object before the first cue' });
+  if (index < L.pages.length - 1 && (await inkAt(p.id, p.end - 0.2)) === 0)
+    issues.push({ page: p.id, t: +(p.end - 0.2).toFixed(1), local: +(p.end - p.start - 0.2).toFixed(1), msg: 'empty ending: the page has cleared itself before it turns out — keep the final state on screen' });
   for (let t = p.start + 0.4; t < p.end - 0.15; t += step) {
     const found = await page.evaluate(({ t, minFont }) => {
       ENGINE.renderAt(t);

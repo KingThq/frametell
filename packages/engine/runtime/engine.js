@@ -63,6 +63,7 @@
     const only = opts.only ? new Set(opts.only) : null;
     for (const pg of layout.pages) {
       const root = h('div', 'page', null, stage);
+      root.dataset.page = pg.id;
       const cam = h('div', 'cam', null, root);
       const B = new Builder(pg, cam);
       const obj = { pg, root, cam, sh: B.sh, B, vis: 0 };
@@ -79,11 +80,14 @@
 
   function renderAt(t) {
     const F = Math.min(TIMING.FADE, layout.gap);   // short gaps fade faster, never into the speech
+    // The cross-fade ends D seconds after the page boundary: a new page draws its first stroke a moment after it starts,
+    // and ending the fade at the boundary showed empty paper in between. The outgoing page stays a pure function of t.
+    const D = SCRIPT.META?.fadeDelay ?? 0.3;
     for (const p of pages) {
       const { start, end, index } = p.pg;
       const last = index === pages.length - 1;
-      const inK = index === 0 ? 1 : smooth(start - F, start, t);
-      const outK = last ? 0 : smooth(end - F, end, t);
+      const inK = index === 0 ? 1 : smooth(start - F + D, start + D, t);
+      const outK = last ? 0 : smooth(end - F + D, end + D, t);
       const vis = inK * (1 - outK);
       p.vis = vis;
       if (vis <= 0.001) { if (p.root.style.display !== 'none') p.root.style.display = 'none'; continue; }

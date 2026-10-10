@@ -6,6 +6,7 @@
 // Exit code: 1 with any red issue, 0 otherwise, 2 when the storyboard can't be read.
 import fs from 'fs';
 import path from 'path';
+import { pathToFileURL } from 'url';
 
 const args = process.argv.slice(2);
 const flag = (k) => args.includes('--' + k);
@@ -129,7 +130,8 @@ export function lintStoryboard(sb, { source = '' } = {}) {
 }
 
 // ── CLI ───────────────────────────────────────────────────────────────────────
-if (import.meta.url === `file://${process.argv[1]}`) {
+// run as a CLI (also through the project's engine/ link)
+if (process.argv[1] && import.meta.url === pathToFileURL(fs.realpathSync(process.argv[1])).href) {
   let sb;
   try { sb = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (e) { console.error(`读不了 ${file}: ${e.message}`); process.exit(2); }
   const src = opt('source') ? [opt('source')] : ['materials', 'script.js'];
