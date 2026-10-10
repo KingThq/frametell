@@ -1,0 +1,13 @@
+{
+  "name": "@frametell/voice",
+  "version": "0.1.0",
+  "description": "Narration for Frametell: Volcengine TTS 2.0 and ElevenLabs, cut into cues with per-character timing.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
+  "files": ["dist"],
+  "scripts": { "build": "tsc -p .", "typecheck": "tsc -p . --noEmit", "test": "node --test dist/*.test.js" },
+  "dependencies": { "@frametell/engine": "workspace:*" }
+}

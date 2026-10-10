@@ -4,7 +4,9 @@
     style: 'warm-story',
     title: '复利：时间比本金更重要',
     name: '复利',
-    gap: 0.5,
+    gap: 0.8,
+    // calm pace for this style: hold a beat longer after a sentence, and a little more before a page turns
+    pace: { maxHold: 1.0, gap: 0.8 },
     extras: ['../../../lib/warm.js'],
   };
   const PAGES = [
