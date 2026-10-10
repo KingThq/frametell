@@ -45,6 +45,9 @@ function sendFile(c: Context, file: string) {
 
 export function createServer(opts: { token?: string } = {}) {
   const token = opts.token || crypto.randomBytes(16).toString('hex');
+  // previews run in a sandboxed iframe (no cookies): their URLs carry a per-project signature instead of the token
+  const sig = (id: string) => crypto.createHmac('sha256', token).update(id).digest('hex').slice(0, 20);
+  const previewBase = (id: string) => `/p/${id}/${sig(id)}/`;
   const app = new Hono();
 
   // the panel opens with ?token=…; the token then lives in an httpOnly cookie
@@ -52,7 +55,7 @@ export function createServer(opts: { token?: string } = {}) {
     const q = c.req.query('token');
     if (q === token) setCookie(c, 'fs_token', token, { httpOnly: true, sameSite: 'Strict', path: '/' });
     const ok = q === token || getCookie(c, 'fs_token') === token || c.req.header('x-studio-token') === token;
-    if ((c.req.path.startsWith('/api') || c.req.path.startsWith('/p/')) && !ok) return c.json({ error: '需要从 frametell 打开的链接访问' }, 401);
+    if (c.req.path.startsWith('/api') && !ok) return c.json({ error: '需要从 frametell 打开的链接访问' }, 401);
     await next();
   });
 
@@ -76,7 +79,7 @@ export function createServer(opts: { token?: string } = {}) {
   });
 
   // ── projects ──
-  app.get('/api/projects', (c) => c.json(listProjects()));
+  app.get('/api/projects', (c) => c.json(listProjects().map((p) => ({ ...p, previewBase: previewBase(p.id) }))));
 
   app.post('/api/projects', async (c) => {
     const form = await c.req.formData();
@@ -101,7 +104,7 @@ export function createServer(opts: { token?: string } = {}) {
 
   app.get('/api/projects/:id', (c) => {
     const id = c.req.param('id');
-    try { return c.json({ ...readMeta(id), ...runner(id).summary() }); } catch { return c.json({ error: '项目不存在' }, 404); }
+    try { return c.json({ ...readMeta(id), ...runner(id).summary(), previewBase: previewBase(id) }); } catch { return c.json({ error: '项目不存在' }, 404); }
   });
   app.post('/api/projects/:id/start', async (c) => { await runner(c.req.param('id')).start(); return c.json({ ok: true }); });
   app.post('/api/projects/:id/approve', async (c) => {
@@ -129,9 +132,10 @@ export function createServer(opts: { token?: string } = {}) {
   });
 
   // project files: the preview player (index.html + engine), snapshots, audio, the finished video
-  app.get('/p/:id/*', (c) => {
+  app.get('/p/:id/:sig/*', (c) => {
     const id = c.req.param('id');
-    const rel = c.req.path.slice(`/p/${id}/`.length) || 'index.html';
+    if (!/^[\w-]+$/.test(id) || c.req.param('sig') !== sig(id)) return c.json({ error: 'forbidden' }, 403);
+    const rel = c.req.path.slice(previewBase(id).length) || 'index.html';
     const f = safeFile(projectDir(id), rel);
     return f ? sendFile(c, f) : c.notFound();
   });

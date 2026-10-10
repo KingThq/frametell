@@ -42,7 +42,7 @@ export function readMeta(id: string): ProjectMeta { return JSON.parse(fs.readFil
 function writeMeta(m: ProjectMeta) { m.updatedAt = new Date().toISOString(); fs.writeFileSync(metaFile(m.id), JSON.stringify(m, null, 2)); }
 
 export function newProject(input: Omit<ProjectMeta, 'id' | 'createdAt' | 'updatedAt' | 'materials'>, files: { name: string; data: Buffer }[]): ProjectMeta {
-  const id = `${new Date().toISOString().slice(0, 10)}-${crypto.randomBytes(3).toString('hex')}`;
+  const id = `${new Date().toISOString().slice(0, 10)}-${crypto.randomBytes(6).toString('hex')}`;
   const dir = dirOf(id);
   createProject(dir, { title: input.title, style: input.style });
   fs.mkdirSync(path.join(dir, 'materials'), { recursive: true });

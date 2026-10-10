@@ -118,17 +118,31 @@ export class Director {
   async script(feedback?: string) {
     this.emit({ type: 'stage', stage: 'script', status: 'start' });
     this.state.stage = 'script'; this.save();
-    // the server owns these META fields; the planner writes title and pages
-    this.setMeta({ style: this.o.style, voice: this.o.voice, gap: 0.8, pace: { maxHold: 1.0, gap: 0.8 }, extras: STYLE_EXTRAS[this.o.style] ?? [] });
+    this.serverMeta();
     const s = await this.session('planner', plannerSystem(this.o.style), MAX.planTurns, this.state.planner);
     const r = await this.send(s, scriptPrompt(feedback));
     this.state.planner = s.ref; this.save();
+    // the planner rewrites script.js: put the server-owned fields back (a lost META.voice once rendered a silent film)
+    this.serverMeta();
     const check = this.project.scriptCheck();
     if (check.code) this.fail('script', `口播脚本有错：${check.err || check.out} ${r.error ?? ''}`);
     await this.commit('口播');
     await s.close();
     this.state.stage = 'narrate'; this.save();
     this.emit({ type: 'stage', stage: 'script', status: 'done', detail: check.out.split('\n').pop() });
+  }
+
+  /** Style, voice, pacing and the style's components: owned by the server, re-applied after every agent edit. */
+  private serverMeta() {
+    const extras = new Set<string>(STYLE_EXTRAS[this.o.style] ?? []);
+    try {   // keep components the page agents registered (use-extra.mjs appends to META.extras)
+      const m = /extras:\s*(\[[^\]\n]*\])/.exec(fs.readFileSync(this.project.file('script.js'), 'utf8'));
+      if (m) for (const e of JSON.parse(m[1].replace(/'/g, '"'))) extras.add(e);
+    } catch {}
+    // a style component copied into extras/ by use-extra is the same file: load it once, from the engine
+    const base = new Set((STYLE_EXTRAS[this.o.style] ?? []).map((e) => path.basename(e)));
+    const list = [...extras].filter((e) => !(e.startsWith('extras/') && base.has(path.basename(e))));
+    this.setMeta({ style: this.o.style, voice: this.o.voice, gap: 0.8, pace: { maxHold: 1.0, gap: 0.8 }, extras: list });
   }
 
   /** Server-owned META fields, rewritten in place in script.js (the planner must not change them). */
@@ -153,6 +167,7 @@ export class Director {
       this.emit({ type: 'stage', stage: 'narrate', status: 'skipped', detail: '没有配置配音，用估算时长' });
       return;
     }
+    this.serverMeta();
     const r = await narrate(this.o.dir, { tts: this.o.tts, voice: this.o.voice, signal: this.o.signal, onProgress: (e) => this.emit({ type: 'narrate', ...e }) });
     await this.commit('配音');
     this.state.stage = 'pages'; this.save();
@@ -258,6 +273,9 @@ export class Director {
   async render(o: { workers?: number } = {}) {
     this.emit({ type: 'stage', stage: 'render', status: 'start' });
     this.state.stage = 'render'; this.save();
+    this.serverMeta();
+    // a narrated film must carry its narration: check before spending minutes on frames
+    if (this.o.voice && !/\bvoice:\s*\{/.test(this.project.read('script.js'))) this.fail('render', 'script.js 里丢了配音设置（META.voice），已停止渲染');
     const out = await this.project.render({ workers: o.workers, signal: this.o.signal, onLine: (line) => { if (!line.startsWith('[chunk')) this.emit({ type: 'render', line }); } });
     const g = this.project.gate(out.withSubs);
     this.emit({ type: 'gate', red: g.red, blank: g.gates.find((x) => x.key === 'blank')?.value ?? [], report: g.report.map((r) => ({ name: r.name, value: r.value, unit: r.unit })) });
