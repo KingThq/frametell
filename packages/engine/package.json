@@ -4,7 +4,16 @@
   "description": "Hand-drawn explainer video engine: page runtime as a pure function of time, components, styles, and the render pipeline.",
   "license": "MIT",
   "type": "module",
-  "files": ["boot.js", "runtime", "lib", "template", "tools", "vendor", "README.md"],
+  "files": [
+    "boot.js",
+    "runtime",
+    "lib",
+    "styles",
+    "template",
+    "tools",
+    "vendor",
+    "README.md"
+  ],
   "exports": {
     "./package.json": "./package.json",
     "./tools/*": "./tools/*"
@@ -31,5 +40,8 @@
   },
   "devDependencies": {
     "esbuild": "^0.25.10"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
   }
 }

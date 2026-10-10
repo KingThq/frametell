@@ -15,9 +15,12 @@
     '@fontsource/caveat/500.css', '@fontsource/caveat/700.css',
   ].map((f) => NM + f).concat(KIT + 'runtime/base.css');
   const meta = (window.SCRIPT && SCRIPT.META) || {};
+  // style pack: META.style = 'warm-story' → styles/warm-story/style.css (after base.css) + style.js (before the runtime)
+  const style = meta.style || 'study';
+  css.push(`${KIT}styles/${style}/style.css`);
   const libs = (meta.libs || []).map((f) => NM + f);
   css.push(...libs.filter((f) => f.endsWith('.css')));
-  const js = [NM + 'roughjs/bundled/rough.js']
+  const js = [NM + 'roughjs/bundled/rough.js', `${KIT}styles/${style}/style.js`]
     .concat(['timing', 'core', 'text', 'doodles', 'widgets', 'live', 'tokens', 'shell3d', 'three', 'media', 'player'].map((f) => `${KIT}runtime/${f}.js`))
     .concat((meta.vendor || []).map((v) => `${KIT}vendor/${v}.js`))
     .concat(libs.filter((f) => !f.endsWith('.css')))

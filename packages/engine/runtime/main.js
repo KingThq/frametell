@@ -6,7 +6,7 @@
   const noise = encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="480" height="480"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.75" numOctaves="3" seed="3" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0.42  0 0 0 0 0.33  0 0 0 0 0.22  0 0 0 0.16 0"/></filter><rect width="480" height="480" filter="url(#n)"/></svg>');
   const blotch = encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${STAGE.w}" height="${STAGE.h}"><filter id="b"><feTurbulence type="fractalNoise" baseFrequency="0.004" numOctaves="3" seed="11"/><feColorMatrix values="0 0 0 0 0.62  0 0 0 0 0.48  0 0 0 0 0.3  0 0 0 0.11 0"/></filter><rect width="${STAGE.w}" height="${STAGE.h}" filter="url(#b)"/></svg>`);
   const bg = document.getElementById('bg');
-  bg.style.background = [
+  bg.style.background = window.STYLE?.background ? STYLE.background(STAGE) : [
     'radial-gradient(circle, rgba(120, 100, 80, 0.13) 1.3px, transparent 1.6px) 0 0 / 40px 40px',
     `url("data:image/svg+xml;utf8,${noise}")`,
     `url("data:image/svg+xml;utf8,${blotch}")`,

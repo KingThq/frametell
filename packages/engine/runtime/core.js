@@ -22,6 +22,9 @@
     yellow: '#F1CF5E', paper: '#FBF8F1',
     inkF: '#E4DED4', softF: '#E9E3D9', mutedF: '#EFEAE2', faintF: '#F4F0E8', // light fills for the ink greys
   };
+  // style pack (styles/<id>/style.js, loaded before the runtime): palette overrides keep the same colour names
+  const STYLE = window.STYLE || {};
+  Object.assign(C, STYLE.palette);
   const col = (c) => (c && C[c]) || c;
 
   const SVGNS = 'http://www.w3.org/2000/svg';
@@ -160,11 +163,12 @@
 
     ro(o = {}, extra = {}) {
       return Object.assign({
-        seed: o.seed ?? this.seed(), roughness: o.rough ?? 1.05, bowing: o.bow ?? 0.9,
-        stroke: col(o.color || 'ink'), strokeWidth: o.sw ?? 2.6, curveStepCount: 14,
+        // the style scales roughness and bowing (flat illustration ≈ 0.35, sketchy whiteboard ≈ 1.2) and sets the default line weight
+        seed: o.seed ?? this.seed(), roughness: (o.rough ?? 1.05) * (STYLE.roughScale ?? 1), bowing: (o.bow ?? 0.9) * (STYLE.bowScale ?? 1),
+        stroke: col(o.color || 'ink'), strokeWidth: o.sw ?? STYLE.sw ?? 2.6, curveStepCount: 14,
         fill: o.fill ? col(o.fill) : undefined, fillStyle: o.fillStyle || 'solid',
         hachureGap: o.gap ?? 9, fillWeight: o.fw ?? 1.6, hachureAngle: o.angle ?? -41,
-        disableMultiStroke: o.single ?? false, preserveVertices: true,
+        disableMultiStroke: o.single ?? STYLE.single ?? false, preserveVertices: true,
       }, extra);
     }
     shapeOf(d, o) {
