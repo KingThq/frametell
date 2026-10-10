@@ -5,6 +5,8 @@ import path from 'node:path';
 import { ENGINE_DIR } from '@frametell/engine/tools/project.mjs';
 import type { PageTiming, Storyboard, LintIssue } from './project.js';
 
+import { pagePack } from './pagepack.js';
+
 const DIR = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../prompts');
 const read = (f: string) => fs.readFileSync(path.join(DIR, f), 'utf8');
 const grammar = (style: string) => {
@@ -15,13 +17,18 @@ const grammar = (style: string) => {
 export const STYLES: { id: string; name: string; summary: string }[] = [
   { id: 'warm-story', name: '暖调叙事插画', summary: '温暖的扁平插画，一个比喻物贯穿全片，适合投资、生活、心理类知识' },
   { id: 'study', name: '安静书房', summary: '纸面手绘，墨线与淡彩，适合读书、历史、方法论' },
+  { id: 'whiteboard', name: '白板手绘', summary: '白板上马克笔边讲边画，适合概念拆解、商业模式、方法论和流程' },
+  { id: 'chalkboard', name: '黑板', summary: '墨绿黑板上的粉笔板书，适合数学、物理、历史等一步步推导的课堂式讲解' },
+  { id: 'tech-dark', name: '科技深色', summary: '石墨深色底上的干净架构图与代码，适合软件、AI、系统原理等工程类讲解' },
 ];
 
 export function plannerSystem(style: string) {
   return [read('PLANNER.md'), '---\n# 本片风格（画面 Agent 会照着画，分镜要写得出来）\n\n' + grammar(style), '---\n' + read('LIB.md')].join('\n\n');
 }
-export function pageSystem(style: string) {
-  return [read('PAGE.md'), '---\n# 本片风格\n\n' + grammar(style), '---\n' + read('API.md'), '---\n' + read('LIB.md')].join('\n\n');
+/** the page agent's system prompt: process, the style's grammar, the drawing API, the style's components with a worked
+ *  example page, and the wider component library (the stable part of every page session, so it caches well) */
+export function pageSystem(style: string, extras: string[] = []) {
+  return [read('PAGE.md'), '---\n# 本片风格\n\n' + grammar(style), '---\n' + read('API.md'), '---\n' + pagePack(style, extras), '---\n' + read('LIB.md')].join('\n\n');
 }
 
 export interface Brief { topic?: string; audience?: string; durationSec: number; notes?: string }
@@ -29,7 +36,8 @@ export interface Brief { topic?: string; audience?: string; durationSec: number;
 export function storyboardPrompt(brief: Brief, style: string, materials: string[]) {
   return [
     '阶段 1：分镜。',
-    `用户需求：把资料做成一条约 ${Math.round(brief.durationSec / 60 * 10) / 10} 分钟的讲解视频。` + (brief.topic ? `主题：${brief.topic}。` : '') + (brief.audience ? `观众：${brief.audience}。` : ''),
+    `用户需求：${materials.length ? '把资料做成' : '做'}一条约 ${Math.round(brief.durationSec / 60 * 10) / 10} 分钟的讲解视频。` + (brief.topic ? `主题：${brief.topic}。` : '') + (brief.audience ? `观众：${brief.audience}。` : ''),
+    materials.length ? '' : '没有资料：用你自己的知识来讲。只用公认、可核实的事实和数字，拿不准的就不写具体数字；屏上的每个数字都要写进对应页的 say 里（服务端会用 say 核对数字出处）。',
     brief.notes ? `补充要求：${brief.notes}` : '',
     `风格：${style}（storyboard.json 的 style 写 "${style}"）。`,
     `资料：${materials.map((m) => 'materials/' + m).join('、') || '（无，按主题写）'}`,

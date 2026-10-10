@@ -235,7 +235,7 @@ export class Director {
     const st: PageState = { status: 'drawing', rounds: 0, issues: [] };
     this.setPage(id, st);
     try {
-      const s = await this.session(`page-${id}`, pageSystem(this.o.style), MAX.pageTurns);
+      const s = await this.session(`page-${id}`, pageSystem(this.o.style, STYLE_EXTRAS[this.o.style] ?? []), MAX.pageTurns);
       const fix = this.state.revision?.[id];
       let r = await this.send(s, pagePrompt(sb, id, t) + (fix ? `\n\n这一页是**修改**：成片已经做好，用户要求改这一页。修改说明：${fix}\n先读现有的 pages/${id}.js，在它的基础上改，不要推倒重来。` : '') + this.unseen(`page-${id}`));
       if (!this.project.exists(`pages/${id}.js`)) r = await this.send(s, `还没有 pages/${id}.js，请写出来再停下。`);
@@ -285,7 +285,7 @@ export class Director {
     }
     const tl = this.project.timeline();
     const sheet = this.project.snap('review', tl.pages.flatMap((p) => [(p.start + p.end) / 2, p.end - 0.35]), undefined, 400);
-    const s = await this.session('review', pageSystem(this.o.style), MAX.pageTurns);
+    const s = await this.session('review', pageSystem(this.o.style, STYLE_EXTRAS[this.o.style] ?? []), MAX.pageTurns);
     for (let round = 1; round <= MAX.reviewRounds; round++) {
       const r = await this.send(s, reviewPrompt(round === 1 ? issues : this.project.lint(), flagged), [sheet]);
       await this.commit(`全片检查：第 ${round} 轮`);

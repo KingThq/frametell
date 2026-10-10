@@ -10,7 +10,7 @@ import { ENGINE_DIR } from '@frametell/engine/tools/project.mjs';
 export function componentDocs(file: string): string[] {
   const src = fs.readFileSync(file, 'utf8');
   const out: string[] = [];
-  const re = /\/\*\*([\s\S]*?)\*\/\s*B\.(\w+)\s*=\s*function\s*\(([^)]*)\)/g;
+  const re = /\/\*\*((?:(?!\*\/)[\s\S])*)\*\/\s*B\.(\w+)\s*=\s*function\s*\(([^)]*)\)/g;   // a doc comment never spans past its own */
   for (let m = re.exec(src); m; m = re.exec(src)) {
     const doc = m[1].split('\n').map((l) => l.replace(/^\s*\*\s?/, '').trim()).filter(Boolean).join(' ');
     out.push(`- \`P.${m[2]}(${m[3].trim()})\` — ${doc.replace(/^\w+\([^)]*\):?\s*/, '')}`);
