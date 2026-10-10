@@ -20,8 +20,12 @@ export interface StudioClient {
   start(id: string): Promise<void>;
   approve(id: string, feedback?: string): Promise<boolean>;
   stop(id: string): Promise<void>;
+  /** talk to the director: storyboard feedback, a note mid-run, or a change to the finished film */
+  say(id: string, text: string): Promise<boolean>;
   /** replay after `since`, then live; returns unsubscribe */
   subscribe(id: string, since: number, onEvent: (e: LoggedEvent) => void, onState?: (s: 'open' | 'reconnecting') => void): () => void;
+  /** where a narrator's sample can be played */
+  voicePreviewUrl(v: Voice): string;
   /** a URL for a file inside the project (preview player, snapshot, video) */
   fileUrl(p: ProjectView, rel: string): string;
 }
@@ -56,6 +60,7 @@ export const httpClient: StudioClient = {
   start: async (id) => { await call('POST', `/api/projects/${id}/start`); },
   approve: async (id, feedback) => (await call<{ ok: boolean }>('POST', `/api/projects/${id}/approve`, { feedback })).ok,
   stop: async (id) => { await call('POST', `/api/projects/${id}/stop`); },
+  say: async (id, text) => (await call<{ ok: boolean }>('POST', `/api/projects/${id}/say`, { text })).ok,
   subscribe(id, since, onEvent, onState) {
     let last = since;
     const es = new EventSource(`/api/projects/${id}/events?since=${since}`);
@@ -64,6 +69,7 @@ export const httpClient: StudioClient = {
     es.onerror = () => onState?.('reconnecting');   // EventSource reconnects with Last-Event-ID by itself
     return () => es.close();
   },
+  voicePreviewUrl: (v) => v.previewUrl || `/api/voices/${v.provider}/${encodeURIComponent(v.id)}/preview`,
   fileUrl: (p, rel) => p.previewBase + rel.split('/').map(encodeURIComponent).join('/'),
 };
 

@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('studioBridge', {
   start: (id) => call('start', id),
   approve: (id, feedback) => call('approve', id, feedback),
   stop: (id) => call('stop', id),
+  say: (id, text) => call('say', id, text),
   subscribe: (id, since, onEvent, onState) => {
     const subId = Math.random().toString(36).slice(2);
     let last = since;
@@ -29,6 +30,7 @@ contextBridge.exposeInMainWorld('studioBridge', {
     ipcRenderer.invoke('studio:subscribe', subId, id, since).then(() => onState && onState('open'));
     return () => { handlers.delete(subId); ipcRenderer.invoke('studio:unsubscribe', subId); };
   },
+  voicePreviewUrl: (v) => v.previewUrl || `studio://app/voice/${v.provider}/${encodeURIComponent(v.id)}`,
   fileUrl: (p, rel) => `studio://app/p/${p.id}/` + rel.split('/').map(encodeURIComponent).join('/'),
   platform: process.platform,
 });

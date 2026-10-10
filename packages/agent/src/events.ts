@@ -13,7 +13,13 @@ export type StudioEvent =
   | { type: 'storyboard_check'; round: number; issues: { level: string; page?: string; beat?: number; msg: string }[] }
   /** the storyboard passed its checks and waits for the user (in CLI runs it is approved automatically) */
   | { type: 'approval'; storyboard: Storyboard }
-  | { type: 'page'; id: string; status: PageStatus; round?: number; issues?: string[]; sheet?: string; note?: string }
+  | { type: 'page'; id: string; status: PageStatus; round?: number; issues?: string[]; sheet?: string; thumb?: string; note?: string }
+  /** something the user said to the director (approval feedback, a note while it works, a change after the film) */
+  | { type: 'user'; text: string }
+  /** a short line from the director that isn't a model message: how a user note will be handled, what a revision redraws */
+  | { type: 'note'; text: string }
+  /** the run stopped: the user paused, the app was closed mid-run, or an error; completed work is kept */
+  | { type: 'paused'; reason: 'user' | 'interrupted' | 'error'; stage?: string; message?: string }
   | { type: 'narrate'; page: string; index: number; total: number; cached: boolean }
   | { type: 'render'; line: string }
   | { type: 'gate'; red: boolean; blank: { at: number; seconds: number }[]; report: { name: string; value: number; unit?: string }[] }

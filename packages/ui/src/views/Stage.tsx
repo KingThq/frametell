@@ -8,9 +8,10 @@ import { useNow } from '../lib/hooks';
 function Tile({ p, project, index, selected, onClick, section }: { p?: PageView; project: ProjectView; index: number; selected: boolean; onClick: () => void; section?: string }) {
   const status = p?.status ?? 'queued';
   const working = status === 'drawing' || status === 'checking';
-  const thumb = p?.sheet ? client.fileUrl(project, relPath(p.sheet, project.id)) : undefined;
+  const src = p?.thumb ?? p?.sheet;   // a single settled frame once the page is done; the latest check sheet before that
+  const thumb = src ? client.fileUrl(project, relPath(src, project.id)) : undefined;
   return (
-    <button onClick={onClick} aria-pressed={selected} title={section}
+    <button onClick={onClick} aria-pressed={selected} title={section} aria-label={`第 ${index + 1} 页${section ? `：${section}` : ''}，${({ queued: '排队', drawing: '正在画', checking: '自己检查中', ok: '画好了', flagged: '有一处要你看看', failed: '没画出来' } as const)[status]}`}
       className={`group relative aspect-video w-[132px] shrink-0 overflow-hidden rounded-lg text-left transition-[transform,box-shadow] duration-200 ease-out ${selected ? 'ring-2 ring-accent ring-offset-2 ring-offset-paper' : 'hover:-translate-y-px'} ${status === 'queued' ? 'border border-dashed border-line-2 bg-paper-2/40' : 'border border-line bg-paper-2'}`}>
       {thumb && <img src={thumb} alt="" className="absolute inset-0 h-full w-full object-cover object-left-top opacity-0 transition-opacity duration-500 [&.loaded]:opacity-100" onLoad={(e) => e.currentTarget.classList.add('loaded')} />}
       {working && (
@@ -18,7 +19,7 @@ function Tile({ p, project, index, selected, onClick, section }: { p?: PageView;
           <rect x="1" y="1" width="130" height="72.25" rx="7" fill="none" stroke="rgb(var(--fs-accent))" strokeWidth="2" pathLength="100" strokeDasharray="22 78" className="motion-safe:animate-[trace_1.6s_linear_infinite]" style={{ strokeDashoffset: 100 }} />
         </svg>
       )}
-      <span className="absolute bottom-1 left-1.5 rounded bg-black/55 px-1 py-px font-mono text-[10px] text-white/90 tabular">{String(index + 1).padStart(2, '0')}</span>
+      <span className="absolute bottom-1 left-1.5 rounded bg-black/60 px-1.5 py-px font-mono text-[11px] text-white tabular">{index + 1}</span>
       {status === 'ok' && <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-jade text-paper" aria-label="完成"><Check size={10} strokeWidth={3} /></span>}
       {status === 'flagged' && <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-seal text-paper" aria-label="需要关注"><TriangleAlert size={9} strokeWidth={3} /></span>}
       {status === 'queued' && <span className="absolute inset-0 flex items-center justify-center text-[11px] text-ink-3">排队</span>}
@@ -91,7 +92,7 @@ function ExportTab({ run, project }: { run: RunView; project: ProjectView }) {
   );
 }
 
-export function Stage({ run, project, selected, onSelect }: { run: RunView; project: ProjectView; selected?: string; onSelect: (id?: string) => void }) {
+export function Stage({ run, project, selected, onSelect, playKey }: { run: RunView; project: ProjectView; selected?: string; onSelect: (id?: string) => void; playKey?: number }) {
   const [tab, setTab] = useState<'progress' | 'storyboard' | 'export'>('progress');
   const ids = run.pageOrder.length ? run.pageOrder : run.storyboard?.pages.map((p) => p.id) || [];
   const okCount = ids.filter((id) => ['ok', 'flagged'].includes(run.pages[id]?.status)).length;
@@ -110,24 +111,25 @@ export function Stage({ run, project, selected, onSelect }: { run: RunView; proj
       </figure>
     );
   } else if (run.video) {
-    screen = <video key={run.video.path} controls className="h-full w-full rounded-xl bg-black object-contain" src={client.fileUrl(project, relPath(run.video.path, project.id))} />;
+    screen = <video key={run.video.path} controls autoPlay={!!playKey} className="h-full w-full rounded-xl bg-black object-contain" src={client.fileUrl(project, relPath(run.video.path, project.id))} />;
   } else if (okCount > 0) {
-    screen = <iframe key={okCount} title="预览" src={preview} sandbox="allow-scripts" className="h-full w-full rounded-xl border-0 bg-black" />;
+    screen = <iframe key={okCount} title="预览：已经画好的页面" src={preview} sandbox="allow-scripts" className="h-full w-full rounded-xl border-0 bg-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent" />;
   } else {
     const current = STAGES.find((s) => run.stages[s].status === 'running');
     screen = (
       <div className="flex h-full flex-col items-center justify-center rounded-xl border border-line bg-paper-2/60 text-center">
-        <span className="font-display text-[22px] text-ink-2">{current ? `${STAGE_NAME[current]}中` : run.awaitingApproval ? '等你确认分镜' : '准备开始'}</span>
-        <span className="mt-2 max-w-[38ch] text-[12.5px] leading-relaxed text-ink-3">{run.awaitingApproval ? '在左边看一遍分镜，确认或写下修改意见。画面会在这里一页一页出现。' : '画好的页面会在这里预览，成片完成后在这里播放。'}</span>
+        <span className="font-display text-[22px] text-ink-2">{run.paused ? '已暂停' : current ? `${STAGE_NAME[current]}中` : run.awaitingApproval ? '等你确认分镜' : '准备开始'}</span>
+        <span className="mt-2 max-w-[38ch] text-[12.5px] leading-relaxed text-ink-3">{run.paused ? '已经做好的部分都保留着，在左边点「继续制作」就从停下的地方接着做。' : run.awaitingApproval ? '在左边看一遍分镜，确认或直接说要改哪里。画面会在这里一页一页出现。' : '画好的页面会在这里预览，成片完成后在这里播放。'}</span>
       </div>
     );
   }
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="min-h-0 flex-1 px-6 pt-5">
-        <div className="mx-auto flex h-full max-h-[calc((100vw-460px)*0.5625)] max-w-[1280px] items-center justify-center">
-          <div className="aspect-video max-h-full w-full">{screen}</div>
+      {/* the screen fills the space it has at 16:9: a size container lets it fit both width and height */}
+      <div className="min-h-0 flex-1 px-6 pt-5 [container-type:size]">
+        <div className="mx-auto flex h-full items-center justify-center">
+          <div className="aspect-video" style={{ width: 'min(100cqw, calc(100cqh * 16 / 9), 1280px)' }}>{screen}</div>
         </div>
       </div>
       {ids.length > 0 && (
@@ -138,16 +140,17 @@ export function Stage({ run, project, selected, onSelect }: { run: RunView; proj
         </div>
       )}
       <div className="mt-4 border-t border-line">
-        <div className="flex gap-1 px-5" role="tablist">
+        <div className="flex gap-1 px-5" role="tablist" aria-label="工作台信息"
+          onKeyDown={(e) => { const order = ['progress', 'storyboard', 'export'] as const; const i = order.indexOf(tab); if (e.key === 'ArrowRight') setTab(order[(i + 1) % 3]); if (e.key === 'ArrowLeft') setTab(order[(i + 2) % 3]); }}>
           {([['progress', '进度'], ['storyboard', '分镜'], ['export', '导出']] as const).map(([k, l]) => (
-            <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
+            <button key={k} role="tab" id={`tab-${k}`} aria-controls="stage-panel" tabIndex={tab === k ? 0 : -1} aria-selected={tab === k} onClick={() => setTab(k)}
               className={`relative px-3 py-2.5 text-[13px] font-medium transition-colors ${tab === k ? 'text-ink' : 'text-ink-3 hover:text-ink'}`}>
               {l}{k === 'export' && run.video ? <span className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-jade align-middle" /> : null}
               <span className={`absolute inset-x-2 bottom-0 h-[2px] rounded-full bg-ink transition-opacity ${tab === k ? 'opacity-100' : 'opacity-0'}`} />
             </button>
           ))}
         </div>
-        <div className="h-[220px] overflow-y-auto px-6 py-4" role="tabpanel">
+        <div className="h-[220px] overflow-y-auto px-6 py-4" role="tabpanel" id="stage-panel" aria-labelledby={`tab-${tab}`}>
           {tab === 'progress' ? <Progress run={run} project={project} /> : tab === 'storyboard' ? <StoryboardTab run={run} /> : <ExportTab run={run} project={project} />}
         </div>
       </div>

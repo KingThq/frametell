@@ -33,6 +33,11 @@ interface State {
   pages: Record<string, PageState>;
   usage: TokenUsage;
   video?: string;
+  /** what the user told the director while it worked; each session picks up the notes it hasn't seen yet */
+  notes?: string[];
+  cursors?: Record<string, number>;
+  /** per-page instructions of the revision in progress */
+  revision?: Record<string, string>;
 }
 
 /** components every page of a style can use, registered before the page sessions start */
@@ -52,6 +57,19 @@ export class Director {
   }
 
   get stage() { return this.state.stage; }
+
+  /** a note from the user mid-run: sessions read it the next time they are spoken to */
+  message(text: string) {
+    (this.state.notes ??= []).push(text.trim());
+    this.save();
+  }
+  /** the notes a session hasn't seen yet, as a block to append to its next message */
+  private unseen(key: string): string {
+    const all = this.state.notes ?? [], cur = (this.state.cursors ??= {})[key] ?? 0;
+    if (cur >= all.length) return '';
+    this.state.cursors[key] = all.length; this.save();
+    return `\n\n用户刚刚补充了要求（和这一页相关就照做，不相关就忽略）：\n${all.slice(cur).map((n) => `- ${n}`).join('\n')}`;
+  }
   get usage() { return this.state.usage; }
 
   private emit(e: StudioEvent) { this.o.emit?.(e); }
@@ -96,7 +114,9 @@ export class Director {
   async storyboard(): Promise<Storyboard> {
     this.emit({ type: 'stage', stage: 'storyboard', status: 'start' });
     if (!fs.existsSync(this.project.file('.git'))) this.project.initHistory();
-    const materials = fs.existsSync(this.project.file('materials')) ? fs.readdirSync(this.project.file('materials')) : [];
+    // only what the agent can read: md/txt/images. PDF/Word/PPT/EPUB are parsed beforehand into x.md (or x.pdf.md)
+    const all = fs.existsSync(this.project.file('materials')) ? fs.readdirSync(this.project.file('materials')).filter((f) => !f.startsWith('.')) : [];
+    const materials = all.filter((f) => /\.(md|markdown|txt|png|jpe?g|webp|gif)$/i.test(f));
     const s = await this.session('planner', plannerSystem(this.o.style), MAX.planTurns, this.state.planner);
     let r = await this.send(s, storyboardPrompt(this.o.brief, this.o.style, materials));
     this.state.planner = s.ref; this.save();
@@ -123,7 +143,7 @@ export class Director {
     this.state.stage = 'script'; this.save();
     this.serverMeta();
     const s = await this.session('planner', plannerSystem(this.o.style), MAX.planTurns, this.state.planner);
-    const r = await this.send(s, scriptPrompt(feedback));
+    const r = await this.send(s, scriptPrompt(feedback) + this.unseen('planner'));
     this.state.planner = s.ref; this.save();
     // the planner rewrites script.js: put the server-owned fields back (a lost META.voice once rendered a silent film)
     this.serverMeta();
@@ -194,7 +214,7 @@ export class Director {
     this.state.stage = 'review'; this.save();
   }
 
-  private setPage(id: string, s: PageState, extra: { sheet?: string; note?: string } = {}) {
+  private setPage(id: string, s: PageState, extra: { sheet?: string; thumb?: string; note?: string } = {}) {
     this.state.pages[id] = s; this.save();
     this.emit({ type: 'page', id, status: s.status, round: s.rounds, issues: s.issues, ...extra });
   }
@@ -216,7 +236,8 @@ export class Director {
     this.setPage(id, st);
     try {
       const s = await this.session(`page-${id}`, pageSystem(this.o.style), MAX.pageTurns);
-      let r = await this.send(s, pagePrompt(sb, id, t));
+      const fix = this.state.revision?.[id];
+      let r = await this.send(s, pagePrompt(sb, id, t) + (fix ? `\n\n这一页是**修改**：成片已经做好，用户要求改这一页。修改说明：${fix}\n先读现有的 pages/${id}.js，在它的基础上改，不要推倒重来。` : '') + this.unseen(`page-${id}`));
       if (!this.project.exists(`pages/${id}.js`)) r = await this.send(s, `还没有 pages/${id}.js，请写出来再停下。`);
       if (!this.project.exists(`pages/${id}.js`)) throw new Error(r.error || '没有写出页面文件');
       st.ref = s.ref;
@@ -228,7 +249,7 @@ export class Director {
         const times = this.sheetTimes(sb, t);
         const sheet = this.project.snap(`${id}-r${round}`, times.map((x) => x.t), [id]);
         this.setPage(id, { ...st, issues: issues.map((i) => i.msg) }, { sheet });
-        r = await this.send(s, checkPrompt(round, issues, times), [sheet]);
+        r = await this.send(s, checkPrompt(round, issues, times) + this.unseen(`page-${id}`), [sheet]);
         await this.commit(`${id}：第 ${round} 轮修改`);
         const reply = r.text.trim();
         if (/^FLAGGED/i.test(reply)) { st.status = 'flagged'; st.issues = [reply.replace(/^FLAGGED:?\s*/i, '')]; break; }
@@ -241,7 +262,10 @@ export class Director {
         st.issues = issues.map((i) => `${i.local}s：${i.msg}`);
       }
       await s.close();
-      this.setPage(id, st);
+      // one settled frame as the film-strip thumbnail (the check sheets are 4-up and read as noise at tile size)
+      let thumb: string | undefined;
+      try { thumb = this.project.snap(`${id}-thumb`, [Math.max(t.start + 0.5, t.end - 0.4)], [id], 480); } catch {}
+      this.setPage(id, st, { thumb });
     } catch (e) {
       if ((e as Error).name === 'AbortError') throw e;
       this.setPage(id, { ...st, status: 'failed', issues: [(e as Error).message] });
@@ -286,6 +310,38 @@ export class Director {
     this.emit({ type: 'stage', stage: 'render', status: 'done' });
     this.emit({ type: 'done', video: out.withSubs, videoNoSubs: out.noSubs, duration: g.duration });
     return out;
+  }
+
+  /**
+   * A change to a finished film: the planner decides which pages it touches and how, those pages are redrawn from their
+   * current code, then the film is checked and rendered again. Everything else is kept as it is.
+   */
+  async revise(request: string) {
+    this.emit({ type: 'note', text: '收到，我先看看要改哪几页' });
+    const s = await this.session('planner', plannerSystem(this.o.style), MAX.planTurns, this.state.planner);
+    const sb = this.project.storyboard();
+    await this.send(s, `成片已经做好。用户对成片的修改意见：
+${request}
+
+判断要改哪几页、每页怎么改：只改需要改的页（通常 1–2 页）；涉及口播的改动直接改 script.js 里对应的句子，并保持句子数量不变。
+把决定写进 .studio/revision.json：{ "pages": [{ "id": "p03", "note": "给画面 Agent 的修改说明，具体到物和动作" }] }，然后一句话告诉用户你要改什么。
+现有分镜：${sb.pages.map((p) => `${p.id} ${p.section}`).join('；')}`);
+    this.state.planner = s.ref; this.save();
+    await s.close();
+    let plan: { pages: { id: string; note: string }[] };
+    try { plan = JSON.parse(this.project.read('.studio/revision.json')); } catch { this.fail('pages', '导演没有写出修改计划（.studio/revision.json）'); }
+    const ids = plan.pages.map((p) => p.id).filter((id) => sb.pages.some((p) => p.id === id));
+    if (!ids.length) this.fail('pages', '修改计划里没有可以改的页');
+    this.emit({ type: 'note', text: `要重画 ${ids.map((id) => `第 ${sb.pages.findIndex((p) => p.id === id) + 1} 页`).join('、')}，其余的保持不变` });
+    this.serverMeta();
+    if (this.o.tts && this.o.voice) await narrate(this.o.dir, { tts: this.o.tts, voice: this.o.voice, signal: this.o.signal });   // cached pages cost nothing
+    this.state.revision = Object.fromEntries(plan.pages.map((p) => [p.id, p.note]));
+    for (const id of ids) this.state.pages[id] = { status: 'queued', rounds: 0, issues: [] };
+    this.state.stage = 'pages'; this.save();
+    await this.pages(ids);
+    this.state.revision = undefined; this.save();
+    await this.review();
+    return this.render();
   }
 
   /** Whole run. `approve` is called with the storyboard and resolves with optional feedback (the user's edits). */

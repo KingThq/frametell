@@ -7,7 +7,7 @@ export type { StudioEvent, Storyboard, ModelInfo };
 export type RuntimeId = 'pi' | 'claude-agent-sdk' | 'codex';
 export type RunStatus = 'idle' | 'running' | 'awaiting_approval' | 'done' | 'failed' | 'stopped';
 export interface VoiceChoice { provider: 'volcengine' | 'elevenlabs'; id: string; name?: string }
-export interface Voice { provider: 'volcengine' | 'elevenlabs'; id: string; name: string; gender?: 'female' | 'male'; lang?: string }
+export interface Voice { provider: 'volcengine' | 'elevenlabs'; id: string; name: string; gender?: 'female' | 'male'; lang?: string; previewUrl?: string }
 export interface StyleInfo { id: string; name: string; summary: string }
 export interface EnvCheck { id: 'chrome' | 'ffmpeg' | 'git' | 'node'; ok: boolean; detail: string; fix?: string }
 

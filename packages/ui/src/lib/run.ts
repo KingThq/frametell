@@ -4,21 +4,26 @@ import type { LoggedEvent } from './client';
 
 type Ev<T extends LoggedEvent['type']> = Extract<LoggedEvent, { type: T }>;
 export type Stage = Ev<'stage'>['stage'];
-export type StageStatus = 'pending' | 'running' | 'done' | 'failed' | 'skipped';
+export type StageStatus = 'pending' | 'running' | 'done' | 'failed' | 'skipped' | 'stopped';
 export type Storyboard = Ev<'approval'>['storyboard'];
 export type PageStatus = Ev<'page'>['status'];
 
 export interface ToolCall { id: string; name: string; summary: string; ok?: boolean }
-export type FeedItem =
+/** every item knows the stage it happened in, so the conversation reads as chapters */
+type In = { stage?: Stage };
+export type FeedItem = In & (
   | { kind: 'stage'; key: string; stage: Stage; status: StageStatus; detail?: string; at: number }
   | { kind: 'say'; key: string; session: string; text: string; at: number }
   | { kind: 'think'; key: string; session: string; text: string; at: number }
   | { kind: 'tools'; key: string; session: string; calls: ToolCall[]; at: number }
+  | { kind: 'user'; key: string; text: string; at: number }
+  | { kind: 'note'; key: string; text: string; at: number }
+  | { kind: 'paused'; key: string; reason: 'user' | 'interrupted' | 'error'; message?: string; at: number }
   | { kind: 'check'; key: string; round: number; reds: number; yellows: number; messages: string[]; at: number }
   | { kind: 'approval'; key: string; storyboard: Storyboard; at: number }
   | { kind: 'pages'; key: string; at: number }
   | { kind: 'error'; key: string; message: string; at: number }
-  | { kind: 'done'; key: string; video: string; duration: number; at: number };
+  | { kind: 'done'; key: string; video: string; duration: number; at: number });
 
 export interface PageView {
   id: string;
@@ -26,6 +31,7 @@ export interface PageView {
   round: number;
   issues: string[];
   sheet?: string;
+  thumb?: string;
   lastText?: string;
   tools: number;
   startedAt?: number;
@@ -44,6 +50,12 @@ export interface RunView {
   gate?: Ev<'gate'>;
   video?: { path: string; noSubs: string; duration: number };
   error?: string;
+  /** set while the run is stopped (paused by the user, interrupted, or failed); cleared when it continues */
+  paused?: { reason: 'user' | 'interrupted' | 'error'; message?: string; at: number };
+  /** the stage that is running now */
+  current?: Stage;
+  /** when the run (or its latest continuation) started, for elapsed time */
+  startedAt?: number;
   /** the last moment anything happened (for "working…" indicators) */
   activeAt?: number;
 }
@@ -62,14 +74,16 @@ const isPage = (session: string) => session.startsWith('page-');
 export function reduce(v: RunView, e: LoggedEvent): RunView {
   const at = e.at, key = String(e.seq);
   const r: RunView = { ...v, seq: e.seq, activeAt: at };
+  const stage = v.current;
+  const push = (item: FeedItem) => { r.feed = [...r.feed, { ...item, stage: item.stage ?? stage } as FeedItem]; };
   switch (e.type) {
     case 'stage': {
       const s = { ...r.stages[e.stage] };
-      if (e.status === 'start') { s.status = 'running'; s.startedAt = at; s.endedAt = undefined; }
-      else { s.status = e.status; s.endedAt = at; s.detail = e.detail; }
+      if (e.status === 'start') { s.status = 'running'; s.startedAt = at; s.endedAt = undefined; r.current = e.stage; r.paused = undefined; r.startedAt ??= at; }
+      else { s.status = e.status; s.endedAt = at; s.detail = e.detail; if (r.current === e.stage) r.current = undefined; }
       r.stages = { ...r.stages, [e.stage]: s };
-      if (e.stage === 'pages' && e.status === 'start' && !r.feed.some((f) => f.kind === 'pages')) r.feed = [...r.feed, { kind: 'pages', key, at }];
-      else if (e.stage !== 'pages' || e.status !== 'start') r.feed = [...r.feed, { kind: 'stage', key, stage: e.stage, status: s.status, detail: e.detail, at }];
+      if (e.stage === 'pages' && e.status === 'start' && !r.feed.some((f) => f.kind === 'pages')) push({ kind: 'pages', key, at, stage: 'pages' });
+      else if (e.stage !== 'pages' || e.status !== 'start') push({ kind: 'stage', key, stage: e.stage, status: s.status, detail: e.detail, at });
       if (e.stage === 'script' && e.status === 'start') r.awaitingApproval = false;
       if (e.status === 'start') r.error = undefined;
       return r;
@@ -84,15 +98,15 @@ export function reduce(v: RunView, e: LoggedEvent): RunView {
         r.pages = { ...r.pages, [id]: p };
         return r;
       }
-      if (ev.type === 'text') r.feed = [...r.feed, { kind: 'say', key, session: e.session, text: ev.text, at }];
-      else if (ev.type === 'thinking') r.feed = [...r.feed, { kind: 'think', key, session: e.session, text: ev.text, at }];
+      if (ev.type === 'text') push({ kind: 'say', key, session: e.session, text: ev.text, at });
+      else if (ev.type === 'thinking') push({ kind: 'think', key, session: e.session, text: ev.text, at });
       else if (ev.type === 'tool_start' || ev.type === 'tool_end') {
         const last = r.feed[r.feed.length - 1];
         if (ev.type === 'tool_start') {
           const call: ToolCall = { id: ev.id, name: ev.name, summary: ev.summary };
           r.feed = last?.kind === 'tools' && last.session === e.session
             ? [...r.feed.slice(0, -1), { ...last, calls: [...last.calls, call] }]
-            : [...r.feed, { kind: 'tools', key, session: e.session, calls: [call], at }];
+            : [...r.feed, { kind: 'tools', key, session: e.session, calls: [call], at, stage }];
         } else {
           r.feed = r.feed.map((f) => (f.kind === 'tools' && f.session === e.session ? { ...f, calls: f.calls.map((c) => (c.id === ev.id ? { ...c, ok: ev.ok } : c)) } : f));
         }
@@ -101,17 +115,18 @@ export function reduce(v: RunView, e: LoggedEvent): RunView {
     }
     case 'storyboard_check': {
       const reds = e.issues.filter((i) => i.level === 'red').length;
-      r.feed = [...r.feed, { kind: 'check', key, round: e.round, reds, yellows: e.issues.length - reds, messages: e.issues.map((i) => `${i.page ?? '全片'}：${i.msg}`), at }];
+      push({ kind: 'check', key, round: e.round, reds, yellows: e.issues.length - reds, messages: e.issues.map((i) => `${i.page ?? '全片'}：${i.msg}`), at });
       return r;
     }
     case 'approval':
       r.storyboard = e.storyboard; r.awaitingApproval = true;
-      r.feed = [...r.feed, { kind: 'approval', key, storyboard: e.storyboard, at }];
+      push({ kind: 'approval', key, storyboard: e.storyboard, at, stage: 'storyboard' });
       return r;
     case 'page': {
       const p = r.pages[e.id] ? { ...r.pages[e.id] } : newPage(e.id, r);
       p.status = e.status; p.round = e.round ?? p.round; p.issues = e.issues ?? p.issues;
       if (e.sheet) p.sheet = e.sheet;
+      if (e.thumb) p.thumb = e.thumb;
       if (e.status === 'drawing' && !p.startedAt) p.startedAt = at;
       if (['ok', 'flagged', 'failed'].includes(e.status)) p.endedAt = at;
       r.pages = { ...r.pages, [e.id]: p };
@@ -120,10 +135,25 @@ export function reduce(v: RunView, e: LoggedEvent): RunView {
     }
     case 'cost': r.cost = { amount: e.amount, currency: e.currency, usage: e.usage }; return r;
     case 'gate': r.gate = e; return r;
-    case 'error': r.error = e.message; r.feed = [...r.feed, { kind: 'error', key, message: e.message, at }]; return r;
+    case 'error': r.error = e.message; push({ kind: 'error', key, message: e.message, at }); return r;
+    case 'user':
+      if (r.awaitingApproval) r.awaitingApproval = false;   // at the storyboard, saying something is the change request
+      push({ kind: 'user', key, text: e.text, at }); return r;
+    case 'note': push({ kind: 'note', key, text: e.text, at }); return r;
+    case 'paused': {
+      // close whatever was running: its timer stops, and the chapter reads as stopped rather than in progress
+      r.stages = Object.fromEntries(Object.entries(r.stages).map(([k, s]) => [k, s.status === 'running' ? { ...s, status: 'stopped' as StageStatus, endedAt: at } : s])) as RunView['stages'];
+      r.current = undefined;
+      r.paused = { reason: e.reason, message: e.message, at };
+      r.pages = Object.fromEntries(Object.entries(r.pages).map(([k, p]) => [k, p.status === 'drawing' || p.status === 'checking' ? { ...p, status: 'queued' as PageStatus } : p]));
+      if (e.reason === 'error' && r.feed.at(-1)?.kind === 'error') r.feed = r.feed.slice(0, -1);   // the paused card carries the message
+      push({ kind: 'paused', key, reason: e.reason, message: e.message, at });
+      return r;
+    }
     case 'done':
       r.video = { path: e.video, noSubs: e.videoNoSubs, duration: e.duration };
-      r.feed = [...r.feed, { kind: 'done', key, video: e.video, duration: e.duration, at }];
+      r.paused = undefined;
+      push({ kind: 'done', key, video: e.video, duration: e.duration, at });
       return r;
     default: return r;
   }

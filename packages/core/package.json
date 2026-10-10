@@ -7,15 +7,30 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
-    "./types": { "types": "./dist/types.d.ts", "default": "./dist/types.js" }
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./types": {
+      "types": "./dist/types.d.ts",
+      "default": "./dist/types.js"
+    }
   },
-  "files": ["dist"],
-  "scripts": { "build": "tsc -p .", "typecheck": "tsc -p . --noEmit" },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p .",
+    "typecheck": "tsc -p . --noEmit",
+    "test": "node --test dist/*.test.js"
+  },
   "dependencies": {
     "@frametell/agent": "workspace:*",
     "@frametell/engine": "workspace:*",
     "@frametell/models": "workspace:*",
-    "@frametell/voice": "workspace:*"
+    "@frametell/voice": "workspace:*",
+    "jszip": "3.10.1",
+    "mammoth": "1.12.3",
+    "unpdf": "1.8.1"
   }
 }

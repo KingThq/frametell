@@ -59,6 +59,7 @@ export function createServer(studio = new Studio(), opts: { token?: string } = {
   app.get('/api/styles', (c) => c.json(studio.styles()));
   app.get('/api/models', async (c) => c.json(await studio.models()));
   app.get('/api/voices', async (c) => c.json(await studio.voices()));
+  app.get('/api/voices/:provider/:id/preview', async (c) => sendFile(c, await studio.voicePreview(c.req.param('provider') as 'volcengine' | 'elevenlabs', c.req.param('id'))));
 
   app.get('/api/projects', (c) => c.json(studio.projects().map((p) => ({ ...p, previewBase: previewBase(p.id) }))));
   app.get('/api/projects/:id', (c) => c.json({ ...studio.project(c.req.param('id')), previewBase: previewBase(c.req.param('id')) }));
@@ -76,6 +77,10 @@ export function createServer(studio = new Studio(), opts: { token?: string } = {
     return c.json({ ok: studio.approve(c.req.param('id'), feedback) });
   });
   app.post('/api/projects/:id/stop', (c) => { studio.stop(c.req.param('id')); return c.json({ ok: true }); });
+  app.post('/api/projects/:id/say', async (c) => {
+    const { text } = (await c.req.json().catch(() => ({}))) as { text?: string };
+    return c.json({ ok: studio.say(c.req.param('id'), text || '') });
+  });
 
   // live events: replay after Last-Event-ID (or ?since=), then stream; a ping every 15s keeps proxies honest
   app.get('/api/projects/:id/events', (c) => {

@@ -9,6 +9,7 @@ import { createCatalog, RELAY_BASE_URL } from '@frametell/models';
 import { elevenLabsTts, volcengineTts } from '@frametell/voice';
 import { Director, piRuntime, claudeRuntime, codexRuntime, type AgentRuntime, type StudioEvent, type Storyboard } from '@frametell/agent';
 import { PROJECTS_DIR, loadConfig } from './config.js';
+import { prepareMaterials } from './materials.js';
 import type { LoggedEvent, ProjectMeta, ProjectSummary, RunStatus } from './types.js';
 
 export type Logged = LoggedEvent;
@@ -77,6 +78,9 @@ class Runner {
   private gate?: (feedback: string | undefined) => void;
   /** an approval that arrived before the run reached the gate (e.g. right after a server restart) */
   private pending?: { feedback?: string };
+  /** notes the user left while nothing was running; handed to the director when the run continues */
+  private parked: string[] = [];
+  private director?: Director;
   status: RunStatus = 'idle';
   private log: string;
 
@@ -86,9 +90,17 @@ class Runner {
       const lines = fs.readFileSync(this.log, 'utf8').trim().split('\n').filter(Boolean);
       this.seq = lines.length;
       const last = lines.length ? (JSON.parse(lines[lines.length - 1]) as Logged) : undefined;
-      // a run in progress when the server stopped is shown as stopped; the user can continue it
       this.status = last?.type === 'done' ? 'done' : last?.type === 'approval' ? 'awaiting_approval' : lines.length ? 'stopped' : 'idle';
+      // a run that was in progress when its process went away (app closed, crash): say so in the log, so every client
+      // shows it as paused with a way to continue, instead of a stage that never ends
+      if (this.status === 'stopped' && last && last.type !== 'paused' && !heldElsewhere(this.id)) {
+        this.emit({ type: 'paused', reason: 'interrupted', stage: this.stateStage() });
+      }
     }
+  }
+
+  private stateStage(): string | undefined {
+    try { return JSON.parse(fs.readFileSync(path.join(dirOf(this.id), '.studio', 'state.json'), 'utf8')).stage; } catch { return undefined; }
   }
 
   summary() {
@@ -125,7 +137,19 @@ class Runner {
   }
 
   /** start or continue the run; it pauses at storyboard approval */
-  async start() {
+  start() {
+    return this.launch((d) => d.run(async () => {
+      if (this.pending) { const p = this.pending; this.pending = undefined; return p.feedback; }
+      this.status = 'awaiting_approval';
+      return new Promise<string | undefined>((resolve) => { this.gate = resolve; });
+    }));
+  }
+
+  /** a change to a finished film, in the user's words */
+  revise(request: string) { return this.launch((d) => d.revise(request)); }
+
+  /** build the director and run `task` with it: one run at a time, across processes; the outcome is always logged */
+  private async launch(task: (d: Director) => Promise<unknown>) {
     if (this.status === 'running') return;
     const other = heldElsewhere(this.id);
     if (other) { this.emit({ type: 'error', message: `这个项目正在另一个 Frametell 窗口里制作（进程 ${other}），请在那里继续` }); return; }
@@ -139,6 +163,10 @@ class Runner {
     this.status = 'running';
     let director: Director;
     try {
+      // PDF/Word/PPT/EPUB → Markdown the director can read (skipped when already done); a file that cannot be read is
+      // reported but does not stop the run
+      const { files } = await prepareMaterials(path.join(dir, 'materials'));
+      for (const f of files) if (f.kind === 'document' && !f.parsedTo) this.emit({ type: 'error', message: `资料 ${f.name} 读不了：${f.warning}` });
       const { runtime, prices } = await buildRuntime(meta);
       const ttsKey = meta.voice?.provider === 'elevenlabs' ? cfg.tts.elevenlabs : cfg.tts.volcengine;
       const tts = meta.voice && ttsKey ? (meta.voice.provider === 'elevenlabs' ? elevenLabsTts(ttsKey) : volcengineTts(ttsKey)) : undefined;
@@ -152,17 +180,17 @@ class Runner {
       this.status = 'failed';
       release();
       this.emit({ type: 'error', message: (e as Error).message });
+      this.emit({ type: 'paused', reason: 'error', message: (e as Error).message });
       return;
     }
-    director.run(async (sb: Storyboard) => {
-      void sb;
-      if (this.pending) { const p = this.pending; this.pending = undefined; return p.feedback; }
-      this.status = 'awaiting_approval';
-      return new Promise<string | undefined>((resolve) => { this.gate = resolve; });
-    }).finally(release).then(() => { this.status = 'done'; writeMeta(readMeta(this.id)); })
+    this.director = director;
+    for (const n of this.parked.splice(0)) director.message(n);
+    task(director).finally(() => { release(); this.director = undefined; })
+      .then(() => { this.status = 'done'; writeMeta(readMeta(this.id)); })
       .catch((e: Error) => {
-        if (e.name === 'AbortError' || this.abort?.signal.aborted) { this.status = 'stopped'; this.emit({ type: 'error', message: '已停止，可以继续制作' }); }
-        else { this.status = 'failed'; this.emit({ type: 'error', message: e.message }); }
+        const stage = this.stateStage();
+        if (e.name === 'AbortError' || this.abort?.signal.aborted) { this.status = 'stopped'; this.emit({ type: 'paused', reason: 'user', stage }); }
+        else { this.status = 'failed'; this.emit({ type: 'error', message: e.message }); this.emit({ type: 'paused', reason: 'error', stage, message: e.message }); }
       });
   }
 
@@ -174,6 +202,26 @@ class Runner {
   }
 
   stop() { this.abort?.abort(); }
+
+  /**
+   * The user said something. At the storyboard it is the change request; while the director works it is a note the
+   * next step picks up; after the film it starts a revision; while paused it is kept for when the run continues.
+   */
+  say(text: string): boolean {
+    text = text.trim();
+    if (!text) return false;
+    this.emit({ type: 'user', text });
+    if (this.gate || this.status === 'awaiting_approval') return this.approve(text);
+    if (this.status === 'running' && this.director) {
+      this.director.message(text);
+      this.emit({ type: 'note', text: '收到，接下来的步骤会照这个来' });
+      return true;
+    }
+    if (this.status === 'done' || this.stateStage() === 'done') { void this.revise(text); return true; }
+    this.parked.push(text);
+    this.emit({ type: 'note', text: '记下了，继续制作时会照这个来' });
+    return true;
+  }
 }
 
 const runners = new Map<string, Runner>();

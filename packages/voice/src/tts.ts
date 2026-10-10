@@ -82,7 +82,7 @@ export function elevenLabsTts(apiKey: string, model = 'eleven_multilingual_v2'):
   };
 }
 
-export interface Voice { provider: TtsProvider['id']; id: string; name: string; gender?: 'female' | 'male'; lang?: string }
+export interface Voice { provider: TtsProvider['id']; id: string; name: string; gender?: 'female' | 'male'; lang?: string; /** a hosted sample (ElevenLabs) */ previewUrl?: string }
 
 /** Volcengine preset narrators (seed-tts-2.0). */
 export const VOLCENGINE_VOICES: Voice[] = [
@@ -99,6 +99,6 @@ export const VOLCENGINE_VOICES: Voice[] = [
 export async function listElevenLabsVoices(apiKey: string): Promise<Voice[]> {
   const res = await fetch('https://api.elevenlabs.io/v2/voices?page_size=100', { headers: { 'xi-api-key': apiKey } });
   if (!res.ok) throw new Error(`ElevenLabs voices ${res.status}`);
-  const j = (await res.json()) as { voices: { voice_id: string; name: string; labels?: { gender?: string } }[] };
-  return j.voices.map((v) => ({ provider: 'elevenlabs', id: v.voice_id, name: v.name, gender: v.labels?.gender === 'female' ? 'female' : v.labels?.gender === 'male' ? 'male' : undefined }));
+  const j = (await res.json()) as { voices: { voice_id: string; name: string; labels?: { gender?: string }; preview_url?: string }[] };
+  return j.voices.map((v) => ({ provider: 'elevenlabs', id: v.voice_id, name: v.name, previewUrl: v.preview_url, gender: v.labels?.gender === 'female' ? 'female' : v.labels?.gender === 'male' ? 'male' : undefined }));
 }
