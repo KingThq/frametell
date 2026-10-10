@@ -1,0 +1,16 @@
+{
+  "name": "frametell",
+  "version": "0.1.0",
+  "description": "Turn documents into polished explainer videos with an AI director. Local-first, any model; Relay recommended.",
+  "license": "MIT",
+  "type": "module",
+  "bin": { "frametell": "./dist/cli.js" },
+  "files": ["dist"],
+  "scripts": { "build": "tsc -p .", "typecheck": "tsc -p . --noEmit", "dev": "node dist/cli.js" },
+  "dependencies": {
+    "@frametell/agent": "workspace:*",
+    "@frametell/engine": "workspace:*",
+    "@frametell/models": "workspace:*",
+    "@frametell/voice": "workspace:*"
+  }
+}

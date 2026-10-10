@@ -40,6 +40,6 @@ export function createProject(dir, { title = '未命名视频', style = 'study' 
     const src = fs.readFileSync(path.join(ENGINE_DIR, 'template', f), 'utf8');
     fs.writeFileSync(path.join(dir, f), src.replaceAll('__TITLE__', title).replace("  const META = {", `  const META = {\n    style: '${style}',`));
   }
-  fs.writeFileSync(path.join(dir, '.gitignore'), 'engine\nengine_modules\nout/\n');
+  fs.writeFileSync(path.join(dir, '.gitignore'), 'engine\nengine_modules\nout/\n.studio/\n');
   linkProject(dir);
 }

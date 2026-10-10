@@ -1,9 +1,10 @@
-# 现成组件库（kit/lib/）
+# 现成组件库（engine/lib/）
 
-需要时用 `node ../../kit/tools/use-extra.mjs <文件名>` 拷进本项目并登记（并行安全），再 Read 该文件看用法。用不上就别用，手写也可以。
+需要时用 `node engine/tools/use-extra.mjs <文件名>` 拷进本项目并登记（并行安全），再 Read 该文件看用法。用不上就别用，手写也可以。
 
 | 文件 | 组件 |
 |---|---|
+| `warm.js` | 暖调叙事插画的比喻物：`ground` 地面 / `snowball` 会长大的雪球 / `jar` 装硬币的玻璃罐（水位）/ `coin` 硬币（可下落）/ `tree` 会生长结果的树 / `trail` 山路（可铺开，带行走点）/ `hand` 不露脸的手 / `calendar` 台历 / `tag` 写在物上的数字标签（可计数到念出的那个词） |
 | `widgets01.js` | gauge 表盘 / tank 水箱 / stampF / loopRing |
 | `runner.js` | pathAt / PV.keys / PV.mix |
 | `waffle.js` | 百格图 |

@@ -35,7 +35,7 @@ ENGINE.visual('p22', (P) => {
 | `PV.K(lt, a, dur, ease)` / `PV.softmax(z, T)` | 进度 0→1 / 真实 softmax |
 | `P.shell3d({ cx, cy, core, step, band, gap, parts: [{ color }], at(i), explode(lt), lift(i, lt), op(i, lt), rot(lt), coreLabel })` → `{ S, z, proj, corner(i, lt), half }` | 模型内核外套 n 层方框壳的 3D 爆炸图；`corner` 给出第 i 层右前角的屏幕坐标，平面标签可以用 liveRough 连线钉上去（例：26/p05、p35）。`PV.tw(str, size)` 估字宽 |
 | `P.three(x, y, w, h, setup(T, S), draw(lt, S), { fov, at })` | **three.js 3D 场景**（量子力学系列首用）：`META.vendor: ['three']` + `META.webgl: true`。`setup` 只跑一次，往 `S.scene` 里加东西、引用挂在 `S` 上；`draw` 每帧按 `lt` 摆好物体和 `S.camera`（必须是 lt 的纯函数，随机数用 `PV.rng`）。所有场景共用一个 WebGL 渲染器再拷进各自的 2D canvas，页数再多也不会超出浏览器的 WebGL 上下文上限。例：`quantum/quantum-01` |
-| `P.logo(name, cx, cy, size, { at, mono })` | **真实品牌 logo**：先在集目录跑 `node ../../kit/tools/logos.mjs anthropic openai …` 生成 `extras/logos.js`（simple-icons → iconify logos），并登记到 `META.extras`；`logos:openai` 可强制取横版带字标志 |
+| `P.logo(name, cx, cy, size, { at, mono })` | **真实品牌 logo**：先在集目录跑 `node engine/tools/logos.mjs anthropic openai …` 生成 `extras/logos.js`（simple-icons → iconify logos），并登记到 `META.extras`；`logos:openai` 可强制取横版带字标志 |
 | `P.bubble(x,y,w,str,{ side:'l'\|'r' })` / `P.chip` / `P.card(x,y,w,h,{ title })` / `P.keycap(x,y,label,{ press })` / `P.stamp(x,y,str)` / `P.live(x,y,lt=>str)` / `P.pulse(el,t)` | 组件 |
 | `P.layer()` → 子 Builder，`.wrap` 可整体移动/淡出；配合 `P.tick(lt => …)` 做分段切换（例：02/p01） | 一页内换场 |
 | `handle.hide(t, dur)` | 某元素在 t 时淡出 |
@@ -57,7 +57,7 @@ ENGINE.visual('p22', (P) => {
 | `P.cameo(kind, cx, cy, size, o)` | 角色表演片段 `clips/c-<kind>`，柔边 + 正片叠底融进纸面 |
 | `P.browser(x, y, w, h, { src, url, crop, pan, at })` → `.mark(rect, o)` / `.ring(rect, o)` / `.toStage(rect)` | 浏览器窗口 + 真实网页截图（2× 截图，rect 用页面 CSS 像素）；`pan: [{ at, y }]` 滚动 |
 
-- 片段帧放好后运行 `node ../../kit/tools/clips.mjs` 生成 `extras/clips.js`（帧数登记），并放在 `META.extras` 第一个。
+- 片段帧放好后运行 `node engine/tools/clips.mjs` 生成 `extras/clips.js`（帧数登记），并放在 `META.extras` 第一个。
 - 片段帧**按需加载**、有上限的缓存：12 个出片进程也不会撑爆内存。页面可设 `window.__frameReady(t)`（media.js 已设好），`render-chunk` / `snap` 截图前会等它，保证每帧图片都解码完，输出确定。
 - 网页截图的规矩见 `videos/CLAUDE.md`（完整链接、避开导航栏和吸顶栏、圈注要实量）。
 
