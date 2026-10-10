@@ -70,6 +70,20 @@ async function run(argv: string[]) {
   console.log(`token：输入 ${u.input} · 缓存读 ${u.cacheRead} · 缓存写 ${u.cacheWrite} · 输出 ${u.output} · 约 ${c.currency === 'CNY' ? '¥' : '$'}${c.amount.toFixed(2)}`);
 }
 
+async function serveCmd(argv: string[]) {
+  const { o } = args(argv);
+  const { startServer } = await import('./server.js');
+  const { url } = startServer(+(o.port || process.env.PORT || 5317));
+  console.log(`\n  Frametell 已启动\n  ${url}\n`);
+  if (!('no-open' in o) && !process.env.NO_OPEN) {
+    const { spawn } = await import('node:child_process');
+    const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'cmd' : 'xdg-open';
+    const a = process.platform === 'win32' ? ['/c', 'start', '', url] : [url];
+    spawn(cmd, a, { stdio: 'ignore', detached: true }).unref();
+  }
+}
+
 const [cmd, ...rest] = process.argv.slice(2);
 if (cmd === 'run') run(rest).catch((e) => { console.error(e instanceof Error ? e.message : e); process.exit(1); });
-else { console.log('frametell run <资料…>  无界面跑完整条流程（面板开发中）'); }
+else if (!cmd || cmd === 'serve' || cmd.startsWith('--')) serveCmd(cmd?.startsWith('--') ? [cmd, ...rest] : rest);
+else console.log('用法：frametell            启动面板\n      frametell run <资料…>  无界面跑完整条流程');
