@@ -1,7 +1,9 @@
 // The panel's StudioClient over IPC. Same method names as the HTTP client; files are read in the page and sent as bytes.
 const { contextBridge, ipcRenderer } = require('electron');
 
-const call = (method, ...args) => ipcRenderer.invoke('studio:call', method, args);
+// Electron wraps a main-process error as "Error invoking remote method 'studio:call': Error: …"; the panel shows the message
+const call = (method, ...args) => ipcRenderer.invoke('studio:call', method, args)
+  .catch((e) => { throw new Error(String(e?.message || e).replace(/^Error invoking remote method '[^']+': (\w*Error: )?/, '')); });
 const withBase = (p) => ({ ...p, previewBase: `studio://app/p/${p.id}/` });
 const handlers = new Map();
 ipcRenderer.on('studio:event', (_e, subId, ev) => handlers.get(subId)?.(ev));

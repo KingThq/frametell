@@ -10,6 +10,7 @@ import { elevenLabsTts, volcengineTts } from '@frametell/voice';
 import { Director, piRuntime, claudeRuntime, codexRuntime, type AgentRuntime, type StudioEvent, type Storyboard } from '@frametell/agent';
 import { PROJECTS_DIR, loadConfig } from './config.js';
 import { prepareMaterials } from './materials.js';
+import { applyProxy, normalizeBaseUrl } from './net.js';
 import type { LoggedEvent, ProjectMeta, ProjectSummary, RunStatus } from './types.js';
 
 export type Logged = LoggedEvent;
@@ -53,20 +54,24 @@ export function newProject(input: Omit<ProjectMeta, 'id' | 'createdAt' | 'update
 
 async function buildRuntime(meta: ProjectMeta): Promise<{ runtime: AgentRuntime; prices: { input: number; output: number; cacheRead: number; cacheWrite: number; currency: 'CNY' | 'USD' } }> {
   const cfg = loadConfig();
+  applyProxy(cfg.proxy);
   const catalog = await createCatalog({ keys: Object.entries(cfg.keys).map(([providerId, apiKey]) => ({ providerId, apiKey })), custom: cfg.custom });
   const [provider, ...rest] = meta.model.split('/');
   const id = rest.join('/');
-  const model = catalog.get(provider, id);
+  let model = catalog.get(provider, id);
   if (!model) throw new Error(`模型 ${meta.model} 不可用：检查设置里的 key`);
   const info = catalog.info(model);
   const prices = { ...info.cost, currency: info.currency };
+  // the user's own relay for Anthropic / OpenAI replaces the official endpoint for every runtime
+  const relay = provider === 'anthropic' || provider === 'openai' ? normalizeBaseUrl(provider, cfg.baseUrls[provider]) : undefined;
+  if (relay) model = { ...model, baseUrl: relay };
   if (meta.runtime === 'claude-agent-sdk') {
     const key = provider === 'relay' ? cfg.keys.relay : cfg.keys.anthropic;
-    return { runtime: claudeRuntime({ apiKey: key || '', baseUrl: provider === 'relay' ? RELAY_BASE_URL : undefined, model: id }), prices };
+    return { runtime: claudeRuntime({ apiKey: key || '', baseUrl: provider === 'relay' ? RELAY_BASE_URL : relay, model: id }), prices };
   }
   if (meta.runtime === 'codex') {
     const key = provider === 'relay' ? cfg.keys.relay : cfg.keys.openai;
-    return { runtime: codexRuntime({ apiKey: key || '', baseUrl: provider === 'relay' ? RELAY_BASE_URL + '/v1' : undefined, model: id }), prices };
+    return { runtime: codexRuntime({ apiKey: key || '', baseUrl: provider === 'relay' ? RELAY_BASE_URL + '/v1' : relay, model: id }), prices };
   }
   return { runtime: piRuntime(catalog.models, model), prices };
 }

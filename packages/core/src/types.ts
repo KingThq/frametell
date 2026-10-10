@@ -45,11 +45,19 @@ export interface NewProjectInput {
 export interface PublicSettings {
   keys: Record<string, string>;
   custom: unknown[];
+  /** the user's relay per provider (not secret) */
+  baseUrls: Record<string, string>;
+  /** the proxy, password masked; '' when none */
+  proxy: string;
   tts: { volcengine: string; elevenlabs: string };
   defaults: { model?: string; runtime: RuntimeId; style: string; durationSec: number; voice?: VoiceChoice; subtitles: boolean; concurrency: number };
 }
 export interface SettingsPatch {
   keys?: Record<string, string>;
+  /** '' removes a relay */
+  baseUrls?: Record<string, string>;
+  /** '' removes the proxy */
+  proxy?: string;
   tts?: { volcengine?: string; elevenlabs?: string };
   defaults?: Partial<PublicSettings['defaults']>;
 }

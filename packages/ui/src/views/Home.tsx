@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, FileText, Image as ImageIcon, Loader2, Paperclip, Play, Square, X } from 'lucide-react';
-import { client, type ProjectView, type Voice } from '../lib/client';
+import { ArrowRight, CircleAlert, FileText, Image as ImageIcon, Loader2, Paperclip, Play, Settings2, Square, X } from 'lucide-react';
+import { client, type ProjectView, type PublicSettings, type Voice } from '../lib/client';
 import { go, useLoad } from '../lib/hooks';
 import { STAGE_NAME, type Stage } from '../lib/run';
 import { STYLE_SWATCH } from '../lib/styles';
@@ -64,6 +64,21 @@ function VoicePicker({ voices, value, onChange }: { voices: Voice[]; value?: str
   );
 }
 
+const RUNTIME_NAME: Record<string, string> = { pi: 'Studio Agent', 'claude-agent-sdk': 'Claude Agent', codex: 'Codex' };
+const host = (u: string) => { try { return new URL(u).host; } catch { return u; } };
+
+/** where this run's requests will go, in one line: runtime · endpoint · proxy; and a runtime/model mismatch, if any */
+function route(s: PublicSettings | undefined, modelId: string | undefined, providerName: string | undefined) {
+  if (!s || !modelId) return undefined;
+  const provider = modelId.split('/')[0];
+  const runtime = s.defaults.runtime;
+  const relay = s.baseUrls?.[provider];
+  const via = provider === 'relay' ? '经 Relay' : relay ? `经你的中转 ${host(relay)}` : provider === 'anthropic' ? '直连 Claude 官方' : provider === 'openai' ? '直连 OpenAI 官方' : `直连 ${providerName ?? provider}`;
+  const mismatch = runtime === 'claude-agent-sdk' && !['relay', 'anthropic'].includes(provider) ? 'Claude Agent 只能用 Relay 或 Claude 官方的模型，换个模型或运行时'
+    : runtime === 'codex' && !['relay', 'openai'].includes(provider) ? 'Codex 只能用 Relay 或 OpenAI 官方的模型，换个模型或运行时' : undefined;
+  return { parts: [RUNTIME_NAME[runtime] ?? runtime, via, s.proxy ? `走代理 ${host(s.proxy)}` : ''].filter(Boolean), mismatch };
+}
+
 export function Home({ openSettings }: { openSettings: () => void }) {
   const projects = useLoad(() => client.projects());
   const models = useLoad(() => client.models());
@@ -97,7 +112,7 @@ export function Home({ openSettings }: { openSettings: () => void }) {
   };
 
   const start = async () => {
-    if (!ready) return;
+    if (!ready || via?.mismatch) return;
     setBusy(true); setError(undefined);
     try {
       const v = voiceList.find((x) => x.id === voiceId);
@@ -108,6 +123,9 @@ export function Home({ openSettings }: { openSettings: () => void }) {
 
   const recent = useMemo(() => projects.data || [], [projects.data]);
   const current = (styles.data || []).find((s) => s.id === styleId);
+  const picked = models.data?.models.find((m) => `${m.provider}/${m.id}` === modelId);
+  const via = route(settings.data, modelId, picked?.providerName);
+  const go_ = ready && !via?.mismatch;
   const hint = noModel ? null : !hasInput ? '说一句想讲什么，或者附上资料' : !modelId ? '先选一个模型' : null;
 
   return (
@@ -163,11 +181,19 @@ export function Home({ openSettings }: { openSettings: () => void }) {
             {current && <p className="mt-2 text-[12.5px] text-ink-3">{current.summary}</p>}
           </fieldset>
           <div className="sm:col-span-2">
-            <label htmlFor="model" className="fs-label">模型</label>
+            <div className="flex items-baseline justify-between gap-3">
+              <label htmlFor="model" className="fs-label">模型</label>
+              <button type="button" onClick={openSettings} className="-mr-1 inline-flex items-center gap-1 rounded-md px-1 text-[12px] text-ink-3 transition-colors hover:text-ink">
+                <Settings2 size={13} aria-hidden /> key、运行时与代理
+              </button>
+            </div>
             <select id="model" className="fs-input" value={modelId ?? ''} onChange={(e) => setModel(e.target.value)} disabled={!models.data?.models.length}>
               {!models.data?.models.length && <option value="">先连接一个模型</option>}
               {models.data?.models.map((m) => <option key={m.provider + m.id} value={`${m.provider}/${m.id}`}>{m.providerName} · {m.name}{m.recommended ? '（推荐）' : ''}</option>)}
             </select>
+            {via && (via.mismatch
+              ? <p className="mt-2 flex items-center gap-1.5 text-[12.5px] text-seal" role="alert"><CircleAlert size={13} aria-hidden /> {via.mismatch}<button type="button" className="ml-1 text-accent-ink hover:underline" onClick={openSettings}>去设置</button></p>
+              : <p className="mt-2 text-[12px] text-ink-3">{via.parts.join(' · ')}<button type="button" className="ml-2 text-ink-2 underline-offset-2 hover:text-ink hover:underline" onClick={openSettings}>更改</button></p>)}
           </div>
         </div>
 
@@ -181,7 +207,7 @@ export function Home({ openSettings }: { openSettings: () => void }) {
           ) : (
             <p className="text-[12px] text-ink-3"><kbd className="fs-kbd">⌘</kbd> <kbd className="fs-kbd">↵</kbd> 开始</p>
           )}
-          <button className="fs-btn fs-btn-accent fs-btn-lg" disabled={!ready} onClick={start}>
+          <button className="fs-btn fs-btn-accent fs-btn-lg" disabled={!go_} onClick={start}>
             {busy && <Loader2 size={16} className="animate-spin" aria-hidden />}
             {busy ? '正在创建' : '开始制作'}
             {!busy && <ArrowRight size={16} aria-hidden />}

@@ -55,3 +55,7 @@ export const addUsage = (a: TokenUsage, b: Partial<TokenUsage>): TokenUsage => (
   input: a.input + (b.input || 0), output: a.output + (b.output || 0),
   cacheRead: a.cacheRead + (b.cacheRead || 0), cacheWrite: a.cacheWrite + (b.cacheWrite || 0),
 });
+
+/** the proxy settings a spawned agent CLI inherits (Studio sets them on its own process when the user configures one) */
+export const proxyEnv = (): Record<string, string> =>
+  Object.fromEntries(['HTTPS_PROXY', 'HTTP_PROXY', 'NO_PROXY'].filter((k) => process.env[k]).map((k) => [k, process.env[k]!]));

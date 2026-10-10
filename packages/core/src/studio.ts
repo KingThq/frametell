@@ -3,19 +3,27 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createCatalog } from '@frametell/models';
-import { elevenLabsTts, listElevenLabsVoices, volcengineTts, VOLCENGINE_VOICES } from '@frametell/voice';
+import { bundledSample, elevenLabsTts, listElevenLabsVoices, volcengineTts, VOLCENGINE_VOICES } from '@frametell/voice';
 import { Project, STYLES, type Timeline } from '@frametell/agent';
 import { DATA_DIR, loadConfig, patchConfig, publicConfig, saveConfig } from './config.js';
 import { listProjects, newProject, projectDir, readMeta, runner } from './runner.js';
 import { checkEnv } from './env.js';
+import { applyProxy } from './net.js';
 import type { EnvCheck, LoggedEvent, ModelInfo, NewProjectInput, ProjectMeta, ProjectSummary, PublicSettings, SettingsPatch, StyleInfo, Voice } from './types.js';
 
 export interface MaterialFile { name: string; data: Uint8Array }
 
 export class Studio {
+  constructor() { applyProxy(loadConfig().proxy); }
+
   // ── settings and environment ──
   settings(): PublicSettings { return publicConfig(loadConfig()); }
-  updateSettings(patch: SettingsPatch): PublicSettings { const next = patchConfig(loadConfig(), patch); saveConfig(next); return publicConfig(next); }
+  updateSettings(patch: SettingsPatch): PublicSettings {
+    const next = patchConfig(loadConfig(), patch);
+    saveConfig(next);
+    applyProxy(next.proxy);
+    return publicConfig(next);
+  }
   env(): EnvCheck[] { return checkEnv(); }
   styles(): StyleInfo[] { return STYLES; }
 
@@ -33,11 +41,14 @@ export class Studio {
   }
 
   /**
-   * A short sample of a narrator, synthesized once with the user's key and kept on this machine (the same sentence for
-   * every voice, so they compare fairly). Returns the mp3 path; ElevenLabs voices also carry a hosted previewUrl.
+   * A short sample of a narrator: the one shipped with Studio for a built-in voice (free), else synthesized once with
+   * the user's key and kept on this machine (the same sentence for every voice, so they compare fairly). Returns the
+   * mp3 path; ElevenLabs voices also carry a hosted previewUrl.
    */
   async voicePreview(provider: 'volcengine' | 'elevenlabs', id: string): Promise<string> {
     if (!/^[\w.-]+$/.test(id)) throw new Error('音色 id 不合法');
+    const shipped = provider === 'volcengine' ? bundledSample(id) : undefined;
+    if (shipped) return shipped;
     const dir = path.join(DATA_DIR, 'voice-previews');
     const file = path.join(dir, `${provider}-${id}.mp3`);
     if (fs.existsSync(file)) return file;

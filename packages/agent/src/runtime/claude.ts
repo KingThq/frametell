@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
-import { addUsage, emptyUsage, type AgentRuntime, type AgentSession, type SessionOptions, type StageInput, type TurnResult } from './types.js';
+import { addUsage, emptyUsage, proxyEnv, type AgentRuntime, type AgentSession, type SessionOptions, type StageInput, type TurnResult } from './types.js';
 
 export interface ClaudeRuntimeOptions {
   apiKey: string;
@@ -35,7 +35,7 @@ export function claudeRuntime(o: ClaudeRuntimeOptions): AgentRuntime {
       fs.mkdirSync(configDir, { recursive: true });
       const env: Record<string, string> = {
         PATH: process.env.PATH || '', HOME: process.env.HOME || os.homedir(), CLAUDE_CONFIG_DIR: configDir,
-        ANTHROPIC_API_KEY: o.apiKey, ...(o.baseUrl ? { ANTHROPIC_BASE_URL: o.baseUrl } : {}), ...QUIET,
+        ANTHROPIC_API_KEY: o.apiKey, ...(o.baseUrl ? { ANTHROPIC_BASE_URL: o.baseUrl } : {}), ...proxyEnv(), ...QUIET,
       };
       return {
         get ref() { return sessionId; },

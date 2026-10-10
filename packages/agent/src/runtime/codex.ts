@@ -4,7 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { Codex, type ThreadEvent } from '@openai/codex-sdk';
-import { addUsage, emptyUsage, type AgentRuntime, type AgentSession, type SessionOptions, type StageInput, type TurnResult } from './types.js';
+import { addUsage, emptyUsage, proxyEnv, type AgentRuntime, type AgentSession, type SessionOptions, type StageInput, type TurnResult } from './types.js';
 
 export interface CodexRuntimeOptions {
   apiKey: string;
@@ -22,9 +22,9 @@ export function codexRuntime(o: CodexRuntimeOptions): AgentRuntime {
     async open(s: SessionOptions, resume?: string): Promise<AgentSession> {
       const home = path.join(s.cwd, '.studio', 'codex');
       fs.mkdirSync(home, { recursive: true });
-      // a gateway (Relay, any OpenAI-compatible base URL) is its own HTTP-only provider: Codex otherwise opens a
+      // a gateway (Relay, the user's own relay, any OpenAI-compatible base URL) is its own HTTP-only provider: Codex otherwise opens a
       // WebSocket to /v1/responses first, and gateways that only speak HTTP cost five failed reconnects per turn
-      const env = { PATH: process.env.PATH || '', HOME: process.env.HOME || '', CODEX_HOME: home, STUDIO_CODEX_KEY: o.apiKey };
+      const env = { PATH: process.env.PATH || '', HOME: process.env.HOME || '', CODEX_HOME: home, STUDIO_CODEX_KEY: o.apiKey, ...proxyEnv() };
       const codex = o.baseUrl
         ? new Codex({ env, config: { model_provider: 'studio', model_providers: { studio: { name: 'Studio gateway', base_url: o.baseUrl, env_key: 'STUDIO_CODEX_KEY', wire_api: 'responses', supports_websockets: false } } } })
         : new Codex({ apiKey: o.apiKey, env });

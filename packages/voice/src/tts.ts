@@ -1,6 +1,8 @@
 // Text-to-speech providers. Each returns the audio (mp3) and per-word timestamps (Chinese: one entry per character),
 // which narrate() uses to cut a page-long utterance back into cues and to place words on the timeline.
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 export interface WordTime { word: string; startTime: number; endTime: number }
 export interface SynthResult { audio: Buffer; words: WordTime[] }
@@ -94,6 +96,16 @@ export const VOLCENGINE_VOICES: Voice[] = [
   { provider: 'volcengine', id: 'zh_male_wennuanahu_uranus_bigtts', name: '温暖阿虎', gender: 'male', lang: 'zh' },
   { provider: 'volcengine', id: 'zh_female_shuangkuaisisi_uranus_bigtts', name: '爽快思思', gender: 'female', lang: 'zh' },
 ];
+
+/**
+ * The preview of a built-in Volcengine voice, generated once and shipped with Studio (samples/<id>.mp3), so listening
+ * to a voice never spends the user's TTS credit. ElevenLabs voices carry their own hosted previewUrl.
+ */
+export function bundledSample(id: string): string | undefined {
+  if (!/^[\w.-]+$/.test(id)) return undefined;
+  const f = fileURLToPath(new URL(`../samples/${id}.mp3`, import.meta.url));
+  return fs.existsSync(f) ? f : undefined;
+}
 
 /** The user's ElevenLabs voices (their library includes the premade ones). */
 export async function listElevenLabsVoices(apiKey: string): Promise<Voice[]> {
