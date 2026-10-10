@@ -109,6 +109,14 @@ export class Studio {
   }
   private timelines = new Map<string, { stamp: string; value: Timeline | null }>();
 
+  /** a full-resolution frame of the finished film (the no-subtitle cut) at `t` seconds: a project-relative path */
+  async frame(id: string, t: number): Promise<string | null> {
+    const dir = projectDir(id);
+    const film = (() => { try { return fs.readdirSync(path.join(dir, 'out')).find((f) => f.endsWith('-无字幕.mp4')); } catch { return undefined; } })();
+    if (!film || !Number.isFinite(t) || t < 0) return null;
+    return new Project(dir).still(path.join(dir, 'out', film), t);
+  }
+
   start(id: string) { return runner(id).start(); }
   approve(id: string, feedback?: string) { return runner(id).approve(feedback); }
   stop(id: string) { runner(id).stop(); }

@@ -24,6 +24,8 @@ export interface StudioClient {
   say(id: string, text: string): Promise<boolean>;
   /** pages with their narration lines and times; null until the script exists */
   timeline(id: string): Promise<Timeline | null>;
+  /** a full-resolution frame of the finished film at `t` seconds, as a project-relative path */
+  frame(id: string, t: number): Promise<string | null>;
   /** replay after `since`, then live; returns unsubscribe */
   subscribe(id: string, since: number, onEvent: (e: LoggedEvent) => void, onState?: (s: 'open' | 'reconnecting') => void): () => void;
   /** where a narrator's sample can be played */
@@ -63,6 +65,7 @@ export const httpClient: StudioClient = {
   approve: async (id, feedback) => (await call<{ ok: boolean }>('POST', `/api/projects/${id}/approve`, { feedback })).ok,
   stop: async (id) => { await call('POST', `/api/projects/${id}/stop`); },
   timeline: (id) => call<Timeline | null>('GET', `/api/projects/${id}/timeline`),
+  frame: async (id, t) => (await call<{ path: string | null }>('GET', `/api/projects/${id}/frame?t=${t.toFixed(2)}`)).path,
   say: async (id, text) => (await call<{ ok: boolean }>('POST', `/api/projects/${id}/say`, { text })).ok,
   subscribe(id, since, onEvent, onState) {
     let last = since;

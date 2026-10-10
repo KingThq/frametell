@@ -26,6 +26,7 @@ contextBridge.exposeInMainWorld('studioBridge', {
   stop: (id) => call('stop', id),
   say: (id, text) => call('say', id, text),
   timeline: (id) => call('timeline', id),
+  frame: (id, t) => call('frame', id, t),
   subscribe: (id, since, onEvent, onState) => {
     const subId = Math.random().toString(36).slice(2);
     let last = since;

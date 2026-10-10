@@ -1,7 +1,7 @@
 // The orchestrator's hands on a project: engine tools (lint, snap, timeline, render, film gate) and git history.
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawn, spawnSync } from 'node:child_process';
+import { execFile, spawn, spawnSync } from 'node:child_process';
 import { ENGINE_DIR, linkProject } from '@frametell/engine/tools/project.mjs';
 import { lintStoryboard, type StoryboardIssue } from '@frametell/engine/tools/storyboard-lint.mjs';
 import { measure, type FilmGateResult } from '@frametell/engine/tools/film-gate.mjs';
@@ -48,6 +48,15 @@ export class Project {
    * One settled frame per page (0.4 s before it ends), cut from the finished film and kept in out/thumbs; for pages
    * whose run predates per-page thumbnails. Returns project-relative paths by page id.
    */
+  /** a full-resolution frame of the film at `t` seconds (cut once, kept until the film changes), project-relative */
+  async still(video: string, t: number): Promise<string> {
+    const rel = `out/frames/${Math.round(t * 10)}.jpg`, abs = path.join(this.dir, rel);
+    if (fs.existsSync(abs) && fs.statSync(abs).mtimeMs >= fs.statSync(video).mtimeMs) return rel;
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    await new Promise<void>((ok, fail) => execFile(FFMPEG, ['-y', '-loglevel', 'error', '-ss', t.toFixed(2), '-i', video, '-frames:v', '1', '-q:v', '2', abs], (e) => (e ? fail(e) : ok())));
+    return rel;
+  }
+
   posters(video: string, pages: PageTiming[]): Record<string, string> {
     const out: Record<string, string> = {};
     const dir = path.join(this.dir, 'out', 'thumbs');

@@ -21,7 +21,7 @@ function serveFile(abs: string | null) {
 }
 
 // ── IPC: one handler per StudioClient method; events stream back on 'studio:event' ──
-const METHODS = new Set(['settings', 'updateSettings', 'env', 'styles', 'models', 'voices', 'projects', 'project', 'createProject', 'start', 'approve', 'stop', 'say', 'timeline']);
+const METHODS = new Set(['settings', 'updateSettings', 'env', 'styles', 'models', 'voices', 'projects', 'project', 'createProject', 'start', 'approve', 'stop', 'say', 'timeline', 'frame']);
 const subs = new Map<string, () => void>();
 
 ipcMain.handle('studio:call', async (_e, method: string, args: unknown[]) => {
