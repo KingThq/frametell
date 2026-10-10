@@ -1,5 +1,5 @@
 // HTTP + SSE transport for the core: the panel's API, the live event stream, project previews and the built panel.
-// Listens on 127.0.0.1 only; /api needs the per-launch token the CLI puts in the panel URL. Previews run in a
+// Listens on 127.0.0.1 only; /api needs the token the CLI puts in the panel URL (kept per data dir). Previews run in a
 // sandboxed iframe without cookies, so their URLs carry a per-project signature instead.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -10,7 +10,7 @@ import { Hono, type Context } from 'hono';
 import { serve } from '@hono/node-server';
 import { streamSSE } from 'hono/streaming';
 import { getCookie } from 'hono/cookie';
-import { Studio, type LoggedEvent, type NewProjectInput } from '@frametell/core';
+import { DATA_DIR, Studio, type LoggedEvent, type NewProjectInput } from '@frametell/core';
 
 const UI_DIR = path.join(path.dirname(createRequire(import.meta.url).resolve('@frametell/ui/package.json')), 'dist');
 const TYPES: Record<string, string> = {
@@ -119,11 +119,21 @@ export function createServer(studio = new Studio(), opts: { token?: string } = {
   return { app, token };
 }
 
+/** one token per data dir, kept across restarts, so a panel already open reconnects instead of being locked out */
+function savedToken(): string {
+  const f = path.join(DATA_DIR, 'server-token');
+  try { const t = fs.readFileSync(f, 'utf8').trim(); if (/^[a-f0-9]{32}$/.test(t)) return t; } catch {}
+  const t = crypto.randomBytes(16).toString('hex');
+  fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
+  fs.writeFileSync(f, t, { mode: 0o600 });
+  return t;
+}
+
 export function startServer(port = 5317, host = '127.0.0.1') {
   // a failure inside one request must not take down the server and the films being made in it
   process.on('uncaughtException', (e) => console.error('[studio] unexpected error:', e));
   process.on('unhandledRejection', (e) => console.error('[studio] unhandled rejection:', e));
-  const { app, token } = createServer();
+  const { app, token } = createServer(undefined, { token: savedToken() });
   const server = serve({ fetch: app.fetch, port, hostname: host });
   return { server, token, url: `http://${host}:${port}/?token=${token}` };
 }

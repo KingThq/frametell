@@ -40,12 +40,40 @@ function CostChip({ run, project }: { run: RunView; project: ProjectView }) {
   );
 }
 
+const LEFT_KEY = 'fs.workbench.left', LEFT_DEFAULT = 420, LEFT_MIN = 320;
+const readLeft = () => { try { const n = Number(localStorage.getItem(LEFT_KEY)); return n > 0 ? n : LEFT_DEFAULT; } catch { return LEFT_DEFAULT; } };
+
 export function Workbench({ id, openSettings }: { id: string; openSettings: () => void }) {
   const project = useLoad(() => client.project(id), [id]);
   const { run, conn } = useRun(project.data);
   const [selected, setSelected] = useState<string>();
   const [playKey, setPlayKey] = useState(0);
   const [pane, setPane] = useState<'talk' | 'stage'>('talk');   // narrow windows show one pane at a time
+  const main = useRef<HTMLElement>(null);
+  const [box, setBox] = useState(0);
+  const [left, setLeft] = useState(readLeft);
+  const [drag, setDrag] = useState(false);
+  const hasMain = !!project.data;
+  useEffect(() => {
+    const el = main.current; if (!el) return;
+    const ro = new ResizeObserver(() => setBox(el.clientWidth)); ro.observe(el); setBox(el.clientWidth);
+    return () => ro.disconnect();
+  }, [hasMain]);
+  const maxLeft = Math.max(LEFT_MIN, Math.min(720, box ? box * 0.6 : 720));
+  const width = Math.round(Math.min(maxLeft, Math.max(LEFT_MIN, left)));
+  const setWidth = (w: number, save = true) => {
+    const v = Math.round(Math.min(maxLeft, Math.max(LEFT_MIN, w))); setLeft(v);
+    if (save) try { localStorage.setItem(LEFT_KEY, String(v)); } catch { /* private mode */ }
+  };
+  const onSash = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!drag || !main.current) return;
+    setWidth(e.clientX - main.current.getBoundingClientRect().left, false);
+  };
+  const endSash = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!drag) return;
+    setDrag(false); e.currentTarget.releasePointerCapture?.(e.pointerId);
+    try { localStorage.setItem(LEFT_KEY, String(width)); } catch { /* private mode */ }
+  };
   useEffect(() => { document.title = project.data ? `${project.data.title} · Frametell` : 'Frametell'; }, [project.data?.title]);
 
   const running = isWorking(run);
@@ -77,7 +105,7 @@ export function Workbench({ id, openSettings }: { id: string; openSettings: () =
         </div>
       )}
       {!p ? <div className="flex-1" /> : (
-        <main className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(360px,420px)_minmax(0,1fr)]">
+        <main ref={main} style={{ '--fs-left': `${width}px` } as React.CSSProperties} className={`relative grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[var(--fs-left)_minmax(0,1fr)] ${drag ? 'select-none [&_iframe]:pointer-events-none' : ''}`}>
           <aside className={`min-h-0 min-w-0 border-line bg-paper-2 lg:block lg:border-r ${pane === 'talk' ? 'block' : 'hidden'}`} aria-label="和导演的对话">
             <Conversation run={run} project={p} onSelectPage={(pid) => { setSelected(pid); setPane('stage'); }} selected={selected} onPlay={play} />
           </aside>
@@ -85,6 +113,15 @@ export function Workbench({ id, openSettings }: { id: string; openSettings: () =
             <Stage run={run} project={p} selected={selected} onSelect={setSelected} playKey={playKey}
               onCompose={(text) => { setPane('talk'); dispatchEvent(new CustomEvent('studio:compose', { detail: text })); }} />
           </section>
+          <div role="separator" aria-orientation="vertical" aria-label="调整对话栏宽度" aria-valuenow={width} aria-valuemin={LEFT_MIN} aria-valuemax={Math.round(maxLeft)} tabIndex={0}
+            style={{ left: width - 4 }}
+            className={`group absolute inset-y-0 z-10 hidden w-2 cursor-col-resize touch-none outline-none lg:block ${drag ? 'cursor-col-resize' : ''}`}
+            onPointerDown={(e) => { if (e.button !== 0) return; e.currentTarget.setPointerCapture(e.pointerId); setDrag(true); e.preventDefault(); }}
+            onPointerMove={onSash} onPointerUp={endSash} onPointerCancel={endSash}
+            onDoubleClick={() => setWidth(LEFT_DEFAULT)}
+            onKeyDown={(e) => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); setWidth(width + (e.key === 'ArrowLeft' ? -16 : 16)); } }}>
+            <span className={`absolute inset-y-0 left-[3px] transition-colors group-hover:w-[2px] group-hover:bg-accent group-focus-visible:w-[2px] group-focus-visible:bg-accent ${drag ? 'w-[2px] bg-accent' : 'w-px bg-transparent'}`} />
+          </div>
         </main>
       )}
     </div>
