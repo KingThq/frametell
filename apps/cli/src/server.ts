@@ -4,6 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { Readable } from 'node:stream';
 import { createRequire } from 'node:module';
 import { Hono, type Context } from 'hono';
 import { serve } from '@hono/node-server';
@@ -19,18 +20,21 @@ const TYPES: Record<string, string> = {
   '.md': 'text/markdown; charset=utf-8', '.txt': 'text/plain; charset=utf-8', '.srt': 'text/plain; charset=utf-8',
 };
 
-function sendFile(c: Context, file: string) {
+/** a proper web stream: a raw fs stream double-closes when the client goes away mid-response and crashes the process */
+const webStream = (file: string, range?: { start: number; end: number }) => Readable.toWeb(fs.createReadStream(file, range)) as unknown as ReadableStream;
+
+function sendFile(c: Context, file: string, extra: Record<string, string> = {}) {
   const stat = fs.statSync(file);
   const type = TYPES[path.extname(file).toLowerCase()] || 'application/octet-stream';
   const range = c.req.header('range');
   if (range && /^bytes=\d*-\d*$/.test(range)) {   // video seeking
     const [a, b] = range.slice(6).split('-');
     const start = a ? +a : 0, end = b ? Math.min(+b, stat.size - 1) : stat.size - 1;
-    return new Response(fs.createReadStream(file, { start, end }) as unknown as ReadableStream, {
-      status: 206, headers: { 'Content-Type': type, 'Content-Range': `bytes ${start}-${end}/${stat.size}`, 'Accept-Ranges': 'bytes', 'Content-Length': String(end - start + 1) },
+    return new Response(webStream(file, { start, end }), {
+      status: 206, headers: { ...extra, 'Content-Type': type, 'Content-Range': `bytes ${start}-${end}/${stat.size}`, 'Accept-Ranges': 'bytes', 'Content-Length': String(end - start + 1) },
     });
   }
-  return new Response(fs.createReadStream(file) as unknown as ReadableStream, { headers: { 'Content-Type': type, 'Content-Length': String(stat.size), 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-cache' } });
+  return new Response(webStream(file), { headers: { ...extra, 'Content-Type': type, 'Content-Length': String(stat.size), 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-cache' } });
 }
 
 export function createServer(studio = new Studio(), opts: { token?: string } = {}) {
@@ -95,7 +99,8 @@ export function createServer(studio = new Studio(), opts: { token?: string } = {
     const id = c.req.param('id');
     if (c.req.param('sig') !== sig(id)) return c.json({ error: 'forbidden' }, 403);
     const f = studio.projectFile(id, decodeURIComponent(c.req.path.slice(previewBase(id).length)));
-    return f ? sendFile(c, f) : c.notFound();
+    // the preview runs in a sandboxed iframe (origin "null"): fonts need CORS; the signed URL is the access control
+    return f ? sendFile(c, f, { 'Access-Control-Allow-Origin': '*' }) : c.notFound();
   });
 
   app.get('*', (c) => {
@@ -109,6 +114,9 @@ export function createServer(studio = new Studio(), opts: { token?: string } = {
 }
 
 export function startServer(port = 5317, host = '127.0.0.1') {
+  // a failure inside one request must not take down the server and the films being made in it
+  process.on('uncaughtException', (e) => console.error('[studio] unexpected error:', e));
+  process.on('unhandledRejection', (e) => console.error('[studio] unhandled rejection:', e));
   const { app, token } = createServer();
   const server = serve({ fetch: app.fetch, port, hostname: host });
   return { server, token, url: `http://${host}:${port}/?token=${token}` };

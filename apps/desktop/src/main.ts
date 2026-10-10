@@ -1,0 +1,67 @@
+// Electron main process: hosts the core and serves the panel and project files over a private studio:// scheme.
+// The renderer reaches the core only through the preload bridge (contextIsolation on, no Node in the page).
+import { app, BrowserWindow, ipcMain, net, protocol, shell, type WebContents } from 'electron';
+import path from 'node:path';
+import fs from 'node:fs';
+import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
+import { Studio, type LoggedEvent } from '@frametell/core';
+
+const require = createRequire(import.meta.url);
+const UI_DIR = path.join(path.dirname(require.resolve('@frametell/ui/package.json')), 'dist');
+app.setName('Frametell');
+const studio = new Studio();
+
+// studio://app/…            the panel
+// studio://app/p/<id>/…     files inside a project (preview player, snapshots, video)
+protocol.registerSchemesAsPrivileged([{ scheme: 'studio', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }]);
+
+function serveFile(abs: string | null) {
+  return abs ? net.fetch(pathToFileURL(abs).toString()) : new Response('not found', { status: 404 });
+}
+
+// ── IPC: one handler per StudioClient method; events stream back on 'studio:event' ──
+const METHODS = new Set(['settings', 'updateSettings', 'env', 'styles', 'models', 'voices', 'projects', 'project', 'createProject', 'start', 'approve', 'stop']);
+const subs = new Map<string, () => void>();
+
+ipcMain.handle('studio:call', async (_e, method: string, args: unknown[]) => {
+  if (!METHODS.has(method)) throw new Error(`unknown method ${method}`);
+  return (studio as unknown as Record<string, (...a: unknown[]) => unknown>)[method](...args);
+});
+ipcMain.handle('studio:subscribe', (e, subId: string, id: string, since: number) => {
+  const target: WebContents = e.sender;
+  const off = studio.subscribe(id, since, (ev: LoggedEvent) => { if (!target.isDestroyed()) target.send('studio:event', subId, ev); });
+  subs.set(subId, off);
+  target.once('destroyed', () => { off(); subs.delete(subId); });
+});
+ipcMain.handle('studio:unsubscribe', (_e, subId: string) => { subs.get(subId)?.(); subs.delete(subId); });
+
+function createWindow() {
+  const win = new BrowserWindow({
+    width: 1440, height: 900, minWidth: 1024, minHeight: 680,
+    title: 'Frametell', backgroundColor: '#0C0A09',
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    trafficLightPosition: { x: 16, y: 18 },
+    webPreferences: { preload: path.join(app.getAppPath(), 'src', 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true },
+  });
+  // links to the outside world open in the user's browser; the window only ever shows the panel
+  win.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) shell.openExternal(url); return { action: 'deny' }; });
+  win.webContents.on('will-navigate', (e, url) => { if (!url.startsWith('studio://app/')) { e.preventDefault(); if (/^https?:/.test(url)) shell.openExternal(url); } });
+  win.loadURL('studio://app/index.html');
+}
+
+app.whenReady().then(() => {
+  protocol.handle('studio', (req) => {
+    const url = new URL(req.url);
+    const rel = decodeURIComponent(url.pathname.replace(/^\/+/, ''));
+    const m = /^p\/([\w-]+)\/(.*)$/.exec(rel);
+    if (m) return serveFile(studio.projectFile(m[1], m[2]));
+    const abs = path.resolve(UI_DIR, rel || 'index.html');
+    if (!abs.startsWith(UI_DIR)) return new Response('forbidden', { status: 403 });
+    return serveFile(fs.existsSync(abs) && fs.statSync(abs).isFile() ? abs : path.join(UI_DIR, 'index.html'));
+  });
+  createWindow();
+  app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
+});
+
+app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });

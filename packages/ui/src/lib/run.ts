@@ -79,7 +79,7 @@ export function reduce(v: RunView, e: LoggedEvent): RunView {
       if (isPage(e.session)) {
         const id = e.session.slice(5);
         const p = r.pages[id] ? { ...r.pages[id] } : newPage(id, r);
-        if (ev.type === 'text') p.lastText = ev.text;
+        if (ev.type === 'text' && !/^(DONE|FLAGGED)\b/i.test(ev.text.trim())) p.lastText = ev.text;   // keep the description, not the check-loop reply
         if (ev.type === 'tool_start') p.tools += 1;
         r.pages = { ...r.pages, [id]: p };
         return r;

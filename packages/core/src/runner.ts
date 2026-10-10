@@ -14,6 +14,12 @@ import type { LoggedEvent, ProjectMeta, ProjectSummary, RunStatus } from './type
 export type Logged = LoggedEvent;
 
 const dirOf = (id: string) => path.join(PROJECTS_DIR, id);
+const lockFile = (id: string) => path.join(dirOf(id), '.studio', 'run.lock');
+const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch (e) { return (e as NodeJS.ErrnoException).code === 'EPERM'; } };
+/** the pid of another live process running this project (the CLI server and the desktop app can share a data dir) */
+function heldElsewhere(id: string): number | undefined {
+  try { const pid = +fs.readFileSync(lockFile(id), 'utf8'); return pid && pid !== process.pid && alive(pid) ? pid : undefined; } catch { return undefined; }
+}
 const metaFile = (id: string) => path.join(dirOf(id), '.studio', 'project.json');
 
 export function listProjects(): ProjectSummary[] {
@@ -88,7 +94,8 @@ class Runner {
   summary() {
     const st = path.join(dirOf(this.id), '.studio', 'state.json');
     const s = fs.existsSync(st) ? JSON.parse(fs.readFileSync(st, 'utf8')) : {};
-    return { status: this.status, stage: s.stage as string | undefined, video: s.video ? path.relative(dirOf(this.id), s.video) : undefined };
+    const status: RunStatus = this.status !== 'running' && heldElsewhere(this.id) ? 'running' : this.status;
+    return { status, stage: s.stage as string | undefined, video: s.video ? path.relative(dirOf(this.id), s.video) : undefined };
   }
 
   private emit = (e: StudioEvent) => {
@@ -99,20 +106,31 @@ class Runner {
 
   /** events after `since` (replayed from disk), then live ones */
   subscribe(fn: (e: Logged) => void, since = 0) {
-    if (fs.existsSync(this.log)) {
+    let last = since;
+    const replay = () => {
+      if (!fs.existsSync(this.log)) return;
       for (const l of fs.readFileSync(this.log, 'utf8').split('\n')) {
         if (!l) continue;
         const e = JSON.parse(l) as Logged;
-        if (e.seq > since) fn(e);
+        if (e.seq > last) { last = e.seq; fn(e); }
       }
-    }
-    this.subs.add(fn);
-    return () => { this.subs.delete(fn); };
+    };
+    replay();
+    const live = (e: Logged) => { if (e.seq > last) { last = e.seq; fn(e); } };
+    this.subs.add(live);
+    // a run in another process (the CLI server or another window) appends to the same log: follow the file
+    const follow = () => { if (this.status !== 'running' && heldElsewhere(this.id)) replay(); };
+    fs.watchFile(this.log, { interval: 700 }, follow);
+    return () => { this.subs.delete(live); fs.unwatchFile(this.log, follow); };
   }
 
   /** start or continue the run; it pauses at storyboard approval */
   async start() {
     if (this.status === 'running') return;
+    const other = heldElsewhere(this.id);
+    if (other) { this.emit({ type: 'error', message: `这个项目正在另一个 Frametell 窗口里制作（进程 ${other}），请在那里继续` }); return; }
+    fs.writeFileSync(lockFile(this.id), String(process.pid));
+    const release = () => { try { if (+fs.readFileSync(lockFile(this.id), 'utf8') === process.pid) fs.rmSync(lockFile(this.id)); } catch {} };
     const meta = readMeta(this.id);
     const cfg = loadConfig();
     const dir = dirOf(this.id);
@@ -132,6 +150,7 @@ class Runner {
       });
     } catch (e) {
       this.status = 'failed';
+      release();
       this.emit({ type: 'error', message: (e as Error).message });
       return;
     }
@@ -140,7 +159,7 @@ class Runner {
       if (this.pending) { const p = this.pending; this.pending = undefined; return p.feedback; }
       this.status = 'awaiting_approval';
       return new Promise<string | undefined>((resolve) => { this.gate = resolve; });
-    }).then(() => { this.status = 'done'; writeMeta(readMeta(this.id)); })
+    }).finally(release).then(() => { this.status = 'done'; writeMeta(readMeta(this.id)); })
       .catch((e: Error) => {
         if (e.name === 'AbortError' || this.abort?.signal.aborted) { this.status = 'stopped'; this.emit({ type: 'error', message: '已停止，可以继续制作' }); }
         else { this.status = 'failed'; this.emit({ type: 'error', message: e.message }); }

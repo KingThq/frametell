@@ -67,7 +67,7 @@ export const httpClient: StudioClient = {
   fileUrl: (p, rel) => p.previewBase + rel.split('/').map(encodeURIComponent).join('/'),
 };
 
-declare global { interface Window { studioBridge?: StudioClient } }
+declare global { interface Window { studioBridge?: StudioClient & { platform?: string } } }
 
 /** the desktop app's bridge when present, else the local HTTP server */
 export const client: StudioClient = (typeof window !== 'undefined' && window.studioBridge) || httpClient;
