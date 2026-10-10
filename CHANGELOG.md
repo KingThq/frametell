@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Composer: a reference tray above the message. Hand the director exactly what you mean — a page (「改这一页」), a narration line or a frame from the workbench (「引用」), or files and images you attach, paste (⌘V) or drop. References show as chips with thumbnails; image and frame chips open full size; Backspace in an empty box removes the last one; the page you are looking at is offered as a one-click chip.
+- Agent: references reach the director as a `<references>` block ahead of the message, with film times and project paths it can open (frames and images with its read tool). Attached documents are parsed to Markdown under `refs/`.
+- API: `POST /api/projects/:id/attach` (and the desktop `attach` method) saves a file for a message; `say` takes `refs`.
 - Page focus: a strip of full-resolution key frames, one per narration line, linked both ways with the lines and the player — whatever is on screen is highlighted in both.
 - Page focus: a lightbox to read any frame or the self-check sheet in detail (click to zoom where you point, drag to pan, wheel zoom, ←/→ to step), and a full-screen button on the player.
 - API: `GET /api/projects/:id/frame?t=` (and the desktop `frame` method) cuts a full-resolution 1920×1080 frame from the finished film, cached until the film changes.
@@ -27,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Composer: rebuilt as a card with the reference tray, an attach button, a drop target and a toolbar, instead of a single line.
 - The CLI server keeps its panel token per data directory, so a restart no longer locks out a panel that is already open.
 - Page agents receive their component reference and a worked example up front instead of searching the engine.
 - The ETA during a revision counts only the pages being redrawn.

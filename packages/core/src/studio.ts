@@ -9,7 +9,8 @@ import { DATA_DIR, loadConfig, patchConfig, publicConfig, saveConfig } from './c
 import { listProjects, newProject, projectDir, readMeta, runner } from './runner.js';
 import { checkEnv } from './env.js';
 import { applyProxy } from './net.js';
-import type { EnvCheck, LoggedEvent, ModelInfo, NewProjectInput, ProjectMeta, ProjectSummary, PublicSettings, SettingsPatch, StyleInfo, Voice } from './types.js';
+import { attach, cleanRefs } from './refs.js';
+import type { UserRef, EnvCheck, LoggedEvent, ModelInfo, NewProjectInput, ProjectMeta, ProjectSummary, PublicSettings, SettingsPatch, StyleInfo, Voice } from './types.js';
 
 export interface MaterialFile { name: string; data: Uint8Array }
 
@@ -121,7 +122,9 @@ export class Studio {
   approve(id: string, feedback?: string) { return runner(id).approve(feedback); }
   stop(id: string) { runner(id).stop(); }
   /** talk to the director: storyboard feedback, a note mid-run, or a change to the finished film */
-  say(id: string, text: string) { return runner(id).say(text); }
+  say(id: string, text: string, refs?: unknown) { return runner(id).say(text, cleanRefs(refs)); }
+  /** save a file the user attached to a message; returns the reference to send with it */
+  attach(id: string, name: string, data: Uint8Array): Promise<UserRef> { readMeta(id); return attach(projectDir(id), name, data); }
 
   /** replay events after `since`, then stream live ones; returns the unsubscribe function */
   subscribe(id: string, since: number, fn: (e: LoggedEvent) => void): () => void { return runner(id).subscribe(fn, since); }

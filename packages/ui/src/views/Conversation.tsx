@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowUp, Check, ChevronRight, CircleDashed, Clapperboard, Download, Loader2, Pause, Play, TriangleAlert } from 'lucide-react';
+import { Check, ChevronRight, CircleDashed, Clapperboard, Download, Loader2, Pause, Play, TriangleAlert } from 'lucide-react';
 import { client, type ProjectView } from '../lib/client';
 import { clock, money, relPath, STAGE_NAME, STAGES, type FeedItem, type PageView, type RunView, type Stage, type Storyboard, isWorking } from '../lib/run';
 import { pageName, summarizeTools } from '../lib/describe';
 import { useNow } from '../lib/hooks';
 import { Crest } from '../components/Logo';
 import { STYLE_NAME } from '../lib/styles';
+import { Composer, RefChip } from './Composer';
+import type { Ref } from '../lib/refs';
 
 // ── small pieces ────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -308,50 +310,20 @@ function NowBar({ run }: { run: RunView }) {
   );
 }
 
-function Composer({ run, project }: { run: RunView; project: ProjectView }) {
-  const [text, setText] = useState('');
-  const [busy, setBusy] = useState(false);
-  const ref = useRef<HTMLTextAreaElement>(null);
-  // 「改这一页」on the workbench starts a message here
-  useEffect(() => {
-    const on = (e: Event) => { const t = (e as CustomEvent<string>).detail; setText((cur) => (cur.trim() ? cur : t)); requestAnimationFrame(() => { const el = ref.current; if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }); };
-    addEventListener('studio:compose', on);
-    return () => removeEventListener('studio:compose', on);
-  }, []);
-  const placeholder = run.awaitingApproval ? '想改分镜的哪里？比如「第 3 页换成天平的比喻」'
-    : run.video && !run.current ? '想改哪里？比如「第 2 页的数字大一点」'
-    : run.paused ? '继续之前，想调整什么？'
-    : run.current ? '给导演留言，比如「节奏再慢一点」'
-    : '说点什么…';
-  useEffect(() => { const el = ref.current; if (!el) return; el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 132) + 'px'; }, [text]);
-  const send = async () => {
-    const t = text.trim();
-    if (!t || busy) return;
-    setBusy(true);
-    try { await client.say(project.id, t); setText(''); } finally { setBusy(false); ref.current?.focus(); }
-  };
-  return (
-    <form className="px-4 pb-4" onSubmit={(e) => { e.preventDefault(); send(); }}>
-      <div className="flex items-end gap-2 rounded-2xl border border-line bg-surface p-2 pl-3.5 transition-[border-color,box-shadow] focus-within:border-accent focus-within:ring-4 focus-within:ring-accent/15">
-        <label htmlFor="say" className="sr-only">对导演说</label>
-        <textarea id="say" ref={ref} rows={1} value={text} onChange={(e) => setText(e.target.value)} placeholder={placeholder}
-          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(); } }}
-          className="max-h-[132px] min-h-[24px] flex-1 resize-none bg-transparent py-1.5 text-[13.5px] leading-relaxed text-ink outline-none placeholder:text-ink-3" />
-        <button type="submit" disabled={!text.trim() || busy} aria-label="发送" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-accent text-accent-fg transition-[opacity,transform] duration-150 disabled:opacity-30 active:scale-95">
-          {busy ? <Loader2 size={15} className="animate-spin" aria-hidden /> : <ArrowUp size={16} strokeWidth={2.5} aria-hidden />}
-        </button>
-      </div>
-      <p className="mt-1.5 px-1 text-[11.5px] text-ink-3">↵ 发送 · ⇧↵ 换行</p>
-    </form>
-  );
-}
-
 export function Conversation({ run, project, onSelectPage, selected, onPlay }: { run: RunView; project: ProjectView; onSelectPage: (id: string) => void; selected?: string; onPlay: () => void }) {
   const box = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   useEffect(() => { const el = box.current; if (el && stick.current) el.scrollTop = el.scrollHeight; }, [run.feed.length, run.pages, run.stages, run.activity, run.revising]);
   const list = useMemo(() => blocks(run.feed), [run.feed]);
   const lastPaused = [...run.feed].reverse().find((f) => f.kind === 'paused');
+  // the page open on the workbench, offered to the composer as a one-click reference
+  const viewing = useMemo<Ref | undefined>(() => {
+    if (!selected) return undefined;
+    const ids = run.pageOrder.length ? run.pageOrder : run.storyboard?.pages.map((x) => x.id) || [];
+    const n = ids.indexOf(selected) + 1, sec = run.storyboard?.pages.find((x) => x.id === selected)?.section;
+    const thumb = run.pages[selected]?.thumb;
+    return n ? { kind: 'page', page: selected, label: `第 ${n} 页${sec ? `「${sec}」` : ''}`, thumb: thumb ? relPath(thumb, project.id) : undefined } : undefined;
+  }, [selected, run.pageOrder, run.storyboard, run.pages[selected ?? '']?.thumb]);
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div ref={box} className="min-h-0 flex-1 overflow-y-auto px-5 pb-6 pt-5" onScroll={(e) => { const el = e.currentTarget; stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80; }}>
@@ -370,7 +342,12 @@ export function Conversation({ run, project, onSelectPage, selected, onPlay }: {
             if (b.kind === 'work') return <WorkChapter key={b.key} b={b} live={!!run.revising && b === list.filter((x) => x.kind === 'work').at(-1)} />;
             if (b.kind === 'chapter') return <Chapter key={b.key} b={b} run={run} project={project} onSelectPage={onSelectPage} selected={selected} />;
             const it = b.item;
-            if (it.kind === 'user') return <p key={it.key} className="ml-auto w-fit max-w-[88%] whitespace-pre-wrap rounded-2xl rounded-tr-md bg-accent-soft/70 px-4 py-2.5 text-[13.5px] leading-relaxed text-ink ring-1 ring-accent/15 animate-rise">{it.text}</p>;
+            if (it.kind === 'user') return (
+              <div key={it.key} className="ml-auto flex w-fit max-w-[88%] flex-col items-end gap-1.5 animate-rise">
+                {!!it.refs?.length && <div className="flex flex-wrap justify-end gap-1.5">{it.refs.map((r, j) => <RefChip key={j} r={r} project={project} />)}</div>}
+                {it.text && <p className="whitespace-pre-wrap rounded-2xl rounded-tr-md bg-accent-soft/70 px-4 py-2.5 text-[13.5px] leading-relaxed text-ink ring-1 ring-accent/15">{it.text}</p>}
+              </div>
+            );
             if (it.kind === 'paused') return it === lastPaused && run.paused
               ? <PausedCard key={it.key} item={it} run={run} project={project} latest />
               : <p key={it.key} className="flex items-center gap-2 text-[12.5px] text-ink-3"><Pause size={13} aria-hidden />{it.reason === 'error' ? '出错停过一次' : '停过一次'}{it.stage ? `（${STAGE_NAME[it.stage]}）` : ''}，之后接着做了</p>;
@@ -383,7 +360,7 @@ export function Conversation({ run, project, onSelectPage, selected, onPlay }: {
       </div>
       <div className="border-t border-line bg-paper-2">
         <NowBar run={run} />
-        <Composer run={run} project={project} />
+        <Composer run={run} project={project} viewing={viewing} />
       </div>
     </div>
   );

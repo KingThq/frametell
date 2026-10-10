@@ -1,0 +1,59 @@
+// What the user hands the director with a message. The panel sends references (a page, a narration line, a frame of the
+// film, an attached file); the director gets them as a block ahead of the message, with paths it can open itself.
+import fs from 'node:fs';
+import path from 'node:path';
+import type { UserRef } from '@frametell/agent';
+import { kindOf, prepareMaterials } from './materials.js';
+
+const MAX_BYTES = 20 << 20;
+const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+const esc = (s: string) => s.replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[c]!);
+const safe = (p: string) => !path.isAbsolute(p) && !p.split(/[\\/]/).includes('..');
+
+/**
+ * Save a file the user attached into the project's refs/ folder. Documents are parsed to markdown next to it (the
+ * director reads that); images and text files are used as they are. Returns the reference to send with the message.
+ */
+export async function attach(dir: string, name: string, data: Uint8Array): Promise<UserRef> {
+  if (data.byteLength > MAX_BYTES) throw new Error(`「${name}」超过 20MB，换个小一点的文件`);
+  const kind = kindOf(name);
+  if (!kind) throw new Error(`「${name}」的格式还不支持：可以附图片、Markdown / 文本、PDF、Word、PPT、EPUB`);
+  const refs = path.join(dir, 'refs');
+  fs.mkdirSync(refs, { recursive: true });
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[-:T]/g, '');
+  const file = `${stamp}-${path.basename(name).replace(/[\\/:*?"<>|\s]+/g, '_')}`;
+  fs.writeFileSync(path.join(refs, file), data);
+  let rel = `refs/${file}`;
+  if (kind === 'document') {
+    const parsed = (await prepareMaterials(refs)).files.find((f) => f.name === file);
+    if (!parsed?.parsedTo) throw new Error(`「${name}」没能读出文字${parsed?.warning ? `：${parsed.warning}` : ''}`);
+    rel = `refs/${parsed.parsedTo}`;
+  }
+  return { kind: 'file', label: name, path: rel, image: kind === 'image' };
+}
+
+/** only references whose fields make sense, with paths inside the project */
+export function cleanRefs(refs: unknown): UserRef[] {
+  if (!Array.isArray(refs)) return [];
+  return refs.slice(0, 12).filter((r): r is UserRef => {
+    if (!r || typeof r !== 'object' || typeof (r as UserRef).label !== 'string') return false;
+    const x = r as UserRef;
+    if (x.kind === 'page') return typeof x.page === 'string';
+    if (x.kind === 'line') return typeof x.page === 'string' && typeof x.text === 'string' && Number.isFinite(x.at);
+    if (x.kind === 'frame') return typeof x.page === 'string' && typeof x.path === 'string' && safe(x.path) && Number.isFinite(x.at);
+    if (x.kind === 'file') return typeof x.path === 'string' && safe(x.path);
+    return false;
+  });
+}
+
+/** the message as the director reads it: the references first, then what the user wrote */
+export function withRefs(text: string, refs: UserRef[]): string {
+  if (!refs.length) return text;
+  const lines = refs.map((r) => {
+    if (r.kind === 'page') return `<page id="${esc(r.page)}" file="pages/${esc(r.page)}.js">${esc(r.label)}</page>`;
+    if (r.kind === 'line') return `<line page="${esc(r.page)}" at="${mmss(r.at)}">${esc(r.text)}</line>`;
+    if (r.kind === 'frame') return `<frame page="${esc(r.page)}" at="${mmss(r.at)}" image="${esc(r.path)}">成片在这一刻的画面${r.text ? `，正在念「${esc(r.text)}」` : ''}；用 read 打开图片看</frame>`;
+    return `<file path="${esc(r.path)}"${r.image ? ' image="true"' : ''}>${esc(r.label)}${r.image ? '；用 read 打开图片看' : ''}</file>`;
+  });
+  return `<references>\n用户指着下面这些内容说话（at 是在成片里的时间）：\n${lines.join('\n')}\n</references>\n\n${text || '请看看上面这些'}`;
+}

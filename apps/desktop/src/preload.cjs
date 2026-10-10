@@ -24,7 +24,8 @@ contextBridge.exposeInMainWorld('studioBridge', {
   start: (id) => call('start', id),
   approve: (id, feedback) => call('approve', id, feedback),
   stop: (id) => call('stop', id),
-  say: (id, text) => call('say', id, text),
+  say: (id, text, refs) => call('say', id, text, refs),
+  attach: async (id, file) => call('attach', id, file.name, new Uint8Array(await file.arrayBuffer())),
   timeline: (id) => call('timeline', id),
   frame: (id, t) => call('frame', id, t),
   subscribe: (id, since, onEvent, onState) => {

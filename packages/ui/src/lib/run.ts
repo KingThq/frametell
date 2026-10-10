@@ -1,6 +1,6 @@
 // Folds the event stream into what the workbench shows. The director (storyboard, script, review) speaks in the
 // conversation; page sessions run in parallel, so each page is summarized in one row instead of interleaving.
-import type { LoggedEvent } from './client';
+import type { LoggedEvent, UserRef } from './client';
 import { describeTool, pageName } from './describe';
 
 type Ev<T extends LoggedEvent['type']> = Extract<LoggedEvent, { type: T }>;
@@ -17,7 +17,7 @@ export type FeedItem = In & (
   | { kind: 'say'; key: string; session: string; text: string; at: number }
   | { kind: 'think'; key: string; session: string; text: string; at: number }
   | { kind: 'tools'; key: string; session: string; calls: ToolCall[]; at: number }
-  | { kind: 'user'; key: string; text: string; at: number }
+  | { kind: 'user'; key: string; text: string; refs?: UserRef[]; at: number }
   | { kind: 'note'; key: string; text: string; at: number }
   | { kind: 'paused'; key: string; reason: 'user' | 'interrupted' | 'error'; message?: string; at: number }
   | { kind: 'check'; key: string; round: number; reds: number; yellows: number; messages: string[]; at: number }
@@ -158,7 +158,7 @@ export function reduce(v: RunView, e: LoggedEvent): RunView {
     case 'user':
       if (r.awaitingApproval) r.awaitingApproval = false;   // at the storyboard, saying something is the change request
       else if (r.video && !r.current) r.revising = at;            // after the film, it is a change request
-      push({ kind: 'user', key, text: e.text, at }); return r;
+      push({ kind: 'user', key, text: e.text, refs: e.refs, at }); return r;
     case 'note': push({ kind: 'note', key, text: e.text, at }); return r;
     case 'paused': {
       // close whatever was running: its timer stops, and the chapter reads as stopped rather than in progress

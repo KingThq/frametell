@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Captions, CaptionsOff, Check, ChevronLeft, ChevronRight, Download, Images, Maximize2, MessageSquareText, TriangleAlert } from 'lucide-react';
+import { ArrowLeft, Captions, CaptionsOff, Check, ChevronLeft, ChevronRight, Download, Images, Maximize2, MessageSquareText, Quote, TriangleAlert } from 'lucide-react';
 import { client, type PageTiming, type ProjectView, type Timeline } from '../lib/client';
 import { relPath, STAGE_NAME, STAGES, type PageView, type RunView } from '../lib/run';
 import { pageName } from '../lib/describe';
 import { Lightbox } from './Lightbox';
+import { clip, type Ref } from '../lib/refs';
 
 // The workbench is about the film and its pages, each page's picture next to the words it carries: a film view (player,
 // a page lane in proportion to time, the line being spoken), a canvas of page cards, and a focused page to look closely.
@@ -197,7 +198,7 @@ function useFrames(project: ProjectView, times: number[], enabled: boolean) {
   return (t: number) => paths[t.toFixed(1)];
 }
 
-function Focus({ id, run, project, ids, tl, onFocus, onBack, onCompose }: { id: string; run: RunView; project: ProjectView; ids: string[]; tl: Timeline | null; onFocus: (id: string) => void; onBack: () => void; onCompose: (text: string) => void }) {
+function Focus({ id, run, project, ids, tl, onFocus, onBack, onRef }: { id: string; run: RunView; project: ProjectView; ids: string[]; tl: Timeline | null; onFocus: (id: string) => void; onBack: () => void; onRef: (r: Ref) => void }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const screenBox = useRef<HTMLDivElement>(null);
   const strip = useRef<HTMLDivElement>(null);
@@ -248,6 +249,9 @@ function Focus({ id, run, project, ids, tl, onFocus, onBack, onCompose }: { id: 
   }, [prev, next, onBack, onFocus]);
 
   const pageLabel = `第 ${i + 1} 页${sb?.section ? `「${sb.section}」` : ''}`;
+  const pageRef: Ref = { kind: 'page', page: id, label: pageLabel, thumb: p?.thumb ? relPath(p.thumb, project.id) : tl?.posters?.[id] };
+  const lineRef = (j: number): Ref => ({ kind: 'line', page: id, at: lines[j].abs ?? 0, text: lines[j].text, label: `第 ${i + 1} 页 ${mmss(lines[j].abs ?? 0)}「${clip(lines[j].text, 10)}」` });
+  const frameRef = (j: number): Ref | undefined => { const f = frameAt(moments[j]); return f ? { kind: 'frame', page: id, at: moments[j], path: f, text: lines[j]?.text, label: `第 ${i + 1} 页 ${mmss(lines[j]?.abs ?? moments[j])} 的画面` } : undefined; };
   const frameItems = moments.map((m, j) => ({ src: frameAt(m) ? client.fileUrl(project, frameAt(m)!) : '', title: `${pageLabel} · ${mmss(lines[j]?.abs ?? m)}`, caption: lines[j]?.text }));
   const sheetItems = p?.sheet ? [{ src: client.fileUrl(project, relPath(p.sheet, project.id)), title: `${pageLabel} · 第 ${p.round} 轮自检截图`, caption: '导演检查这一页时看的截图，每格左下角是它在成片里的时间' }] : [];
 
@@ -298,7 +302,12 @@ function Focus({ id, run, project, ids, tl, onFocus, onBack, onCompose }: { id: 
                       : <span className="absolute inset-0 animate-pulse bg-ink/[0.06]" aria-hidden />}
                     <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1 font-mono text-[10px] leading-4 text-white tabular">{mmss(lines[j]?.abs ?? m)}</span>
                   </button>
-                  {src && <button className="fs-lb-btn absolute right-1 top-1 h-6 w-6 opacity-0 transition-opacity focus-visible:opacity-100 group-hover/f:opacity-100" onClick={() => setLight({ kind: 'frames', i: j })} aria-label="放大看这一帧" title="放大看"><Maximize2 size={11} /></button>}
+                  {src && (
+                    <span className="absolute right-1 top-1 flex gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover/f:opacity-100">
+                      <button className="fs-lb-btn h-6 w-6" onClick={() => { const r = frameRef(j); if (r) onRef(r); }} aria-label="把这一帧加到对话" title="加到对话"><Quote size={11} /></button>
+                      <button className="fs-lb-btn h-6 w-6" onClick={() => setLight({ kind: 'frames', i: j })} aria-label="放大看这一帧" title="放大看"><Maximize2 size={11} /></button>
+                    </span>
+                  )}
                 </div>
               );
             })}
@@ -312,12 +321,13 @@ function Focus({ id, run, project, ids, tl, onFocus, onBack, onCompose }: { id: 
               {lines.length ? lines.map((l, j) => {
                 const on = j === active && inThis && drawn;
                 return (
-                  <li key={j} data-i={j}>
+                  <li key={j} data-i={j} className="group/l relative">
                     <button disabled={l.abs == null || !drawn} onClick={() => seekFrame(frame.current, l.abs!)}
-                      className={`flex w-full items-baseline gap-3 rounded-lg px-2.5 py-1.5 text-left text-[13.5px] leading-relaxed transition-colors duration-150 enabled:hover:bg-ink/[0.045] ${on ? 'bg-accent-soft/60 text-ink' : 'text-ink-2'}`}>
+                      className={`flex w-full items-baseline gap-3 rounded-lg py-1.5 pl-2.5 pr-20 text-left text-[13.5px] leading-relaxed transition-colors duration-150 enabled:hover:bg-ink/[0.045] ${on ? 'bg-accent-soft/60 text-ink' : 'text-ink-2'}`}>
                       {l.abs != null && <span className={`w-10 shrink-0 font-mono text-[11.5px] tabular ${on ? 'text-accent-ink' : 'text-ink-3'}`}>{mmss(l.abs)}</span>}
                       <span className="min-w-0">{l.text}</span>
                     </button>
+                    {l.abs != null && <button onClick={() => onRef(lineRef(j))} className="absolute right-1.5 top-1/2 inline-flex h-6 -translate-y-1/2 items-center gap-1 rounded-md px-1.5 text-[11.5px] text-ink-3 opacity-0 transition-opacity hover:bg-ink/[0.07] hover:text-ink focus-visible:opacity-100 group-hover/l:opacity-100"><Quote size={11} aria-hidden /> 引用</button>}
                   </li>
                 );
               }) : <li className="px-2.5 text-[13px] text-ink-3">口播还没写好。</li>}
@@ -325,13 +335,14 @@ function Focus({ id, run, project, ids, tl, onFocus, onBack, onCompose }: { id: 
             {p?.status === 'flagged' && p.issues.length > 0 && <p className="mt-2 flex items-start gap-1.5 text-[12.5px] leading-relaxed text-seal"><TriangleAlert size={13} className="mt-0.5 shrink-0" aria-hidden />{p.issues.join('；')}</p>}
           </div>
           <div className="flex items-start">
-            <button className="fs-btn fs-btn-secondary" onClick={() => onCompose(`第 ${i + 1} 页：`)}>改这一页</button>
+            <button className="fs-btn fs-btn-secondary" onClick={() => onRef(pageRef)} title="把这一页加到对话里，说说想怎么改">改这一页</button>
           </div>
         </div>
       </div>
 
       {light && (light.kind === 'sheet' ? sheetItems : frameItems).length > 0 && (
-        <Lightbox items={light.kind === 'sheet' ? sheetItems : frameItems} index={light.i} onIndex={(n) => { setLight({ ...light, i: n }); if (light.kind === 'frames') seekFrame(frame.current, moments[n], false); }} onClose={() => setLight(null)} />
+        <Lightbox items={light.kind === 'sheet' ? sheetItems : frameItems} index={light.i} onIndex={(n) => { setLight({ ...light, i: n }); if (light.kind === 'frames') seekFrame(frame.current, moments[n], false); }} onClose={() => setLight(null)}
+          actions={light.kind === 'frames' ? (_, n) => <button className="fs-btn fs-btn-sm border border-white/15 bg-white/10 text-white hover:bg-white/20" onClick={() => { const r = frameRef(n); if (r) { onRef(r); setLight(null); } }}><Quote size={13} aria-hidden /> 加到对话</button> : undefined} />
       )}
     </div>
   );
@@ -339,7 +350,7 @@ function Focus({ id, run, project, ids, tl, onFocus, onBack, onCompose }: { id: 
 
 // ── the workbench ──────────────────────────────────────────────────────────────────────────────────────────────────
 
-export function Stage({ run, project, selected, onSelect, playKey, onCompose }: { run: RunView; project: ProjectView; selected?: string; onSelect: (id?: string) => void; playKey?: number; onCompose: (text: string) => void }) {
+export function Stage({ run, project, selected, onSelect, playKey, onRef }: { run: RunView; project: ProjectView; selected?: string; onSelect: (id?: string) => void; playKey?: number; onRef: (r: Ref) => void }) {
   const [view, setView] = useState<'film' | 'pages'>('film');
   const [subs, setSubs] = useState(true);
   const ids = run.pageOrder.length ? run.pageOrder : run.storyboard?.pages.map((p) => p.id) || [];
@@ -370,7 +381,7 @@ export function Stage({ run, project, selected, onSelect, playKey, onCompose }: 
         </div>
       )}
       <div className="min-h-0 flex-1">
-        {focused ? <Focus id={focused} run={run} project={project} ids={ids} tl={tl} onFocus={onSelect} onBack={() => { onSelect(undefined); setView('pages'); }} onCompose={onCompose} />
+        {focused ? <Focus id={focused} run={run} project={project} ids={ids} tl={tl} onFocus={onSelect} onBack={() => { onSelect(undefined); setView('pages'); }} onRef={onRef} />
           : view === 'film' ? <Film run={run} project={project} ids={ids} tl={tl} subs={subs} playKey={playKey} onFocus={onSelect} />
           : <Canvas run={run} project={project} ids={ids} tl={tl} onFocus={onSelect} />}
       </div>

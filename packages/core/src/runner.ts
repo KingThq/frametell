@@ -7,10 +7,11 @@ import crypto from 'node:crypto';
 import { createProject, linkProject } from '@frametell/engine/tools/project.mjs';
 import { createCatalog, RELAY_BASE_URL } from '@frametell/models';
 import { elevenLabsTts, volcengineTts } from '@frametell/voice';
-import { Director, piRuntime, claudeRuntime, codexRuntime, type AgentRuntime, type StudioEvent, type Storyboard } from '@frametell/agent';
+import { Director, piRuntime, claudeRuntime, codexRuntime, type AgentRuntime, type StudioEvent, type Storyboard, type UserRef } from '@frametell/agent';
 import { PROJECTS_DIR, loadConfig } from './config.js';
 import { prepareMaterials } from './materials.js';
 import { applyProxy, normalizeBaseUrl } from './net.js';
+import { withRefs } from './refs.js';
 import type { LoggedEvent, ProjectMeta, ProjectSummary, RunStatus } from './types.js';
 
 export type Logged = LoggedEvent;
@@ -212,10 +213,11 @@ class Runner {
    * The user said something. At the storyboard it is the change request; while the director works it is a note the
    * next step picks up; after the film it starts a revision; while paused it is kept for when the run continues.
    */
-  say(text: string): boolean {
-    text = text.trim();
-    if (!text) return false;
-    this.emit({ type: 'user', text });
+  say(said: string, refs: UserRef[] = []): boolean {
+    said = said.trim();
+    if (!said && !refs.length) return false;
+    this.emit({ type: 'user', text: said, ...(refs.length ? { refs } : {}) });
+    const text = withRefs(said, refs);   // what the director reads: the references, then the words
     if (this.gate || this.status === 'awaiting_approval') return this.approve(text);
     if (this.status === 'running' && this.director) {
       this.director.message(text);

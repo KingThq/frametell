@@ -6,6 +6,7 @@ import { isWorking, money, STAGE_NAME, type RunView } from '../lib/run';
 import { TopBar } from '../components/TopBar';
 import { Conversation } from './Conversation';
 import { Stage } from './Stage';
+import { offerRef } from '../lib/refs';
 
 const fmtK = (n: number) => (n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'K' : String(n));
 
@@ -111,7 +112,7 @@ export function Workbench({ id, openSettings }: { id: string; openSettings: () =
           </aside>
           <section className={`min-h-0 min-w-0 lg:block ${pane === 'stage' ? 'block' : 'hidden'}`} aria-label="工作台">
             <Stage run={run} project={p} selected={selected} onSelect={setSelected} playKey={playKey}
-              onCompose={(text) => { setPane('talk'); dispatchEvent(new CustomEvent('studio:compose', { detail: text })); }} />
+              onRef={(r) => { setPane('talk'); offerRef(r); }} />
           </section>
           <div role="separator" aria-orientation="vertical" aria-label="调整对话栏宽度" aria-valuenow={width} aria-valuemin={LEFT_MIN} aria-valuemax={Math.round(maxLeft)} tabIndex={0}
             style={{ left: width - 4 }}

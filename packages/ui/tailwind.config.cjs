@@ -24,6 +24,7 @@ module.exports = {
       keyframes: {
         rise: { from: { opacity: '0', transform: 'translateY(6px)' }, to: { opacity: '1', transform: 'none' } },
         fade: { from: { opacity: '0' }, to: { opacity: '1' } },
+        pop: { from: { opacity: '0', transform: 'scale(0.92)' }, to: { opacity: '1', transform: 'none' } },
         trace: { to: { strokeDashoffset: '0' } },
         breathe: { '0%,100%': { opacity: '0.45' }, '50%': { opacity: '1' } },
         shimmer: { from: { backgroundPosition: '150% 0' }, to: { backgroundPosition: '-50% 0' } },
@@ -32,6 +33,7 @@ module.exports = {
       animation: {
         rise: 'rise 320ms cubic-bezier(0.16,1,0.3,1) both',
         fade: 'fade 240ms ease-out both',
+        pop: 'pop 160ms cubic-bezier(0.16,1,0.3,1) both',
         breathe: 'breathe 1.8s ease-in-out infinite',
         shimmer: 'shimmer 2.2s linear infinite',
         halo: 'halo 1.6s cubic-bezier(0.16,1,0.3,1) infinite',

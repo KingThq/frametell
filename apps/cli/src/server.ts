@@ -80,8 +80,13 @@ export function createServer(studio = new Studio(), opts: { token?: string } = {
   });
   app.post('/api/projects/:id/stop', (c) => { studio.stop(c.req.param('id')); return c.json({ ok: true }); });
   app.post('/api/projects/:id/say', async (c) => {
-    const { text } = (await c.req.json().catch(() => ({}))) as { text?: string };
-    return c.json({ ok: studio.say(c.req.param('id'), text || '') });
+    const { text, refs } = (await c.req.json().catch(() => ({}))) as { text?: string; refs?: unknown };
+    return c.json({ ok: studio.say(c.req.param('id'), text || '', refs) });
+  });
+  app.post('/api/projects/:id/attach', async (c) => {
+    const f = (await c.req.formData()).get('file');
+    if (!(f instanceof File)) throw new Error('没有收到文件');
+    return c.json(await studio.attach(c.req.param('id'), f.name, new Uint8Array(await f.arrayBuffer())));
   });
 
   // live events: replay after Last-Event-ID (or ?since=), then stream; a ping every 15s keeps proxies honest

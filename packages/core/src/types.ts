@@ -4,7 +4,7 @@ import type { StudioEvent, Storyboard } from '@frametell/agent';
 import type { ModelInfo } from '@frametell/models';
 
 export type { StudioEvent, Storyboard, ModelInfo };
-export type { Timeline, PageTiming } from '@frametell/agent';
+export type { Timeline, PageTiming, UserRef } from '@frametell/agent';
 export type RuntimeId = 'pi' | 'claude-agent-sdk' | 'codex';
 export type RunStatus = 'idle' | 'running' | 'awaiting_approval' | 'done' | 'failed' | 'stopped';
 export interface VoiceChoice { provider: 'volcengine' | 'elevenlabs'; id: string; name?: string }

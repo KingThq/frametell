@@ -1,10 +1,10 @@
 // StudioClient: everything the panel can ask of the core. In a browser it speaks HTTP + SSE to the local server; inside
 // the desktop app the preload script exposes the same methods as `window.studioBridge` over IPC.
 import type {
-  EnvCheck, LoggedEvent, ModelInfo, NewProjectInput, PageTiming, ProjectSummary, PublicSettings, SettingsPatch, StyleInfo, Timeline, Voice,
+  EnvCheck, LoggedEvent, ModelInfo, NewProjectInput, PageTiming, ProjectSummary, PublicSettings, SettingsPatch, StyleInfo, Timeline, UserRef, Voice,
 } from '@frametell/core/types';
 
-export type { EnvCheck, LoggedEvent, ModelInfo, NewProjectInput, PageTiming, ProjectSummary, PublicSettings, SettingsPatch, StyleInfo, Timeline, Voice };
+export type { EnvCheck, LoggedEvent, ModelInfo, NewProjectInput, PageTiming, ProjectSummary, PublicSettings, SettingsPatch, StyleInfo, Timeline, UserRef, Voice };
 export type ProjectView = ProjectSummary & { previewBase: string };
 
 export interface StudioClient {
@@ -21,7 +21,9 @@ export interface StudioClient {
   approve(id: string, feedback?: string): Promise<boolean>;
   stop(id: string): Promise<void>;
   /** talk to the director: storyboard feedback, a note mid-run, or a change to the finished film */
-  say(id: string, text: string): Promise<boolean>;
+  say(id: string, text: string, refs?: UserRef[]): Promise<boolean>;
+  /** save a file the user attached to a message into the project; returns the reference to send with it */
+  attach(id: string, file: File): Promise<UserRef>;
   /** pages with their narration lines and times; null until the script exists */
   timeline(id: string): Promise<Timeline | null>;
   /** a full-resolution frame of the finished film at `t` seconds, as a project-relative path */
@@ -66,7 +68,8 @@ export const httpClient: StudioClient = {
   stop: async (id) => { await call('POST', `/api/projects/${id}/stop`); },
   timeline: (id) => call<Timeline | null>('GET', `/api/projects/${id}/timeline`),
   frame: async (id, t) => (await call<{ path: string | null }>('GET', `/api/projects/${id}/frame?t=${t.toFixed(2)}`)).path,
-  say: async (id, text) => (await call<{ ok: boolean }>('POST', `/api/projects/${id}/say`, { text })).ok,
+  say: async (id, text, refs) => (await call<{ ok: boolean }>('POST', `/api/projects/${id}/say`, { text, refs })).ok,
+  attach: async (id, file) => { const f = new FormData(); f.append('file', file); return call<UserRef>('POST', `/api/projects/${id}/attach`, f); },
   subscribe(id, since, onEvent, onState) {
     let last = since;
     const es = new EventSource(`/api/projects/${id}/events?since=${since}`);
