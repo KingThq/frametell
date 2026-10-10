@@ -1,14 +1,37 @@
 # Changelog
 
-Every change lands as its own commit; this file records them, newest first.
+All notable changes to this project are documented in this file.
 
-## Unreleased
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-- **server**: the panel token is kept per data dir (`server-token`, 0600), so restarting the server no longer locks out a panel that is already open.
-- `30a1aba` **settings**: Claude (Anthropic) and OpenAI official cards with an optional relay base URL each; 「用这个」 switches the default model to a provider in one click and marks the one in use; an HTTP proxy for every outbound request (Pi, voices, model lists, and the Claude Code / Codex CLIs); Home shows where a run goes (runtime · endpoint · proxy) and blocks a runtime/model mismatch; previews of the built-in Volcengine voices ship with Studio, so listening never spends TTS credit.
-- `93eb154` **agent**: Codex talks to gateways over HTTP only (no WebSocket attempts that failed five times per turn).
-- `4730d2b` **ui**: a live line shows what the director is doing while you wait; revisions get a 「修改计划」 chapter and a 修改中 status; the ETA counts only the pages being redrawn.
-- `ccbc468` **ui**: the workbench is about pages and their words — film view with a page lane, a canvas of page cards with narration, a focus view with one persistent player (turning a page seeks), cost in a popover, playable exports.
-- `1f0baff` **engine**: renders no longer stall on a hung browser close; plainer conversation text.
-- `105a999` **styles**: whiteboard, chalkboard and tech-dark; page agents get their reference pack up front.
-- `3eb551a` **studio**: talk to the director, resumable runs, optional materials, voice samples.
+## [Unreleased]
+
+### Added
+
+- Settings: dedicated cards for the official Claude (Anthropic) and OpenAI APIs, each with an optional relay base URL.
+- Settings: a 「用这个」 button switches the default model to a connected provider in one click; the provider in use is marked.
+- Settings: an HTTP proxy for every outbound request — Pi, voices, model lists, and the Claude Code / Codex CLIs. Local addresses always go direct; the proxy password is never shown to the panel.
+- Home: the model field shows where a run goes (runtime · endpoint · proxy), links to settings, and blocks a runtime/model mismatch.
+- Voice: previews of the built-in Volcengine voices ship with Studio, so listening to a voice never spends TTS credit.
+- Workbench: a live line shows what the director is doing while you wait; revisions get a 「修改计划」 chapter and a 修改中 status.
+- Workbench: film view with a page lane, a canvas of page cards with their narration, and a focus view for one page.
+- Workbench: playable exports with a subtitles on/off toggle; cost, model and token usage in a popover.
+- Styles: whiteboard, chalkboard and tech-dark.
+- Agent runtimes: Claude Agent SDK and Codex, both API-key only.
+- Conversation with the director, runs that resume after the app is closed, optional materials, voice samples.
+
+### Changed
+
+- The CLI server keeps its panel token per data directory, so a restart no longer locks out a panel that is already open.
+- Page agents receive their component reference and a worked example up front instead of searching the engine.
+- The ETA during a revision counts only the pages being redrawn.
+
+### Fixed
+
+- Codex talks to gateways over HTTP only, instead of failing five WebSocket attempts per turn.
+- Turning a page in the focus view seeks the film instead of reloading the player.
+- Renders no longer stall when the browser hangs on close.
+- Electron no longer wraps main-process errors in its own text before they reach the panel.
+
+[Unreleased]: https://github.com/sitor-ai/frametell/commits/main
