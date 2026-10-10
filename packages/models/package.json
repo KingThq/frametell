@@ -1,0 +1,26 @@
+{
+  "name": "@frametell/models",
+  "version": "0.1.0",
+  "description": "Model catalog for Frametell: every Pi provider, plus Relay (recommended), Volcengine Ark and custom endpoints.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p .",
+    "typecheck": "tsc -p . --noEmit",
+    "test": "node --test dist/*.test.js"
+  },
+  "dependencies": {
+    "@earendil-works/pi-ai": "1.1.0"
+  }
+}
