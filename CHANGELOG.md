@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Workbench: drag the divider between the conversation and the stage to resize them, like VS Code; double-click resets, arrow keys nudge, and the width is remembered.
 - Settings: dedicated cards for the official Claude (Anthropic) and OpenAI APIs, each with an optional relay base URL.
 - Settings: a 「用这个」 button switches the default model to a connected provider in one click; the provider in use is marked.
 - Settings: an HTTP proxy for every outbound request — Pi, voices, model lists, and the Claude Code / Codex CLIs. Local addresses always go direct; the proxy password is never shown to the panel.
