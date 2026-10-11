@@ -87,7 +87,15 @@ export class Studio {
     if (!files.length && !said && !input.topic) throw new Error(tr('说一句想讲什么，或者附上资料', 'Say what the video is about, or attach some material'));
     // without materials, the sentence the user wrote is the topic; it also names the project
     const topic = input.topic || (files.length ? undefined : said);
-    const fromText = (t?: string) => t?.replace(/^(讲讲|讲一讲|介绍一下|介绍|聊聊|说说|帮我做一条|做一条|(?:please )?(?:explain|tell me about|talk about|make a video about|a video about)\s+)/i, '').replace(/[。！？!?，,].*$/, '').trim().slice(0, 24) || undefined;
+    const fromText = (t?: string) => {
+      const s = t?.replace(/^(讲讲|讲一讲|介绍一下|介绍|聊聊|说说|帮我做一条|做一条|(?:please )?(?:explain|tell me about|talk about|make a video about|a video about)\s+)/i, '').trim();
+      if (!s) return undefined;
+      if (/[㐀-鿿]/.test(s)) return s.replace(/[。！？!?，,].*$/, '').trim().slice(0, 24) || undefined;
+      // English: the first clause, at most 40 characters, cut between words, capitalised
+      let e = s.replace(/[.!?;:,].*$/, '').trim();
+      if (e.length > 40) e = e.slice(0, 40).replace(/\s+\S*$/, '');
+      return e ? e[0].toUpperCase() + e.slice(1) : undefined;
+    };
     const meta = newProject({
       title: input.title?.trim() || fromText(topic) || fromText(said) || files[0]?.name.replace(/\.[^.]+$/, '') || tr('未命名视频', 'Untitled video'),
       style: input.style || d.style, durationSec: input.durationSec || d.durationSec, model,
