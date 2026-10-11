@@ -13,8 +13,6 @@
 
 It's built for knowledge creators who explain history, science, technology, investing, psychology or books, and who'd rather tell the story than learn video editing.
 
-> **Status:** in active development. See the [roadmap](docs/ROADMAP.md) and [architecture](docs/ARCHITECTURE.md).
-
 ## See it
 
 Two films Frametell made end to end in English: storyboard, narration, an ElevenLabs voice, every page and the render. Click a picture to watch (with sound).
