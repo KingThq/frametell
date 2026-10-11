@@ -3,6 +3,16 @@
   "version": "0.1.0",
   "description": "Frametell's application core: settings, projects and their runs, events. Transport-agnostic; the CLI serves it over HTTP and the desktop app over IPC.",
   "license": "MIT",
+  "author": "Sitor Team",
+  "homepage": "https://github.com/sanyuan0704/frametell#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sanyuan0704/frametell.git",
+    "directory": "packages/core"
+  },
+  "bugs": {
+    "url": "https://github.com/sanyuan0704/frametell/issues"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

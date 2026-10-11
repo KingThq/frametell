@@ -3,6 +3,28 @@
   "version": "0.1.0",
   "description": "Turn documents into polished explainer videos with an AI director. Local-first, any model; Relay recommended.",
   "license": "MIT",
+  "author": "Sitor Team",
+  "homepage": "https://github.com/sanyuan0704/frametell#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sanyuan0704/frametell.git",
+    "directory": "apps/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/sanyuan0704/frametell/issues"
+  },
+  "keywords": [
+    "explainer video",
+    "ai video",
+    "agent",
+    "storyboard",
+    "narration",
+    "tts",
+    "frametell"
+  ],
+  "engines": {
+    "node": ">=22.19"
+  },
   "type": "module",
   "bin": {
     "frametell": "./dist/cli.js"
