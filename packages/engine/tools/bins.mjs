@@ -1,6 +1,7 @@
 // Where the external binaries come from. Studio passes explicit paths through the environment; standalone use falls
-// back to the bundled ffmpeg-static / ffprobe-static and to a Chrome-family browser already installed on the machine.
+// back to the bundled ffmpeg-static and to a Chrome-family browser already installed on the machine.
 import fs from 'fs';
+import { spawnSync } from 'child_process';
 import os from 'os';
 import path from 'path';
 import { createRequire } from 'module';
@@ -9,7 +10,15 @@ const require = createRequire(import.meta.url);
 const tryRequire = (id) => { try { return require(id); } catch { return null; } };
 
 export const FFMPEG = process.env.FFMPEG_PATH || tryRequire('ffmpeg-static') || 'ffmpeg';
-export const FFPROBE = process.env.FFPROBE_PATH || tryRequire('ffprobe-static')?.path || 'ffprobe';
+
+/** Duration (s) and picture size of a media file, read from what `ffmpeg -i` prints (no ffprobe needed). */
+export function probe(file) {
+  const out = spawnSync(FFMPEG, ['-hide_banner', '-i', file], { encoding: 'utf8' }).stderr || '';
+  const d = /Duration: (\d+):(\d+):([\d.]+)/.exec(out);
+  if (!d) throw new Error(`cannot read ${file}: ${out.trim().split('\n').pop()}`);
+  const v = /Stream #[^\n]*Video:[^\n]*?(\d{2,5})x(\d{2,5})/.exec(out);
+  return { duration: +d[1] * 3600 + +d[2] * 60 + +d[3], width: v ? +v[1] : 0, height: v ? +v[2] : 0 };
+}
 
 const CHROME_CANDIDATES = {
   darwin: [

@@ -3,6 +3,16 @@
   "version": "0.1.0",
   "description": "Hand-drawn explainer video engine: page runtime as a pure function of time, components, styles, and the render pipeline.",
   "license": "MIT",
+  "author": "Sitor Team",
+  "homepage": "https://github.com/sanyuan0704/frametell#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sanyuan0704/frametell.git",
+    "directory": "packages/engine"
+  },
+  "bugs": {
+    "url": "https://github.com/sanyuan0704/frametell/issues"
+  },
   "type": "module",
   "files": [
     "boot.js",
@@ -26,7 +36,6 @@
     "@iconify-json/logos": "^1.2.15",
     "d3": "^7.9.0",
     "ffmpeg-static": "^5.2.0",
-    "ffprobe-static": "^3.1.0",
     "gpt-tokenizer": "^4.0.0",
     "gsap": "^3.15.0",
     "katex": "^0.18.9",

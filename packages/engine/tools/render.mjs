@@ -7,7 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import { loadEpisode, OUT, PORTRAIT, EP } from './lib.mjs';
 import { mixTrack } from './mix.mjs';
-import { FFMPEG, FFPROBE } from './bins.mjs';
+import { FFMPEG, probe } from './bins.mjs';
 const dir = path.dirname(new URL(import.meta.url).pathname);
 const arg = (k, d) => { const i = process.argv.indexOf('--' + k); return i > 0 ? process.argv[i + 1] : d; };
 const has = (k) => process.argv.includes('--' + k);
@@ -132,7 +132,7 @@ if (!has('skip-subs')) {
     '-map', '[v]', '-map', '0:a?', '-c:a', 'copy', ...(has('hw') ? ['-c:v', 'h264_videotoolbox', '-q:v', '72'] : ['-c:v', 'libx264', '-preset', 'medium', '-crf', '16']), '-r', String(FPS), '-movflags', '+faststart', withsub]);
   console.timeEnd('subs');
 }
-const dur = (f) => new Promise((res) => { let o = ''; spawn(FFPROBE, ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', f]).stdout.on('data', (d) => (o += d)).on('end', () => res(+o)); });
+const dur = async (f) => probe(f).duration;
 for (const f of [nosub, withsub]) {
   if (!fs.existsSync(f)) continue;
   const d = await dur(f);

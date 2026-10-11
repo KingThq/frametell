@@ -7,17 +7,15 @@
 import fs from 'fs';
 import { spawnSync } from 'child_process';
 import { pathToFileURL } from 'url';
-import { FFMPEG, FFPROBE } from './bins.mjs';
+import { FFMPEG, probe as probeFile } from './bins.mjs';
 
 const FPS = 12, W = 320;
 const BLANK_GRAD = 24, BLANK_SHARE = 0.002, BLANK_EDGE_S = 0.5, BLANK_MIN_S = 0.3;
 const STILL = 0.3, FAST = 9;
 
 function probe(file) {
-  const r = spawnSync(FFPROBE, ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height:format=duration', '-of', 'json', file], { encoding: 'utf8' });
-  if (r.status !== 0) throw new Error(r.stderr || 'ffprobe failed');
-  const j = JSON.parse(r.stdout);
-  return { w: j.streams[0].width, h: j.streams[0].height, duration: +j.format.duration };
+  const { width: w, height: h, duration } = probeFile(file);
+  return { w, h, duration };
 }
 
 /** Grey frames at FPS, W wide, as Uint8Array views. */

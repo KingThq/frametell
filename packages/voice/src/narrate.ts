@@ -6,7 +6,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import crypto from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { FFMPEG, FFPROBE } from '@frametell/engine/tools/bins.mjs';
+import { FFMPEG, probe } from '@frametell/engine/tools/bins.mjs';
 import { ENGINE_DIR } from '@frametell/engine/tools/project.mjs';
 import type { TtsProvider, WordTime } from './tts.js';
 
@@ -35,7 +35,7 @@ function loadScript(dir: string) {
   return ctx as unknown as { SCRIPT: { META: Record<string, any>; PAGES: Page[] }; TIMING: any };
 }
 
-const dur = (f: string) => +execFileSync(FFPROBE, ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', f]).toString();
+const dur = (f: string) => probe(f).duration;
 
 /** Speech span of every cue, from the per-character timestamps. */
 function spans(spoken: string[], words: WordTime[], warn: (m: string) => void) {
