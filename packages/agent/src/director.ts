@@ -45,7 +45,7 @@ interface State {
 /** components every page of a style can use, registered before the page sessions start */
 const STYLE_EXTRAS: Record<string, string[]> = { 'warm-story': ['engine/lib/warm.js'] };
 
-const MAX = { storyboardFix: 2, planTurns: 30, pageTurns: 40, pageRounds: 3, reviewRounds: 2 };
+const MAX = { storyboardFix: 2, planTurns: 30, pageTurns: 40, pageRounds: 3, revisionRounds: 2, reviewRounds: 2 };
 
 export class Director {
   readonly project: Project;
@@ -245,7 +245,7 @@ export class Director {
       st.ref = s.ref;
       await this.commit(`${id}：初稿`);
       let issues: LintIssue[] = [];
-      for (let round = 1; round <= MAX.pageRounds; round++) {
+      for (let round = 1; round <= (fix ? MAX.revisionRounds : MAX.pageRounds); round++) {   // a revision starts from a checked page
         st.status = 'checking'; st.rounds = round; this.setPage(id, st);
         issues = this.project.lint([id]);
         const times = this.sheetTimes(sb, t);
@@ -326,15 +326,28 @@ export class Director {
    */
   async revise(request: string) {
     this.emit({ type: 'note', text: '收到，我先看看要改哪几页' });
-    const s = await this.session('planner', plannerSystem(this.o.style), MAX.planTurns, this.state.planner);
+    // a fresh, small session per change: resuming the planner would carry the whole making of the film (slow, and every
+    // token of it re-read); the files hold everything this decision needs
+    const s = await this.session('reviser', plannerSystem(this.o.style), MAX.planTurns);
+    fs.rmSync(this.project.file('.studio/revision.json'), { force: true });   // last change's plan is not this one's
     const sb = this.project.storyboard();
+    // hand over what the decision needs up front (the script, and the code of the pages the request names) — reading
+    // them file by file costs a model round trip each
+    const named = sb.pages.filter((p, i) => new RegExp(`\\b${p.id}\\b|第\\s*${i + 1}\\s*页`).test(request)).map((p) => p.id);
+    const code = named.map((id) => `pages/${id}.js：\n\`\`\`js\n${this.project.read(`pages/${id}.js`)}\n\`\`\``).join('\n\n');
     await this.send(s, `成片已经做好。用户对成片的修改意见：
 ${request}
 
-判断要改哪几页、每页怎么改：只改需要改的页（通常 1–2 页）；涉及口播的改动直接改 script.js 里对应的句子，并保持句子数量不变。
+判断要改哪几页、每页怎么改：只改需要改的页（通常 1–2 页）。只有用户要改口播时才动 script.js，改对应的句子并保持句子数量不变。
 把决定写进 .studio/revision.json：{ "pages": [{ "id": "p03", "note": "给画面 Agent 的修改说明，具体到物和动作" }] }，然后一句话告诉用户你要改什么。
-现有分镜：${sb.pages.map((p) => `${p.id} ${p.section}`).join('；')}`);
-    this.state.planner = s.ref; this.save();
+下面已经给了分镜、script.js${named.length ? ' 和提到的页面代码' : ''}，不用再读它们；别的页需要时再读 pages/<id>.js。
+
+分镜：${sb.pages.map((p) => `${p.id} ${p.section}：${p.say}`).join('\n')}
+
+script.js：
+\`\`\`js
+${this.project.read('script.js')}
+\`\`\`${code ? `\n\n${code}` : ''}`);
     await s.close();
     let plan: { pages: { id: string; note: string }[] };
     try { plan = JSON.parse(this.project.read('.studio/revision.json')); } catch { this.fail('pages', '导演没有写出修改计划（.studio/revision.json）'); }
