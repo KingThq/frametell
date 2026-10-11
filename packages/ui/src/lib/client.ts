@@ -78,12 +78,22 @@ export const httpClient: StudioClient = {
   say: async (id, text, refs) => (await call<{ ok: boolean }>('POST', `/api/projects/${id}/say`, { text, refs })).ok,
   attach: async (id, file) => { const f = new FormData(); f.append('file', file); return call<UserRef>('POST', `/api/projects/${id}/attach`, f); },
   subscribe(id, since, onEvent, onState) {
-    let last = since;
-    const es = new EventSource(`/api/projects/${id}/events?since=${since}`);
-    es.addEventListener('studio', (m) => { const e = JSON.parse((m as MessageEvent).data) as LoggedEvent; if (e.seq > last) { last = e.seq; onEvent(e); } });
-    es.onopen = () => onState?.('open');
-    es.onerror = () => onState?.('reconnecting');   // EventSource reconnects with Last-Event-ID by itself
-    return () => es.close();
+    // A browser gives one host six connections, and each open stream holds one: a few Studio tabs left open would
+    // starve the rest (images, the player) of any. So only the tab being looked at keeps its stream; a hidden tab
+    // lets go and, when it is shown again, picks up from the last event it saw.
+    let last = since, es: EventSource | undefined, closed = false;
+    const open = () => {
+      if (closed || es) return;
+      es = new EventSource(`/api/projects/${id}/events?since=${Math.floor(last)}`);
+      es.addEventListener('studio', (m) => { const e = JSON.parse((m as MessageEvent).data) as LoggedEvent; if (e.seq > last) { last = e.seq; onEvent(e); } });
+      es.onopen = () => onState?.('open');
+      es.onerror = () => onState?.('reconnecting');   // EventSource reconnects with Last-Event-ID by itself
+    };
+    const close = () => { es?.close(); es = undefined; };
+    const vis = () => (document.hidden ? close() : open());
+    if (!document.hidden) open();
+    document.addEventListener('visibilitychange', vis);
+    return () => { closed = true; close(); document.removeEventListener('visibilitychange', vis); };
   },
   voicePreviewUrl: (v) => v.previewUrl || `/api/voices/${v.provider}/${encodeURIComponent(v.id)}/preview`,
   fileUrl: (p, rel) => p.previewBase + rel.split('/').map(encodeURIComponent).join('/'),
