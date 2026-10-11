@@ -4,6 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { spawnSync } from 'child_process';
 import { linkProject, ENGINE_DIR } from '../tools/project.mjs';
@@ -43,9 +44,13 @@ test('lib: the gallery covers every component file', () => {
 });
 
 test('lib: the gallery builds and plays without runtime errors', () => {
-  const dir = path.join(ENGINE_DIR, 'test/gallery');
+  // linked in a temporary copy: a project linked inside the engine would hold an engine/ link to its own ancestor, a cycle that
+  // sends anything walking the package with symlinks followed (a recursive glob, an indexer) into an endless descent
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'frametell-gallery-'));
+  fs.cpSync(path.join(ENGINE_DIR, 'test/gallery'), dir, { recursive: true, filter: (src) => !/[\\/](engine|engine_modules|out)$/.test(src) });
   linkProject(dir);
   const lint = spawnSync(process.execPath, [path.join(ENGINE_DIR, 'tools/lint.mjs'), '--json'], { cwd: dir, encoding: 'utf8', timeout: 300000 });
+  fs.rmSync(dir, { recursive: true, force: true });
   const issues = JSON.parse(lint.stdout.trim().split('\n').pop());
   assert.deepEqual(issues.filter((i) => /^(runtime error|unknown API)/.test(i.msg)).map((i) => `${i.page}: ${i.msg}`), []);
 });
