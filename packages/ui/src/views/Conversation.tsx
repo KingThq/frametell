@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronRight, CircleDashed, Clapperboard, Download, Loader2, Pause, Play, TriangleAlert } from 'lucide-react';
 import { client, type ProjectView } from '../lib/client';
 import { clock, film, finished, money, relPath, STAGE_NAME, STAGES, type FeedItem, type PageView, type RunView, type Stage, type Storyboard, isWorking } from '../lib/run';
-import { pageName, summarizeTools } from '../lib/describe';
+import { pageName, stepText, summarizeTools } from '../lib/describe';
 import { useNow } from '../lib/hooks';
 import { Crest } from '../components/Logo';
 import { STYLE_NAME } from '../lib/styles';
@@ -30,13 +30,13 @@ function Said({ text }: { text: string }) {
   );
 }
 
-/** a stage's work in plain words, folded: 「过程 · 读资料《番茄工作法》、写分镜、检查分镜 ×2」 */
+/** a stage's work in plain words, folded: 「过程 · 读资料《番茄工作法》、写分镜、检查分镜 2 次」 */
 function Process({ items }: { items: FeedItem[] }) {
   const [open, setOpen] = useState(false);
   const steps = useMemo(() => summarizeTools(items.flatMap((i) => (i.kind === 'tools' ? i.calls : []))), [items]);
   const thoughts = items.filter((i): i is Extract<FeedItem, { kind: 'think' }> => i.kind === 'think');
   if (!steps.length && !thoughts.length) return null;
-  const preview = steps.slice(0, 3).map((s) => s.text + (s.count > 1 ? ` ×${s.count}` : '')).join('、') + (steps.length > 3 ? ` 等 ${steps.length} 步` : '');
+  const preview = steps.slice(0, 3).map(stepText).join('、') + (steps.length > 3 ? ` 等 ${steps.length} 步` : '');
   return (
     <div>
       <button className="group flex max-w-full items-center gap-1.5 text-left text-[12.5px] text-ink-3 hover:text-ink" aria-expanded={open} onClick={() => setOpen(!open)}>
@@ -45,7 +45,7 @@ function Process({ items }: { items: FeedItem[] }) {
       </button>
       {open && (
         <ol className="mt-2 space-y-1.5 animate-fade pl-5">
-          {steps.map((s, i) => <li key={i} className="text-[12.5px] text-ink-2">{s.text}{s.count > 1 && <span className="ml-1 text-ink-3">×{s.count}</span>}</li>)}
+          {steps.map((s, i) => <li key={i} className="text-[12.5px] text-ink-2">{s.text}{s.count > 1 && <span className="ml-1 text-ink-3">{s.count} 次</span>}</li>)}
           {thoughts.map((t) => <li key={t.key} className="line-clamp-3 border-l border-line pl-2.5 text-[12px] italic leading-relaxed text-ink-3">{t.text}</li>)}
         </ol>
       )}

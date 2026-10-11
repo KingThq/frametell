@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
-import { addUsage, emptyUsage, proxyEnv, type AgentRuntime, type AgentSession, type SessionOptions, type StageInput, type TurnResult } from './types.js';
+import { addUsage, emptyUsage, toolSummary, proxyEnv, type AgentRuntime, type AgentSession, type SessionOptions, type StageInput, type TurnResult } from './types.js';
 
 export interface ClaudeRuntimeOptions {
   apiKey: string;
@@ -21,7 +21,7 @@ const QUIET = {
   CLAUDE_CODE_AGENT_PROGRESS_SUMMARIES: '0', CLAUDE_CODE_EMIT_TOOL_USE_SUMMARIES: '0', CLAUDE_CODE_POST_TURN_MEMORY: '0',
 };
 const mimeOf = (f: string) => (/\.png$/i.test(f) ? 'image/png' : /\.webp$/i.test(f) ? 'image/webp' : 'image/jpeg');
-const short = (v: unknown) => { const s = typeof v === 'string' ? v : JSON.stringify(v); return s.length > 160 ? s.slice(0, 160) + '…' : s; };
+const short = toolSummary;
 
 export function claudeRuntime(o: ClaudeRuntimeOptions): AgentRuntime {
   if (!o.apiKey) throw new Error('Claude Agent SDK 运行时需要 API key（Anthropic 或 Relay）；不支持使用 Claude 订阅登录');

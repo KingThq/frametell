@@ -44,6 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Conversation: every edit reads as what it changes (「修改口播稿」「修改分镜」「修改第 5 页」) — tool summaries now lead with the path before any file content, and older logs whose path was cut off are recognised from the text they change; repeats read 「2 次」 instead of 「×2」.
 - The finished-film card times the latest round (a revision counts from the change request), not the whole life of the project.
 - Page focus: opening a page no longer flashes the start of the film — the player boots on that page, with the page's picture standing in until it is ready.
 - Page focus: narration times are positions in the film, matching the frames and the player, instead of offsets within the page; the time column is no longer clipped and the stray scrollbar corner is gone.

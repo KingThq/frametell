@@ -59,3 +59,13 @@ export const addUsage = (a: TokenUsage, b: Partial<TokenUsage>): TokenUsage => (
 /** the proxy settings a spawned agent CLI inherits (Studio sets them on its own process when the user configures one) */
 export const proxyEnv = (): Record<string, string> =>
   Object.fromEntries(['HTTPS_PROXY', 'HTTP_PROXY', 'NO_PROXY'].filter((k) => process.env[k]).map((k) => [k, process.env[k]!]));
+
+/** a tool call's arguments in 160 characters, what it acts on first (a path or a command, before any file content) */
+export function toolSummary(v: unknown): string {
+  const first = ['path', 'file_path', 'command', 'pattern'];
+  const o = v && typeof v === 'object' && !Array.isArray(v)
+    ? Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => (first.includes(a) ? first.indexOf(a) : 99) - (first.includes(b) ? first.indexOf(b) : 99)))
+    : v;
+  const s = typeof o === 'string' ? o : JSON.stringify(o);
+  return s.length > 160 ? s.slice(0, 160) + '…' : s;
+}

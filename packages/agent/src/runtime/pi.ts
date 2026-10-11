@@ -5,10 +5,10 @@ import path from 'node:path';
 import { Agent, type AgentMessage } from '@earendil-works/pi-agent-core';
 import type { Api, Model, MutableModels } from '@earendil-works/pi-ai';
 import { fileTools } from '../tools/files.js';
-import { addUsage, emptyUsage, type AgentRuntime, type AgentSession, type SessionOptions, type StageInput, type TurnResult } from './types.js';
+import { addUsage, emptyUsage, toolSummary, type AgentRuntime, type AgentSession, type SessionOptions, type StageInput, type TurnResult } from './types.js';
 
 const mimeOf = (f: string) => (/\.png$/i.test(f) ? 'image/png' : /\.webp$/i.test(f) ? 'image/webp' : 'image/jpeg');
-const short = (v: unknown) => { const s = typeof v === 'string' ? v : JSON.stringify(v); return s.length > 160 ? s.slice(0, 160) + '…' : s; };
+const short = toolSummary;
 
 export function piRuntime(models: MutableModels, model: Model<Api>, opts: { thinking?: 'off' | 'low' | 'medium' | 'high' } = {}): AgentRuntime {
   return {
