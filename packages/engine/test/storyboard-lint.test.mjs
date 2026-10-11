@@ -62,3 +62,15 @@ test('three identical cameras in a row is a yellow', () => {
   for (const p of sb.pages) for (const b of p.beats) b.camera = '推近';
   assert.ok(msgs(sb).some((m) => m.startsWith('yellow') && /连续三个拍点/.test(m)));
 });
+
+test('an English storyboard is held to the same rules, in English words', () => {
+  const page = (id, beats) => ({ id, section: 'x', say: 'Save a thousand a month for thirty years.', beats });
+  const sb = { style: 'warm-story', cast: 'none', lang: 'en', pages: [
+    page('p01', [{ at: 'c0', object: 'a snowball', action: 'rolls down the hill and grows', text: '30 years' }, { at: 'c1', object: 'a jar of coins', action: 'fills to the brim', text: '' }]),
+    page('p02', [{ at: 'c0', object: 'a tree', action: 'grows a crown of apples', text: '' }, { at: 'c1', object: 'a calendar', action: 'flips to the last page', text: '30 years' }]),
+  ] };
+  assert.deepEqual(reds(sb), []);
+  sb.pages[0].beats[0] = { at: 'c0', object: 'a big title card', action: 'appears', text: 'Compound interest is the eighth wonder of the world' };
+  const r = reds(sb);
+  assert.ok(r.some((m) => /版面词/.test(m)) && r.some((m) => /万能词/.test(m)) && r.some((m) => /9 个单词/.test(m)), r.join('\n'));
+});

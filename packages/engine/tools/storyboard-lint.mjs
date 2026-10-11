@@ -28,8 +28,26 @@ const WEAK = `出现 显示 展示 呈现 浮现 淡入 淡出 渐显 弹出 出
 const ACT_FILLER = /[\d一二三四五六七八九十两几个条张行句段组页块排些堆串的地着了过和与及跟或也都再又并、，,。.;；:：/／+＋\s（）()「」“”"'\-—–~～…|]|逐条|依次|一一|逐个|逐一|逐渐|渐渐|慢慢|缓缓|然后|开始|同时|接着|陆续|一起|一下|画面|屏幕|上/g;
 const FACES = /小人|火柴人|机器人|吉祥物|卡通人|卡通形象|人脸|笑脸|表情|Q版|q版/;
 
+// the same three lists for a storyboard written in English (words matched whole, any case, with a plural s)
+const LAYOUT_EN = `title subtitle heading headline text words word label caption card background backdrop icon bullet list slide banner
+  keyword keywords quote slogan tagline summary conclusion concept content info information element thing diagram image picture page
+  layout animation effect paragraph sentence symbol arrow line shape box block frame textbox table chart graph pie bar gradient
+  screen blank particle particles decoration`.split(/\s+/).filter(Boolean);
+const FILLER_EN = /\b(a|an|the|of|with|and|or|on|in|at|to|for|big|small|large|tiny|new|main|white|black|red|blue|green|yellow|grey|gray|orange|purple|colored|coloured|empty|plain|simple|centered|centred|some|few|several|one|two|three|four|five|six|seven|eight|nine|ten|top|bottom|left|right|middle)\b|[\d\s,.;:/+&()[\]"'’\-—–~·…|!?]/gi;
+const WEAK_EN = `appear appears appearing show shows showing display displays present presents fade fades fading pop pops list lists
+  highlight highlights stay stays remain remains sit sits exist exists introduce introduces explain explains emphasize emphasizes
+  reveal reveals enter enters exit exits switch switches transition transitions expand expands collapse collapses change changes
+  become becomes animate animates move moves`.split(/\s+/).filter(Boolean);
+const ACT_FILLER_EN = /\b(in|out|up|down|on|onto|into|off|away|over|by|one|after|another|each|then|slowly|gradually|quickly|softly|start|starts|begin|begins|again|together|screen|color|colour|it|its|they|them|all|the|a|an|and|to|of|with|is|are)\b|[\d\s,.;:/+&()"'’\-—–~…|!?]/gi;
+const TEXTY_EN = /\b(title|text|words?|bullets?|list|captions?|keywords?|quote|slogan|headline|table)\b/i;
+const FACES_EN = /\b(stick ?figure|cartoon (?:man|woman|person|character)|mascot|smiley|face|emoji|robot)\b/i;
+const residueEn = (s, words, filler) => { let r = String(s || '').toLowerCase(); for (const w of words) r = r.replace(new RegExp(`\\b${w}s?\\b`, 'g'), ''); return r.replace(filler, ''); };
+/** a storyboard is English when it says so (lang: "en"), or when no page or beat has a CJK character in it */
+const isEnglish = (sb) => (sb.lang ? sb.lang === 'en' : !/[㐀-鿿]/.test(JSON.stringify(sb.pages)));
+
 const residue = (s, words, filler) => { let r = String(s || ''); for (const w of words) r = r.split(w).join(''); return r.replace(filler, ''); };
 /** on-screen length: a CJK character counts 1, a run of latin letters or digits counts 1 */
+const wordsIn = (t) => (String(t || '').match(/[A-Za-z]+(?:['’-][A-Za-z]+)*|\d+(?:[.,]\d+)*%?/g) || []).length;
 const textUnits = (t) => (String(t || '').match(/[㐀-鿿]|[A-Za-z]+|\d+(?:[.,]\d+)*%?/g) || []).length;
 const textParts = (t) => String(t || '').split(/\s*[\/／|｜]\s*/).filter((x) => x.trim());
 
@@ -90,6 +108,12 @@ export function lintStoryboard(sb, { source = '' } = {}) {
   const cast = String(sb.cast || '');
   if (!cast) add('red', {}, '缺少 cast（none / hands / silhouette）：没有插画素材时人物不出脸');
 
+  const en = isEnglish(sb), MAX_TEXT = en ? 5 : 8, unit = en ? '个单词' : '个字';
+  const units = en ? wordsIn : textUnits;
+  const layoutOnly = (o) => (en ? !/[a-z]/.test(residueEn(o, LAYOUT_EN, FILLER_EN)) : !residue(o, LAYOUT, FILLER));
+  const weakOnly = (a) => (en ? !/[a-z]/.test(residueEn(a, WEAK_EN, ACT_FILLER_EN)) : !residue(a, WEAK, ACT_FILLER));
+  const texty = (o) => (en ? TEXTY_EN : TEXTY).test(o);
+  const faces = (o) => (en ? FACES_EN : FACES).test(o);
   const have = source ? sourceNumbers(source + '\n' + sb.pages.map((p) => p.say || '').join('\n')) : null;
   const all = [];
   sb.pages.forEach((p, pi) => {
@@ -99,16 +123,16 @@ export function lintStoryboard(sb, { source = '' } = {}) {
       const where = { page: p.id, beat: bi };
       const obj = String(b.object || '').trim(), act = String(b.action || '').trim();
       if (!obj) add('red', where, '「物」是空的');
-      else if (!residue(obj, LAYOUT, FILLER)) add('red', where, `「物」只是版面词："${obj}"。写画面里具体的东西（雪球、储蓄罐、一条山路）`);
+      else if (layoutOnly(obj)) add('red', where, `「物」只是版面词："${obj}"。写画面里具体的东西（雪球、储蓄罐、一条山路）`);
       if (!act) add('red', where, '「动作」是空的');
-      else if (!residue(act, WEAK, ACT_FILLER)) add('red', where, `「动作」只是万能词："${act}"。写它怎么动（滚下、长高、落进、裂开）`);
+      else if (weakOnly(act)) add('red', where, `「动作」只是万能词："${act}"。写它怎么动（滚下、长高、落进、裂开）`);
       for (const part of textParts(b.text)) {
-        const n = textUnits(part);
-        if (n > 8) add('red', where, `屏上字 "${part}" 有 ${n} 个字（每个元素 ≤ 8）`);
+        const n = units(part);
+        if (n > MAX_TEXT) add('red', where, `屏上字 "${part}" 有 ${n} ${unit}（每个元素 ≤ ${MAX_TEXT}）`);
       }
-      if (FACES.test(obj) && !/^frames?:/.test(cast)) add('red', where, `「物」里有画脸的角色（"${obj}"）：只画手、背影、剪影，或让物当主角`);
+      if (faces(obj) && !/^frames?:/.test(cast)) add('red', where, `「物」里有画脸的角色（"${obj}"）：只画手、背影、剪影，或让物当主角`);
       if (have) for (const n of screenNumbers(b.text)) if (!grounded(n, have)) add('red', where, `屏上数字 "${n.raw}" 在素材里找不到出处`);
-      all.push({ page: p.id, pi, bi, texty: TEXTY.test(obj) || textUnits(b.text) >= 7, cam: String(b.camera || '').trim() });
+      all.push({ page: p.id, pi, bi, texty: texty(obj) || units(b.text) >= (en ? 5 : 7), cam: String(b.camera || '').trim() });
     });
   });
 
