@@ -1,13 +1,16 @@
 // Packages the desktop app: node apps/desktop/scripts/package.mjs [--dir]
 //   1. builds every workspace package;
-//   2. assembles release/app: the desktop shell, our own packages (what each publishes) and, installed by npm into a flat
-//      node_modules, the third-party packages they need at run time;
+//   2. assembles release/app: the main process as one esbuild bundle (with the core, the agent, models, voices and the
+//      SDKs they use), the engine and the panel as they publish themselves, and, installed by npm into a flat
+//      node_modules, only what the engine needs on disk (browser libraries, fonts, Playwright), trimmed to the files used;
 //   3. renders the app icon from docs/brand/frametell-app-icon.svg;
-//   4. runs electron-builder on it → release/Frametell-<version>-<arch>.dmg (or, with --dir, just the .app).
+//   4. puts a redistributable ffmpeg in Resources/bin (pinned, checksummed, and refused if it has nonfree parts);
+//   5. runs electron-builder on it → release/Frametell-<version>-<arch>.dmg (or, with --dir, just the .app).
 // The app is not signed yet: macOS asks the first time it is opened (right-click → Open).
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 
 const DESKTOP = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -19,27 +22,58 @@ const run = (cmd, args, cwd = ROOT) => execFileSync(cmd, args, { cwd, stdio: 'in
 
 run('pnpm', ['-r', 'build']);
 fs.rmSync(RELEASE, { recursive: true, force: true });
-// a flat node_modules with real directories: the engine's files are read by Chromium from disk, and projects link to them
-const OURS = { core: 'packages/core', agent: 'packages/agent', models: 'packages/models', voice: 'packages/voice', engine: 'packages/engine', ui: 'packages/ui' };
-// the UI's dependencies are bundled into its dist; the parked runtimes are not loaded by the app
-const SKIP = new Set(['@anthropic-ai/claude-agent-sdk', '@openai/codex-sdk']);
-const deps = {}, ours = [];
-for (const [name, dir] of Object.entries(OURS)) {
-  const src = path.join(ROOT, dir), p = JSON.parse(fs.readFileSync(path.join(src, 'package.json'), 'utf8'));
-  if (name !== 'ui') for (const [k, v] of Object.entries(p.dependencies || {})) if (!v.startsWith('workspace:') && !SKIP.has(k)) deps[k] ??= v;
-  ours.push([name, src, p]);
-}
+// a flat node_modules with real directories: the engine's files are read by Chromium from disk, and projects link to them.
+// The engine's own dependencies are the only ones installed; ffmpeg comes from step 4 (ffmpeg-static's macOS binary is
+// built with --enable-nonfree and may not be redistributed).
+const SKIP = new Set(['ffmpeg-static']);
+const read = (dir) => JSON.parse(fs.readFileSync(path.join(ROOT, dir, 'package.json'), 'utf8'));
+const engine = read('packages/engine');
+const deps = Object.fromEntries(Object.entries(engine.dependencies).filter(([k]) => !SKIP.has(k)));
 fs.mkdirSync(APP, { recursive: true });
 fs.writeFileSync(path.join(APP, 'package.json'), JSON.stringify({ name: 'frametell', productName: 'Frametell', version: pkg.version, description: pkg.description, license: pkg.license, author: 'Sitor Team', type: 'module', main: pkg.main, dependencies: deps }, null, 2));
 run('npm', ['install', '--omit=dev', '--no-audit', '--no-fund', '--no-package-lock'], APP);
-// then our own packages, as each publishes itself (its "files"); links (a style example's engine/ → the engine) are left out
-for (const [name, src, p] of ours) {
-  const out = path.join(APP, 'node_modules/@frametell', name);
-  for (const f of p.files || []) fs.cpSync(path.join(src, f), path.join(out, f), { recursive: true, filter: (f) => !fs.lstatSync(f).isSymbolicLink() && !/[\\/]out$/.test(f) });
+
+// fonts: keep the stylesheets boot.js loads and the font files they point at, drop every other weight and subset
+const NM = path.join(APP, 'node_modules');
+const usedCss = [...fs.readFileSync(path.join(ROOT, 'packages/engine/boot.js'), 'utf8').matchAll(/'((?:@fontsource\/[\w-]+|lxgw-wenkai-webfont)\/[\w.-]+\.css)'/g)].map((m) => m[1]);
+for (const dir of new Set(usedCss.map((c) => c.split('/').slice(0, c.startsWith('@') ? 2 : 1).join('/')))) {
+  const keep = new Set(['package.json', 'LICENSE', 'OFL.txt']);
+  for (const css of usedCss.filter((c) => c.startsWith(dir + '/'))) {
+    const rel = css.slice(dir.length + 1);
+    keep.add(rel);
+    for (const m of fs.readFileSync(path.join(NM, css), 'utf8').matchAll(/url\(['"]?\.\/([^'")]+)['"]?\)/g)) keep.add(m[1]);
+  }
+  const walk = (d) => { for (const f of fs.readdirSync(path.join(NM, dir, d))) { const r = d ? `${d}/${f}` : f; if (fs.statSync(path.join(NM, dir, r)).isDirectory()) { walk(r); if (!fs.readdirSync(path.join(NM, dir, r)).length) fs.rmdirSync(path.join(NM, dir, r)); } else if (!keep.has(r)) fs.rmSync(path.join(NM, dir, r)); } };
+  walk('');
+}
+
+// our packages: the engine and the panel as they publish themselves (links, e.g. a style example's engine/, are left
+// out); of the agent and the voices only what their bundled code reads from disk — prompts, voice samples
+const copy = (dir, files, name) => {
+  const src = path.join(ROOT, dir), p = read(dir), out = path.join(NM, '@frametell', name);
+  for (const f of files ?? p.files ?? []) fs.cpSync(path.join(src, f), path.join(out, f), { recursive: true, filter: (f) => !fs.lstatSync(f).isSymbolicLink() && !/[\\/]out$/.test(f) });
   delete p.devDependencies; delete p.scripts;
   fs.writeFileSync(path.join(out, 'package.json'), JSON.stringify({ ...p, dependencies: {} }, null, 2));
-}
-for (const f of ['dist', 'src/preload.cjs']) fs.cpSync(path.join(DESKTOP, f), path.join(APP, f), { recursive: true });
+};
+copy('packages/engine', null, 'engine');
+copy('packages/ui', null, 'ui');
+copy('packages/agent', ['prompts'], 'agent');
+copy('packages/voice', ['samples'], 'voice');
+
+// the main process: one minified ESM file. bins.js stays its own module and is imported first, so FFMPEG_PATH is set
+// before the engine (external, read from disk) loads
+const esbuild = createRequire(path.join(ROOT, 'packages/engine/package.json'))('esbuild');
+fs.mkdirSync(path.join(APP, 'dist'), { recursive: true });
+await esbuild.build({
+  entryPoints: [path.join(DESKTOP, 'dist/main.js')], outfile: path.join(APP, 'dist/main.js'),
+  bundle: true, platform: 'node', format: 'esm', target: 'node22', minify: true, legalComments: 'linked', logLevel: 'warning',
+  external: ['electron', '@frametell/engine', '@frametell/engine/*', '@frametell/ui', '@frametell/ui/*', 'playwright-core', 'ffmpeg-static', './bins.js'],
+  // CommonJS dependencies inside the bundle call require
+  banner: { js: "import { createRequire as __frametellRequire } from 'node:module'; const require = __frametellRequire(import.meta.url);" },
+});
+fs.copyFileSync(path.join(DESKTOP, 'dist/bins.js'), path.join(APP, 'dist/bins.js'));
+fs.mkdirSync(path.join(APP, 'src'), { recursive: true });
+fs.copyFileSync(path.join(DESKTOP, 'src/preload.cjs'), path.join(APP, 'src/preload.cjs'));
 
 // icon: the brand svg drawn by the system browser at 1024 px, then an .icns from the usual sizes
 const require = createRequire(path.join(ROOT, 'packages/engine/package.json'));
@@ -62,6 +96,44 @@ if (process.platform === 'darwin') {
   execFileSync('iconutil', ['-c', 'icns', set, '-o', path.join(build, 'icon.icns')]);
 }
 
+// ffmpeg: a static GPLv3 build (no nonfree parts), shipped as a separate program beside the app with its licence and
+// where its source is. FRAMETELL_FFMPEG=/path/to/ffmpeg uses a binary of your own instead (Windows has no pinned build yet).
+const FFMPEG_BUILDS = {
+  'darwin-arm64': { url: 'https://ffmpeg.martin-riedl.de/download/macos/arm64/1789931890_9.0.2/ffmpeg.zip', sha256: 'c8ed4c4e6978a03c485edbfe4e0a5dc2380f8a30bba5150531b31b094492d924' },
+  'darwin-x64': { url: 'https://ffmpeg.martin-riedl.de/download/macos/amd64/1789931006_9.0.2/ffmpeg.zip', sha256: '7c6b4125b191cbf773832dc51f424cf2b6bb7da43007d1e066f95909e47cacd4' },
+};
+const bin = path.join(build, 'bin'), exe = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
+fs.mkdirSync(bin, { recursive: true });
+if (process.env.FRAMETELL_FFMPEG) fs.copyFileSync(process.env.FRAMETELL_FFMPEG, path.join(bin, exe));
+else {
+  const key = `${process.platform}-${process.arch}`, b = FFMPEG_BUILDS[key];
+  if (!b) throw new Error(`no pinned ffmpeg for ${key}: set FRAMETELL_FFMPEG to a redistributable (LGPL or GPL, not nonfree) build`);
+  const cache = path.join(DESKTOP, 'node_modules/.cache/frametell-ffmpeg', path.basename(path.dirname(b.url)) + '-' + key + '.zip');
+  if (!fs.existsSync(cache)) {
+    console.log(`downloading ffmpeg for ${key}…`);
+    const res = await fetch(b.url);
+    if (!res.ok) throw new Error(`ffmpeg download failed: ${res.status} ${b.url}`);
+    fs.mkdirSync(path.dirname(cache), { recursive: true });
+    fs.writeFileSync(cache, Buffer.from(await res.arrayBuffer()));
+  }
+  const sum = createHash('sha256').update(fs.readFileSync(cache)).digest('hex');
+  if (sum !== b.sha256) { fs.rmSync(cache); throw new Error(`ffmpeg checksum mismatch for ${b.url}: ${sum}`); }
+  execFileSync('unzip', ['-o', '-q', cache, exe, '-d', bin]);
+}
+fs.chmodSync(path.join(bin, exe), 0o755);
+const ff = (args) => spawnSync(path.join(bin, exe), ['-hide_banner', ...args], { encoding: 'utf8' });
+const licence = ff(['-L']).stdout || '';
+if (!licence) throw new Error('the bundled ffmpeg does not run');
+if (/nonfree|not legally redistributable/i.test(licence)) throw new Error('the bundled ffmpeg has nonfree parts and may not be redistributed');
+const gpl = /GNU General Public License/.test(licence);
+fs.writeFileSync(path.join(bin, 'FFMPEG-NOTICE.txt'), [
+  'Frametell runs this ffmpeg as a separate program; it is not part of Frametell and keeps its own licence.',
+  '', ff(['-version']).stdout.split('\n')[0], '', licence.trim(), '',
+  `Built with: ${(ff(['-buildconf']).stdout || '').replace(/\s+/g, ' ').trim()}`, '',
+  'Source: https://ffmpeg.org/releases/ (FFmpeg) and https://git.martin-riedl.de/ffmpeg/build-script (the build and its libraries).',
+].join('\n'));
+if (gpl) fs.copyFileSync(require.resolve('ffmpeg-static/LICENSE'), path.join(bin, 'COPYING.GPLv3'));
+
 const config = {
   appId: 'ai.sitor.frametell',
   productName: 'Frametell',
@@ -71,9 +143,11 @@ const config = {
   // no asar: the engine's runtime, fonts and ffmpeg are used straight from disk
   asar: false,
   npmRebuild: false,
+  // the panel speaks Chinese and English; Chromium's other locales are not needed
+  electronLanguages: ['en', 'zh_CN', 'zh_TW'],
   // node_modules goes in as it is: electron-builder would keep only what package.json lists, dropping our own packages
   files: ['**/*', '!node_modules{,/**}'],
-  extraResources: [{ from: path.join(APP, 'node_modules'), to: 'app/node_modules', filter: ['**/*', '!**/*.map', '!**/*.d.ts', '!.bin{,/**}', '!.package-lock.json'] }],
+  extraResources: [{ from: path.join(APP, 'node_modules'), to: 'app/node_modules', filter: ['**/*', '!**/*.map', '!**/*.d.ts', '!.bin{,/**}', '!.package-lock.json'] }, { from: bin, to: 'bin' }],
   mac: { category: 'public.app-category.video', icon: path.join(build, 'icon.icns'), target: process.argv.includes('--dir') ? ['dir'] : ['dmg'], identity: null },
   dmg: { title: 'Frametell ${version}' },
   win: { target: ['nsis'], icon: path.join(build, 'icon.png') },

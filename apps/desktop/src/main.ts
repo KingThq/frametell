@@ -5,6 +5,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
+import './bins.js';
 import { PROJECTS_DIR, Studio, type LoggedEvent } from '@frametell/core';
 
 const require = createRequire(import.meta.url);
