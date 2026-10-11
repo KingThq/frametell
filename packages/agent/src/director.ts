@@ -57,7 +57,7 @@ export function crashText(raw: string, id: string): string {
 
 const crashPrompt = (id: string, crash: string) => `pages/${id}.js 运行时报错，还没法截图检查：
 ${crash}
-先修好这个错误：多半是调用了不存在的函数或参数不对，用法以「本片的组件与范例」为准，不要猜引擎的 API。用 edit 改需要改的地方，修好后停下。`;
+先修好这个错误：多半是调用了不存在的函数或参数不对，用法以「本片的组件与范例」为准，不要猜引擎的 API。用 edit 改需要改的地方，所有修改放在同一次回复里，每个 edit 都带上 finish: true，修好就结束，不用再回复。`;
 
 /**
  * A page that already works, changed: the current code is handed over, and the change is made with targeted edits.
@@ -70,7 +70,7 @@ const revisionNote = (id: string, fix: string, code: string) => `
 \`\`\`js
 ${code}
 \`\`\`
-用 edit 只改需要改的地方（可以多次 edit），**不要用 write 重写整个文件**；改完不用再读一遍文件，检查截图会告诉你效果。`;
+用 edit 只改需要改的地方，**不要用 write 重写整个文件**；**所有修改放在同一次回复里**（一次回复可以调用多次 edit），每个 edit 都带上 finish: true：改完就结束，不用再回复，也不用再读一遍文件，检查截图会告诉你效果。`;
 
 // A page is drafted at the model's full thinking level; its check rounds (look at the contact sheet, fix what is off) are
 // small edits and run at medium, which on a gateway's …-high model means its …-medium sibling: most of a check round's

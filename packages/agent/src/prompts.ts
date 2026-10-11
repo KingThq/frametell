@@ -102,7 +102,8 @@ ${lint}
 
 附图是本页在这些页内时刻的截图（从左到右、从上到下）：${times.map((x) => x.local.toFixed(1) + 's').join('、')}。
 对照清单认真看图。有问题就改好 pages 文件再停下；没有问题只回复 DONE；有意保留的问题回复 FLAGGED: 原因。
-改的时候用 edit 只改出问题的那几处（字号、位置、时间点），**不要用 write 重写整个文件**——整页重写要几分钟，一处 edit 只要几秒；改完不用再读一遍文件。`;
+改的时候用 edit 只改出问题的那几处（字号、位置、时间点），**不要用 write 重写整个文件**——整页重写要几分钟，一处 edit 只要几秒；改完不用再读一遍文件。
+**把这一轮的所有修改放在同一次回复里**（一次回复可以调用多次 edit），每个 edit 都带上 finish: true：改完这一轮就结束，不用再回复，系统会重新检查并截图给你看。`;
 }
 
 export function reviewPrompt(issues: LintIssue[], flagged: string[]) {

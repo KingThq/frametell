@@ -25,7 +25,11 @@ const text = (t: string) => ({ content: [{ type: 'text' as const, text: t }], de
 
 const ReadP = Type.Object({ path: Type.String(), offset: Type.Optional(Type.Number()), limit: Type.Optional(Type.Number()) });
 const WriteP = Type.Object({ path: Type.String(), content: Type.String() });
-const EditP = Type.Object({ path: Type.String(), old_string: Type.String(), new_string: Type.String(), replace_all: Type.Optional(Type.Boolean()) });
+// finish: the last edits of a check round, sent together in one reply — the round ends as soon as they apply, with no
+// further model turn just to say so (the orchestrator lints and looks again anyway). Ignored unless every call in the
+// reply sets it, and a failed edit never ends the round.
+const EditP = Type.Object({ path: Type.String(), old_string: Type.String(), new_string: Type.String(), replace_all: Type.Optional(Type.Boolean()),
+  finish: Type.Optional(Type.Boolean({ description: 'true when this reply holds all of this round\'s edits: the round ends once they apply, no reply needed' })) });
 const BashP = Type.Object({ command: Type.String() });
 
 export function fileTools(root: string, opts: { timeoutMs?: number } = {}): AgentTool<any>[] {
@@ -72,7 +76,7 @@ export function fileTools(root: string, opts: { timeoutMs?: number } = {}): Agen
       if (n === 0) throw new Error('old_string not found');
       if (n > 1 && !p.replace_all) throw new Error(`old_string occurs ${n} times; add context or set replace_all`);
       fs.writeFileSync(abs, p.replace_all ? src.split(p.old_string).join(p.new_string) : src.replace(p.old_string, () => p.new_string));
-      return text(`edited ${p.path} (${p.replace_all ? n : 1} replacement${n > 1 && p.replace_all ? 's' : ''})`);
+      return { ...text(`edited ${p.path} (${p.replace_all ? n : 1} replacement${n > 1 && p.replace_all ? 's' : ''})`), terminate: p.finish === true };
     },
   };
   const bash: AgentTool<typeof BashP> = {
