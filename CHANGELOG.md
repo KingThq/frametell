@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The panel can run hosted: a `studioBridge` that sets `hosted` (Frametell Cloud) gets the account and a sign-out in the top bar instead of Settings, no model picker (the service chooses), and only the voices the service can speak with. Home also takes `?topic=` to start with an idea typed elsewhere.
 
+## [0.1.1] - 2026-10-11
+
+### Fixed
+
+- The macOS app opens after it is downloaded. It was left with a signature that no longer matched the app, and Apple silicon Macs called it damaged with no way to open it. It is now signed with Sitor's Developer ID and notarized by Apple, so it opens like any other app. A build made without a Developer ID certificate is signed ad hoc instead, and macOS asks once before opening it.
+
 ## [0.1.0] - 2026-10-11
 
 The first release of 画说 · Frametell: a local, open-source studio that turns an idea or your material into an explainer video. A director agent drafts a storyboard for you to approve, then writes the narration, voices it, draws every page in a chosen style, checks its own work, and renders a 1080p film with subtitles.
@@ -63,11 +69,12 @@ The first release of 画说 · Frametell: a local, open-source studio that turns
 
 ### Known limitations
 
-- The desktop app is not signed or notarized yet: the first time, open it with right-click → Open. Only an Apple-silicon macOS build is provided; Windows is not packaged yet.
+- The desktop app is not signed with a Developer ID or notarized (fixed in 0.1.1). Only an Apple-silicon macOS build is provided; Windows is not packaged yet.
 - Chrome, Edge or Chromium must be installed; Frametell draws and renders with it.
 - Undoing a change uses git; without it a film is still made, but its versions are not kept.
 - The npm packages are not published yet; install from source (see the README).
 - The Claude Agent SDK and Codex runtimes are in the code but not offered; every film runs on the built-in agent, which works with any provider.
 
-[Unreleased]: https://github.com/sitor-ai/frametell/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/sitor-ai/frametell/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/sitor-ai/frametell/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/sitor-ai/frametell/releases/tag/v0.1.0
