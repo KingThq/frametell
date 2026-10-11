@@ -6,8 +6,7 @@
 //   3. renders the app icon from docs/brand/frametell-app-icon.svg;
 //   4. puts a redistributable ffmpeg in Resources/bin (pinned, checksummed, and refused if it has nonfree parts);
 //   5. runs electron-builder on it → release/Frametell-<version>-<arch>.dmg (or, with --dir, just the .app).
-// The app is signed ad hoc only, not with a Developer ID: macOS asks the first time it is opened (System Settings →
-// Privacy & Security → 仍要打开 / Open Anyway).
+// Signed with a Developer ID and notarized when the certificate and Apple credentials are there (see below), else ad hoc.
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -136,6 +135,18 @@ fs.writeFileSync(path.join(bin, 'FFMPEG-NOTICE.txt'), [
 ].join('\n'));
 if (gpl) fs.copyFileSync(require.resolve('ffmpeg-static/LICENSE'), path.join(bin, 'COPYING.GPLv3'));
 
+// macOS signing. With a "Developer ID Application" certificate in the keychain (or CSC_NAME naming one) the app is
+// signed with it under the hardened runtime, and notarized when credentials are given: APPLE_KEYCHAIN_PROFILE (a
+// profile saved with `xcrun notarytool store-credentials`), or APPLE_ID + APPLE_APP_SPECIFIC_PASSWORD + APPLE_TEAM_ID.
+// Without the certificate the app is signed ad hoc, and macOS asks the first time it is opened.
+const ENTITLEMENTS = path.join(DESKTOP, 'scripts', 'entitlements.mac.plist');
+const devId = process.platform !== 'darwin' ? undefined : process.env.CSC_NAME || (() => {
+  const ids = spawnSync('security', ['find-identity', '-v', '-p', 'codesigning'], { encoding: 'utf8' }).stdout || '';
+  return /"Developer ID Application: ([^"]+)"/.exec(ids)?.[1];
+})();
+const notarize = !!(process.env.APPLE_KEYCHAIN_PROFILE || process.env.APPLE_ID || process.env.APPLE_API_KEY);
+console.log(devId ? `signing with Developer ID Application: ${devId}${notarize ? ', notarizing' : ' (not notarized: no Apple credentials given)'}` : 'no Developer ID certificate: signing ad hoc');
+
 const config = {
   appId: 'ai.sitor.frametell',
   productName: 'Frametell',
@@ -150,9 +161,14 @@ const config = {
   // node_modules goes in as it is: electron-builder would keep only what package.json lists, dropping our own packages
   files: ['**/*', '!node_modules{,/**}'],
   extraResources: [{ from: path.join(APP, 'node_modules'), to: 'app/node_modules', filter: ['**/*', '!**/*.map', '!**/*.d.ts', '!.bin{,/**}', '!.package-lock.json'] }, { from: bin, to: 'bin' }],
-  mac: { category: 'public.app-category.video', icon: path.join(build, 'icon.icns'), target: process.argv.includes('--dir') ? ['dir'] : ['dmg'], identity: null },
-  // no Developer ID yet: signed ad hoc after packing (see adhoc-sign.cjs), or a downloaded copy reports itself damaged
-  afterPack: path.join(DESKTOP, 'scripts', 'adhoc-sign.cjs'),
+  mac: {
+    category: 'public.app-category.video', icon: path.join(build, 'icon.icns'), target: process.argv.includes('--dir') ? ['dir'] : ['dmg'],
+    ...(devId
+      ? { identity: devId, hardenedRuntime: true, entitlements: ENTITLEMENTS, entitlementsInherit: ENTITLEMENTS, notarize }
+      : { identity: null }),
+  },
+  // without a Developer ID: signed ad hoc after packing (see adhoc-sign.cjs), or a downloaded copy reports itself damaged
+  ...(devId || process.platform !== 'darwin' ? {} : { afterPack: path.join(DESKTOP, 'scripts', 'adhoc-sign.cjs') }),
   dmg: { title: 'Frametell ${version}' },
   win: { target: ['nsis'], icon: path.join(build, 'icon.png') },
   artifactName: 'Frametell-${version}-${arch}.${ext}',
