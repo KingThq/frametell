@@ -175,4 +175,23 @@ const config = {
 };
 fs.writeFileSync(path.join(build, 'electron-builder.json'), JSON.stringify(config, null, 2));
 run(path.join(DESKTOP, 'node_modules/.bin/electron-builder'), ['--config', path.join(build, 'electron-builder.json'), '--publish', 'never'], DESKTOP);
+
+// electron-builder signs and notarizes the app inside the dmg, not the dmg itself: do the dmg too, so the download is
+// accepted as it is opened, then write its checksum next to it
+const dmg = path.join(RELEASE, `Frametell-${pkg.version}-${process.arch}.dmg`);
+if (devId && fs.existsSync(dmg)) {
+  run('codesign', ['--force', '--sign', `Developer ID Application: ${devId}`, '--timestamp', dmg]);
+  const e = process.env;
+  const creds = e.APPLE_KEYCHAIN_PROFILE ? ['--keychain-profile', e.APPLE_KEYCHAIN_PROFILE]
+    : e.APPLE_API_KEY ? ['--key', e.APPLE_API_KEY, '--key-id', e.APPLE_API_KEY_ID, '--issuer', e.APPLE_API_ISSUER]
+    : e.APPLE_ID ? ['--apple-id', e.APPLE_ID, '--password', e.APPLE_APP_SPECIFIC_PASSWORD, '--team-id', e.APPLE_TEAM_ID] : null;
+  if (creds) {
+    run('xcrun', ['notarytool', 'submit', dmg, ...creds, '--wait']);
+    run('xcrun', ['stapler', 'staple', dmg]);
+  }
+}
+if (fs.existsSync(dmg)) {
+  const sum = createHash('sha256').update(fs.readFileSync(dmg)).digest('hex');
+  fs.writeFileSync(`${dmg}.sha256`, `${sum}  ${path.basename(dmg)}\n`);
+}
 console.log(`\nreleased to ${RELEASE}`);
