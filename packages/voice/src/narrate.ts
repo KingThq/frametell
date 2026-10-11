@@ -91,7 +91,8 @@ function cut(wav: string, sp: { s: number; e: number }[]) {
     }
   }
   segs.forEach((g, i) => { g.o = Math.max(0, Math.min(sp[i].s - g.a, g.b - g.a - 0.1)); });
-  const inSil = ([a, b]: [number, number]) => sil.some(([x, y]) => a >= x - 0.001 && b <= y + 0.001);
+  // durations read from ffmpeg are rounded to 1/100 s, so a silence that runs to the end can look 5 ms short of it
+  const inSil = ([a, b]: [number, number]) => sil.some(([x, y]) => a >= x - 0.01 && b <= y + 0.01);
   const bad = removed.filter((x) => !inSil(x));
   return { segs, bad };
 }
