@@ -6,7 +6,6 @@
 //     executable directly with ELECTRON_RUN_AS_NODE, see nodeEnv in @frametell/agent.)
 import { app } from 'electron';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 
 if (app.isPackaged && !process.env.FFMPEG_PATH) {
@@ -14,7 +13,8 @@ if (app.isPackaged && !process.env.FFMPEG_PATH) {
 }
 
 try {
-  const dir = path.join(os.tmpdir(), `frametell-node-${process.getuid?.() ?? 'user'}`);
+  // in the app's own data folder: a shared temp dir (Linux /tmp) would let another local user plant a `node` there first
+  const dir = path.join(app.getPath('userData'), 'bin');
   fs.mkdirSync(dir, { recursive: true });
   if (process.platform === 'win32') fs.writeFileSync(path.join(dir, 'node.cmd'), `@echo off\r\nset ELECTRON_RUN_AS_NODE=1\r\n"${process.execPath}" %*\r\n`);
   else {
