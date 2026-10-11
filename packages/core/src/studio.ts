@@ -5,7 +5,8 @@ import path from 'node:path';
 import { createCatalog, PROVIDERS, type ProviderSpec } from '@frametell/models';
 import { bundledSample, elevenLabsTts, listElevenLabsVoices, volcengineTts, VOLCENGINE_VOICES } from '@frametell/voice';
 import { Project, STYLES, type Timeline } from '@frametell/agent';
-import { DATA_DIR, loadConfig, patchConfig, publicConfig, saveConfig } from './config.js';
+import { linkProject } from '@frametell/engine/tools/project.mjs';
+import { DATA_DIR, PROJECTS_DIR, loadConfig, patchConfig, publicConfig, saveConfig } from './config.js';
 import { listProjects, newProject, projectDir, readMeta, runner } from './runner.js';
 import { checkEnv } from './env.js';
 import { applyProxy } from './net.js';
@@ -16,7 +17,11 @@ import { tr } from './i18n.js';
 export interface MaterialFile { name: string; data: Uint8Array }
 
 export class Studio {
-  constructor() { applyProxy(loadConfig().proxy); }
+  constructor() {
+    applyProxy(loadConfig().proxy);
+    // every project reaches the engine through links; point them at this install (it may have moved, or been renamed)
+    try { for (const id of fs.readdirSync(PROJECTS_DIR)) { try { linkProject(path.join(PROJECTS_DIR, id)); } catch {} } } catch {}
+  }
 
   // ── settings and environment ──
   settings(): PublicSettings { return publicConfig(loadConfig()); }

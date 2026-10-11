@@ -9,7 +9,12 @@ import { maskProxy } from './net.js';
 import type { LocalePref, PublicSettings, RuntimeId, SettingsPatch, VoiceChoice } from './types.js';
 import { tr } from './i18n.js';
 
-export const DATA_DIR = process.env.FRAMETELL_HOME || path.join(os.homedir(), '.frametell');
+export const DATA_DIR = process.env.FRAMETELL_HOME || process.env.FRAMETELL_HOME || path.join(os.homedir(), '.frametell');
+// the data directory of the days before the rename moves over once, the first time Frametell starts
+const LEGACY_DIR = path.join(os.homedir(), '.frametell');
+if (!process.env.FRAMETELL_HOME && !process.env.FRAMETELL_HOME && !fs.existsSync(DATA_DIR) && fs.existsSync(LEGACY_DIR)) {
+  try { fs.renameSync(LEGACY_DIR, DATA_DIR); } catch {}
+}
 export const PROJECTS_DIR = path.join(DATA_DIR, 'projects');
 const FILE = path.join(DATA_DIR, 'config.json');
 

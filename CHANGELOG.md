@@ -38,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The project is called Frametell everywhere: the repository (`sanyuan0704/frametell`), the command (`frametell`, `frametell run`), the packages (`@frametell/*`) and the data directory (`~/.frametell`, or `FRAMETELL_HOME`). An existing `~/.frametell` moves to `~/.frametell` the first time Frametell starts, and every project's links to the engine are renewed on start, so projects keep working after the install moves; materials parsed before the rename are still recognised.
 - **The component library has no course in it.** Every file in `engine/lib` is named for what it draws (`gauges.js`, `radar.js`, `filetree.js`, … instead of `widgets01.js`, `ctx14.js`, `jit18.js`) and takes its labels, colours and numbers from the page; the data of the course the library came from — its pillars and dimensions, framework scores, the skills installed on one machine, a demo project's tree, step roadmaps — is gone. Components whose names clashed are renamed (`filetree`, `lanes`, `stageDots`, `packet`, `cellgrid`, `netgraph`, `scoretubes`), and the helpers several files shared — `P.move`, `P.pathAt`, `PV.keys`, `PV.mix`, `PV.arcAt`, `PV.mmss` — are now part of the engine, so any file can be used alone. A gallery project (`engine/test/gallery`) draws every component and is a test: all files load together, no name shadows another or the engine's, and nothing throws. Projects keep the copies in their own `extras/`.
 - Engine: forgiving where pages often guess — `PV.K` takes an easing by name (`'out'`) as well as a function, and `PV.ease` is callable (as `PV.ease.inOut`) besides holding the named easings; a wrong easing says which ones exist.
 - Pages are drawn up to 10 at once (was 3; a saved 3 becomes 10). With Claude, which bills writing the shared page prompt to its cache, the first page goes alone until its first answer is back so the rest find the prompt cached; with Gemini or OpenAI every page starts at once. While several pages are drawn, the status line says so in one steady line (「同时在画 3 页」) and each page's own moment (thinking, writing, checking its pictures) is shown on its row, instead of the line hopping between pages.
@@ -77,4 +78,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Renders no longer stall when the browser hangs on close.
 - Electron no longer wraps main-process errors in its own text before they reach the panel.
 
-[Unreleased]: https://github.com/sitor-ai/frametell/commits/main
+[Unreleased]: https://github.com/sanyuan0704/frametell/commits/main
