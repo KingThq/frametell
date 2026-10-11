@@ -40,6 +40,8 @@ interface State {
   cursors?: Record<string, number>;
   /** per-page instructions of the revision in progress */
   revision?: Record<string, string>;
+  /** the change to the finished film being made, until it is done: 「继续」 after a failure picks it up again */
+  change?: string;
 }
 
 /** components every page of a style can use, registered before the page sessions start */
@@ -383,11 +385,13 @@ export class Director {
    */
   async revise(request: string) {
     const t0 = Date.now();
+    this.state.change = request; this.save();
     const sb = this.project.storyboard();
     const named = sb.pages.filter((p, i) => new RegExp(`\\b${p.id}\\b|第\\s*${i + 1}\\s*页`).test(request)).map((p) => p.id);
     // a change to the picture of the page(s) it names needs no planning: it goes straight to those pages' agents.
     // Anything that may touch the words (narration, subtitles, timing), or names no page, is planned first
-    const words = /口播|文案|台词|配音|字幕|旁白|这句|句子|念|讲|说的|时长|节奏/;
+    // (not 讲 or 说: 「讲 ABC 的那部分」 points at a picture, and sent a centering fix through a minute of planning)
+    const words = /口播|文案|台词|配音|字幕|旁白|这句|句子|念|时长|节奏/;
     const direct = named.length > 0 && named.length <= 2 && !words.test(request.replace(/<references>[\s\S]*?<\/references>/, ''));
     let plan: { pages: { id: string; note: string }[] } | undefined = direct ? { pages: named.map((id) => ({ id, note: request })) } : undefined;
     if (!plan) {
@@ -414,6 +418,7 @@ export class Director {
     const sec = (ms: number) => `${Math.max(1, Math.round(ms / 1000))} 秒`;
     this.beforeReady = () => this.emit({ type: 'note', text: `这次改了 ${sec(Date.now() - t0)}：${direct ? '' : `想怎么改 ${sec(tPlan - t0)} · `}${tDraw - tPlan > 1500 ? `配音 ${sec(tDraw - tPlan)} · ` : ''}画和自检 ${sec(tPages - tDraw)} · 全片检查 ${sec(Date.now() - tPages)}` });
     await this.review();
+    this.state.change = undefined; this.save();
   }
   /** said just before the film is ready again (a revision's time line) */
   private beforeReady?: () => void;
@@ -436,6 +441,7 @@ ${request}
 ${langNote('revise', this.o.brief.lang, this.o.brief.replyLang).trim()}
 把决定写进 .studio/revision.json：{ "pages": [{ "id": "p03", "note": "给画面 Agent 的修改说明，具体到物和动作" }] }，然后一句话告诉用户你要改什么。
 下面已经给了分镜、script.js${named.length ? ' 和提到的页面代码' : ''}，不用再读它们；别的页需要时再读 pages/<id>.js。
+你只决定改哪几页、每页改成什么样，具体怎么写代码由画面 Agent 去做：不要查引擎、不要截图、不要跑工具。用户指着某一页（<references> 里的 page）时，通常就是改那一页。
 
 分镜：${sb.pages.map((p) => `${p.id} ${p.section}：${p.say}`).join('\n')}
 
@@ -448,6 +454,8 @@ ${this.project.read('script.js')}
 
   /** Whole run. `approve` is called with the storyboard and resolves with optional feedback (the user's edits). */
   async run(approve: (sb: Storyboard) => Promise<string | undefined> = async () => undefined) {
+    // a change that stopped while it was still being planned: the film is done, so only the change has anything left to do
+    if (this.state.stage === 'done' && this.state.change) return this.revise(this.state.change);
     if (this.state.stage === 'storyboard') await this.storyboard();
     if (this.state.stage === 'approval') await this.script(await approve(this.project.storyboard()));
     if (this.state.stage === 'script') await this.script();
@@ -455,6 +463,7 @@ ${this.project.read('script.js')}
     if (this.state.stage === 'pages') await this.pages();
     if (this.state.stage === 'review') await this.review();
     if (this.state.stage === 'render') await this.ready();   // a run saved before exports were separate: it is ready to preview
+    if (this.state.change) { this.state.change = undefined; this.save(); }
   }
 
   /** the exported mp4 if it shows the film as it is now */
