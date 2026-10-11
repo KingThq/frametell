@@ -65,6 +65,16 @@ node apps/cli/dist/cli.js serve
 node apps/cli/dist/cli.js run 讲稿.pdf --style warm-story --duration 60
 ```
 
+## 社区
+
+用画说做了片子、遇到问题、想要新风格，都欢迎来群里聊。扫码加入画说交流群：
+
+<p align="center">
+  <img src="docs/brand/community/wecom.png" alt="画说交流群（企业微信）二维码" width="220">
+</p>
+
+Bug 和功能建议也可以直接提 [Issue](../../issues)。
+
 ## 许可
 
 [MIT](LICENSE) · **Sitor Team** 出品

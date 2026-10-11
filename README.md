@@ -65,6 +65,16 @@ node apps/cli/dist/cli.js serve
 node apps/cli/dist/cli.js run notes.pdf --style warm-story --duration 60
 ```
 
+## Community
+
+Questions, ideas and films you've made are all welcome. Come say hi on [Discord](https://discord.gg/GKz3McPPXx).
+
+<p align="center">
+  <a href="https://discord.gg/GKz3McPPXx"><img src="https://img.shields.io/badge/Discord-Join%20the%20community-5865F2?logo=discord&logoColor=white" alt="Join Frametell on Discord"></a>
+</p>
+
+For bugs and feature requests, open an [issue](../../issues).
+
 ## License
 
 [MIT](LICENSE) · Made by **Sitor Team**
