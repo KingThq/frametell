@@ -7,19 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-
-- A change that names a page, or points at one, goes straight to that page's agent; a request like 「讲 ABC 的那部分没有居中」 no longer goes through a minute of planning, where the planner tried to fix the page itself and failed.
-- 「继续制作」 after a change failed starts the change again; it used to do nothing.
-- The director answers in the language you write in.
-- The app no longer freezes while pages check themselves. Lint and snapshots ran in the same process as the panel and blocked it, so with several pages drawing at once every click waited seconds; four pages' checks now finish in half the time with the panel responsive throughout.
-- The director and page agents talk to you in plain words: their reports and progress notes no longer show file names, fields, commands or code, and pages are called 第 4 页 rather than p04.
-- Claude 4.6 and later (Opus 5.5, the default, among them) are asked to think adaptively; Opus 5.5 refused the token-budget form with 「requires adaptive thinking」 and the storyboard never started.
-
 ### Added
 
 - The panel can run hosted: a `studioBridge` that sets `hosted` (Frametell Cloud) gets the account and a sign-out in the top bar instead of Settings, no model picker (the service chooses), and only the voices the service can speak with. Home also takes `?topic=` to start with an idea typed elsewhere.
-- A Linux render image (`docker/render.Dockerfile`): draws a finished project to mp4 with no desktop, GPU or Mac — Debian's Chromium and ffmpeg, Noto CJK and emoji fonts, the engine with its own modules. `docker run … frametell-render /project --fps 30 --workers 4`. Tried on 番茄工作法 (54.5 s, warm-story): frames identical to the Mac export; 75 s on 4 cores, 123 s on 2.
 
 ## [0.1.0] - 2026-10-11
 
@@ -67,6 +57,7 @@ The first release of 画说 · Frametell: a local, open-source studio that turns
 
 - A desktop app for macOS (Apple silicon), built with `pnpm package:desktop`. It contains the engine and a redistributable GPLv3 ffmpeg, and needs neither Node nor anything else installed except Chrome.
 - A command line: `frametell` opens the studio in your browser; `frametell run <material…> [--style] [--duration] [--model] [--lang]` makes a film straight through.
+- A Linux render image (`docker/render.Dockerfile`): draws a finished project to mp4 with no desktop, GPU or Mac — Debian's Chromium and ffmpeg, Noto CJK and emoji fonts, the engine with its own modules. `docker run … frametell-render /project --fps 30 --workers 4`. Tried on 番茄工作法 (54.5 s, warm-story): frames identical to the Mac export; 75 s on 4 cores, 123 s on 2.
 - One core behind every client (`@frametell/core`), with an HTTP + SSE server in the CLI and IPC in the desktop app. A `Studio` can take its own data directory and settings store, and keeps its data in `~/.frametell` (or `FRAMETELL_HOME`) by default.
 - Open-source groundwork: MIT licence, CI on Linux, macOS and Windows, contributing and security guides, issue forms and a pull request checklist, READMEs and docs in English and Chinese.
 
