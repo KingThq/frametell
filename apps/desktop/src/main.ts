@@ -5,7 +5,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
-import { Studio, type LoggedEvent } from '@frametell/core';
+import { PROJECTS_DIR, Studio, type LoggedEvent } from '@frametell/core';
 
 const require = createRequire(import.meta.url);
 const UI_DIR = path.join(path.dirname(require.resolve('@frametell/ui/package.json')), 'dist');
@@ -33,6 +33,12 @@ ipcMain.handle('studio:subscribe', (e, subId: string, id: string, since: number)
   const off = studio.subscribe(id, since, (ev: LoggedEvent) => { if (!target.isDestroyed()) target.send('studio:event', subId, ev); });
   subs.set(subId, off);
   target.once('destroyed', () => { off(); subs.delete(subId); });
+});
+// show an exported file in Finder / Explorer: only files of Studio's own projects
+ipcMain.handle('studio:reveal', (_e, file: string) => {
+  const abs = path.resolve(String(file));
+  if (!abs.startsWith(PROJECTS_DIR + path.sep) || !fs.existsSync(abs)) throw new Error('file not found');
+  shell.showItemInFolder(abs);
 });
 ipcMain.handle('studio:unsubscribe', (_e, subId: string) => { subs.get(subId)?.(); subs.delete(subId); });
 

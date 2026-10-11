@@ -37,6 +37,8 @@ export interface StudioClient {
   subscribe(id: string, since: number, onEvent: (e: LoggedEvent) => void, onState?: (s: 'open' | 'reconnecting') => void): () => void;
   /** where a narrator's sample can be played */
   voicePreviewUrl(v: Voice): string;
+  /** show a file in Finder / Explorer — the desktop app only */
+  reveal?(file: string): Promise<void>;
   /** a URL for a file inside the project (preview player, snapshot, video) */
   fileUrl(p: ProjectView, rel: string): string;
 }

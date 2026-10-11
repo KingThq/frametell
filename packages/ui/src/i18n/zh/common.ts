@@ -20,6 +20,13 @@ export default {
     'tech-dark': '石墨深色底上的干净架构图与代码，适合软件、AI、系统原理等工程类讲解',
   },
   export: {
+    revealMac: '在访达中显示',
+    revealWin: '在资源管理器中显示',
+    revealOther: '打开所在文件夹',
+    where: '文件位置',
+    pathHint: '导出的文件在这里，复制路径后可以在访达里用「前往文件夹」打开（⇧⌘G）。',
+    copy: '复制',
+    copied: '已复制',
     download: '下载 mp4',
     exporting: '正在导出 · {time}',
     staleTitle: '片子改过了，导出最新的一版',

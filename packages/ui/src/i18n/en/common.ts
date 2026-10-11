@@ -20,6 +20,13 @@ const en: typeof zh = {
     'tech-dark': 'Clean diagrams and code on dark graphite. Good for software, AI and how systems work.',
   },
   export: {
+    revealMac: 'Show in Finder',
+    revealWin: 'Show in Explorer',
+    revealOther: 'Open folder',
+    where: 'File location',
+    pathHint: 'The exported file is here. Copy the path and open it in Finder with Go to Folder (⇧⌘G).',
+    copy: 'Copy',
+    copied: 'Copied',
     download: 'Download mp4',
     exporting: 'Exporting · {time}',
     staleTitle: 'The film has changed since the last export. Export the latest version',

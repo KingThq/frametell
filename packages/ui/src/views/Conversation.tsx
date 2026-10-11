@@ -7,7 +7,7 @@ import { useNow } from '../lib/hooks';
 import { Crest } from '../components/Logo';
 import { STYLE_NAME } from '../lib/styles';
 import { Composer, RefChip } from './Composer';
-import { ExportControls } from './Export';
+import { ExportControls, RevealFile } from './Export';
 import type { Ref } from '../lib/refs';
 import { t, useT } from '../i18n';
 
@@ -214,6 +214,7 @@ function ExportLine({ it, project }: { it: Extract<FeedItem, { kind: 'export' }>
         <span className="flex gap-1.5">
           <a className="fs-btn fs-btn-ghost fs-btn-sm" href={client.fileUrl(project, relPath(it.video, project.id))} download><Download size={13} aria-hidden /> {t('conversation.export.withSubs')}</a>
           {it.noSubs && <a className="fs-btn fs-btn-ghost fs-btn-sm" href={client.fileUrl(project, relPath(it.noSubs, project.id))} download><Download size={13} aria-hidden /> {t('conversation.export.noSubs')}</a>}
+          <RevealFile file={it.video} size="fs-btn-sm" />
         </span>
       )}
     </div>

@@ -40,4 +40,5 @@ contextBridge.exposeInMainWorld('studioBridge', {
   voicePreviewUrl: (v) => v.previewUrl || `studio://app/voice/${v.provider}/${encodeURIComponent(v.id)}`,
   fileUrl: (p, rel) => `studio://app/p/${p.id}/` + rel.split('/').map(encodeURIComponent).join('/'),
   platform: process.platform,
+  reveal: (file) => ipcRenderer.invoke('studio:reveal', file),
 });
