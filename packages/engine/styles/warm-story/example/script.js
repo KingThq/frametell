@@ -1,4 +1,4 @@
-/* 暖调叙事插画 · 标杆项目：复利。按 styles/warm-story/GRAMMAR.md 画，也用作这套风格的回归测试。 */
+/* Warm story illustration · benchmark film: compound interest. Drawn to styles/warm-story/GRAMMAR.md; also this style's regression test. */
 (function (root) {
   const META = {
     style: 'warm-story',

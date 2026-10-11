@@ -85,5 +85,5 @@ export function toolSummary(v: unknown): string {
  */
 export function rewriteRefusal(rel: string, existing?: string): string | undefined {
   if (!/^pages(-portrait)?\/p\w+\.js$/.test(rel.replace(/\\/g, '/')) || existing == null || existing.split('\n').length < 40) return undefined;
-  return `${rel} 已经有 ${existing.split('\n').length} 行：改已有的页面请用 edit 只改需要改的地方，不要整页重写（整页重写要几分钟）。`;
+  return `${rel} already has ${existing.split('\n').length} lines: to change an existing page, use edit on just what needs changing; never rewrite the whole page (a full rewrite takes minutes).`;
 }

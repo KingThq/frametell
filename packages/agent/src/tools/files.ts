@@ -15,9 +15,9 @@ const MAX_TEXT = 60_000;
 export function resolveIn(root: string, p: string, write = false): string {
   const abs = path.resolve(root, p);
   const rel = path.relative(root, abs);
-  if (rel.startsWith('..') || path.isAbsolute(rel)) throw new Error(`路径在项目目录之外：${p}`);
+  if (rel.startsWith('..') || path.isAbsolute(rel)) throw new Error(`path is outside the project directory: ${p}`);
   const top = rel.split(path.sep)[0];
-  if (write && READ_ONLY.includes(top)) throw new Error(`不能修改 ${p}：引擎目录是只读的`);
+  if (write && READ_ONLY.includes(top)) throw new Error(`cannot change ${p}: the engine directory is read-only`);
   return abs;
 }
 

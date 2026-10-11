@@ -27,7 +27,7 @@ function examplePage(style: string): { id: string; code: string } | undefined {
 }
 
 export function pagePack(style: string, extras: string[]): string {
-  const parts: string[] = ['# 本片的组件与范例（已经为你准备好）', '下面这些组件已经登记在 `META.extras` 里，页面里直接 `P.xxx(...)` 调用，**不要**再运行 use-extra 登记它们，也不用去 engine/ 里找源码。'];
+  const parts: string[] = ['# This film\'s components and worked example (ready for you)', 'These components are already registered in `META.extras`: call them directly as `P.xxx(...)` in the page. **Don\'t** run use-extra for them again, and don\'t look for their source in engine/.'];
   for (const e of extras) {
     const f = path.join(ENGINE_DIR, e.replace(/^engine\//, ''));
     if (!fs.existsSync(f)) continue;
@@ -35,6 +35,6 @@ export function pagePack(style: string, extras: string[]): string {
     if (docs.length) parts.push(`## ${path.basename(e)}`, ...docs);
   }
   const ex = examplePage(style);
-  if (ex) parts.push(`## 范例：标杆片的 ${ex.id}`, '一页完整的代码，照这个写法组织你的页面（物、动作、卡点、镜头、数字落在物上），不要照抄内容。', '```js', ex.code.trim(), '```');
+  if (ex) parts.push(`## Worked example: ${ex.id} of the benchmark film`, 'One complete page. Organise your page the way it does (objects, actions, timing to cues, camera, numbers landing on objects); don\'t copy its content.', '```js', ex.code.trim(), '```');
   return parts.join('\n');
 }

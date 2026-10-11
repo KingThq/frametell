@@ -1,4 +1,4 @@
-/* p03 搬格子：右边描出 5×5 的空正方形，9 个黄格、16 个蓝格一格一格飞进去铺满，边上写 5 并划两道线。 */
+/* p03 Moving the cells: an empty 5×5 square traced on the right; 9 yellow and 16 blue cells fly in one by one to fill it; a 5 written on its side, underlined twice. */
 ENGINE.visual('p03', (P) => {
   P.title('九加十六', { accent: 'yellow' });
   const { lerp, clamp, ease } = PV;

@@ -32,7 +32,7 @@ function Said({ text }: { text: string }) {
   );
 }
 
-/** a stage's work in plain words, folded: 「过程 · 读资料《番茄工作法》、写分镜、检查分镜 2 次」 */
+/** a stage's work in plain words, folded: “Steps · Read “Pomodoro”, Wrote the storyboard, Checked the storyboard ×2” */
 function Process({ items }: { items: FeedItem[] }) {
   const { locale } = useT();
   const [open, setOpen] = useState(false);
@@ -56,7 +56,7 @@ function Process({ items }: { items: FeedItem[] }) {
   );
 }
 
-/** stage detail in people's words: "pages=5 cues=16 duration=01:05.7" → "5 页 · 16 句 · 约 1 分 06 秒" */
+/** stage detail in people's words: "pages=5 cues=16 duration=01:05.7" → "5 pages · 16 lines · about 1m 6s" */
 function humanDetail(stage: Stage, detail?: string, sb?: Storyboard) {
   if (!detail) return stage === 'storyboard' && sb ? t('conversation.pagesCount', { n: sb.pages.length }) : undefined;
   const m = /pages=(\d+) cues=(\d+) duration=(\d+):([\d.]+)/.exec(detail);

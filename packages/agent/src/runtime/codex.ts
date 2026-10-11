@@ -15,7 +15,7 @@ export interface CodexRuntimeOptions {
 }
 
 export function codexRuntime(o: CodexRuntimeOptions): AgentRuntime {
-  if (!o.apiKey) throw new Error('Codex 运行时需要 OpenAI 兼容的 API key');
+  if (!o.apiKey) throw new Error('The Codex runtime needs an OpenAI-compatible API key');
   return {
     id: 'codex',
     model: { provider: o.baseUrl?.includes('relay') ? 'relay' : 'openai', id: o.model },

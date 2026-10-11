@@ -100,15 +100,15 @@ function readSource(paths) {
 export function lintStoryboard(sb, { source = '' } = {}) {
   const issues = [];
   const add = (level, where, msg) => issues.push({ level, ...where, msg });
-  if (!sb || !Array.isArray(sb.pages) || !sb.pages.length) { add('red', {}, '分镜里没有 pages'); return issues; }
+  if (!sb || !Array.isArray(sb.pages) || !sb.pages.length) { add('red', {}, 'the storyboard has no pages'); return issues; }
 
   // style lock
-  if (!sb.style) add('red', {}, '缺少 style（全片只用一种风格）');
-  else if (!fs.existsSync(path.join(STYLES_DIR, sb.style))) add('red', {}, `风格 "${sb.style}" 不存在`);
+  if (!sb.style) add('red', {}, 'missing style (the whole film uses one style)');
+  else if (!fs.existsSync(path.join(STYLES_DIR, sb.style))) add('red', {}, `style "${sb.style}" does not exist`);
   const cast = String(sb.cast || '');
-  if (!cast) add('red', {}, '缺少 cast（none / hands / silhouette）：没有插画素材时人物不出脸');
+  if (!cast) add('red', {}, 'missing cast (none / hands / silhouette): without illustrated material, people never show a face');
 
-  const en = isEnglish(sb), MAX_TEXT = en ? 5 : 8, unit = en ? '个单词' : '个字';
+  const en = isEnglish(sb), MAX_TEXT = en ? 5 : 8, unit = en ? 'words' : 'characters';
   const units = en ? wordsIn : textUnits;
   const layoutOnly = (o) => (en ? !/[a-z]/.test(residueEn(o, LAYOUT_EN, FILLER_EN)) : !residue(o, LAYOUT, FILLER));
   const weakOnly = (a) => (en ? !/[a-z]/.test(residueEn(a, WEAK_EN, ACT_FILLER_EN)) : !residue(a, WEAK, ACT_FILLER));
@@ -118,37 +118,37 @@ export function lintStoryboard(sb, { source = '' } = {}) {
   const all = [];
   sb.pages.forEach((p, pi) => {
     const beats = Array.isArray(p.beats) ? p.beats : [];
-    if (beats.length < 2) add('red', { page: p.id }, `只有 ${beats.length} 个拍点：一页至少要有 2 个看得见的变化`);
+    if (beats.length < 2) add('red', { page: p.id }, `only ${beats.length} beat(s): a page needs at least 2 visible changes`);
     beats.forEach((b, bi) => {
       const where = { page: p.id, beat: bi };
       const obj = String(b.object || '').trim(), act = String(b.action || '').trim();
-      if (!obj) add('red', where, '「物」是空的');
-      else if (layoutOnly(obj)) add('red', where, `「物」只是版面词："${obj}"。写画面里具体的东西（雪球、储蓄罐、一条山路）`);
-      if (!act) add('red', where, '「动作」是空的');
-      else if (weakOnly(act)) add('red', where, `「动作」只是万能词："${act}"。写它怎么动（滚下、长高、落进、裂开）`);
+      if (!obj) add('red', where, 'the object is empty');
+      else if (layoutOnly(obj)) add('red', where, `the object is only a layout word: "${obj}". Name a concrete thing in the picture (a snowball, a piggy bank, a mountain road)`);
+      if (!act) add('red', where, 'the action is empty');
+      else if (weakOnly(act)) add('red', where, `the action is only a catch-all word: "${act}". Say how it moves (rolls down, grows, drops in, cracks open)`);
       for (const part of textParts(b.text)) {
         const n = units(part);
-        if (n > MAX_TEXT) add('red', where, `屏上字 "${part}" 有 ${n} ${unit}（每个元素 ≤ ${MAX_TEXT}）`);
+        if (n > MAX_TEXT) add('red', where, `on-screen text "${part}" has ${n} ${unit} (each element ≤ ${MAX_TEXT})`);
       }
-      if (faces(obj) && !/^frames?:/.test(cast)) add('red', where, `「物」里有画脸的角色（"${obj}"）：只画手、背影、剪影，或让物当主角`);
-      if (have) for (const n of screenNumbers(b.text)) if (!grounded(n, have)) add('red', where, `屏上数字 "${n.raw}" 在素材里找不到出处`);
+      if (faces(obj) && !/^frames?:/.test(cast)) add('red', where, `the object is a character with a face ("${obj}"): draw only hands, a back or a silhouette, or let the object lead`);
+      if (have) for (const n of screenNumbers(b.text)) if (!grounded(n, have)) add('red', where, `on-screen number "${n.raw}" has no source in the material`);
       all.push({ page: p.id, pi, bi, texty: texty(obj) || units(b.text) >= (en ? 5 : 7), cam: String(b.camera || '').trim() });
     });
   });
 
   // text-dominated beats: first and last page must be led by an object, and at most 30% overall
   const pageTexty = (pi) => { const bs = all.filter((b) => b.pi === pi); return bs.length && bs.filter((b) => b.texty).length * 2 > bs.length; };
-  if (pageTexty(0)) add('red', { page: sb.pages[0].id }, '第一页是文字主导：开场要先给一个物和一个问题');
+  if (pageTexty(0)) add('red', { page: sb.pages[0].id }, 'the first page is text-led: open on an object and a question');
   const last = sb.pages.length - 1;
-  if (pageTexty(last)) add('red', { page: sb.pages[last].id }, '最后一页是文字主导：结尾落在主物的一个动作上，不收在金句卡上');
+  if (pageTexty(last)) add('red', { page: sb.pages[last].id }, 'the last page is text-led: end on an action of the main object, not on a quote card');
   const lastBeat = all.filter((b) => b.pi === last).pop();
-  if (lastBeat?.texty && !pageTexty(last)) add('red', { page: sb.pages[last].id, beat: lastBeat.bi }, '最后一个拍点是文字：让主物完成一个动作收尾');
+  if (lastBeat?.texty && !pageTexty(last)) add('red', { page: sb.pages[last].id, beat: lastBeat.bi }, 'the last beat is text: end on the main object completing an action');
   const share = all.length ? all.filter((b) => b.texty).length / all.length : 0;
-  if (share > 0.3) add('red', {}, `文字主导的拍点占 ${Math.round(share * 100)}%（≤ 30%）`);
+  if (share > 0.3) add('red', {}, `text-led beats are ${Math.round(share * 100)}% of all beats (≤ 30%)`);
 
   for (let i = 2; i < all.length; i++) {
     const [a, b, c] = [all[i - 2], all[i - 1], all[i]];
-    if (a.cam && a.cam === b.cam && b.cam === c.cam) add('yellow', { page: c.page, beat: c.bi }, `连续三个拍点都是「${c.cam}」镜头`);
+    if (a.cam && a.cam === b.cam && b.cam === c.cam) add('yellow', { page: c.page, beat: c.bi }, `three beats in a row use the same camera move "${c.cam}"`);
   }
   return issues;
 }
@@ -157,7 +157,7 @@ export function lintStoryboard(sb, { source = '' } = {}) {
 // run as a CLI (also through the project's engine/ link)
 if (process.argv[1] && import.meta.url === pathToFileURL(fs.realpathSync(process.argv[1])).href) {
   let sb;
-  try { sb = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (e) { console.error(`读不了 ${file}: ${e.message}`); process.exit(2); }
+  try { sb = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (e) { console.error(`cannot read ${file}: ${e.message}`); process.exit(2); }
   const src = opt('source') ? [opt('source')] : ['materials', 'script.js'];
   const issues = lintStoryboard(sb, { source: readSource(src.map((p) => path.resolve(p))) });
   const reds = issues.filter((i) => i.level === 'red').length;
@@ -165,7 +165,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(fs.realpathSync(process
   else if (!issues.length) console.log('storyboard: OK');
   else {
     console.log(`storyboard: ${reds} red, ${issues.length - reds} yellow`);
-    for (const i of issues) console.log(`  ${i.level === 'red' ? '✗' : '!'} ${i.page ?? '全片'}${i.beat != null ? ` 拍点${i.beat + 1}` : ''}: ${i.msg}`);
+    for (const i of issues) console.log(`  ${i.level === 'red' ? '✗' : '!'} ${i.page ?? 'film'}${i.beat != null ? ` beat ${i.beat + 1}` : ''}: ${i.msg}`);
   }
   process.exit(reds ? 1 : 0);
 }

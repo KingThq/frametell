@@ -1,4 +1,4 @@
-/* p02 画正方形：沿短边向外描出正方形并分成 9 格，再沿长边描出 16 格的正方形。 */
+/* p02 Squares: a square traced outward on the short leg and split into 9 cells, then a 16-cell square on the long leg. */
 ENGINE.visual('p02', (P) => {
   P.title('每条边一个正方形', { accent: 'yellow' });
   const t0 = P.c(0), t1 = P.c(1), t2 = P.c(2);

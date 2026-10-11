@@ -1,7 +1,7 @@
 // electron-builder afterPack: sign the macOS app ad hoc, before it goes into the dmg.
 // Without a Developer ID the build is left with Electron's own signature, which no longer matches the renamed and
-// filled bundle. Apple silicon refuses such an app once it has been downloaded: 「已损坏，无法打开」, with no way past it.
-// Signed ad hoc, macOS only says it can't verify the developer, and the app opens after 「仍要打开」.
+// filled bundle. Apple silicon refuses such an app once it has been downloaded: “is damaged and can't be opened”, with no way past it.
+// Signed ad hoc, macOS only says it can't verify the developer, and the app opens after “Open Anyway”.
 const { execFileSync } = require('node:child_process');
 const path = require('node:path');
 

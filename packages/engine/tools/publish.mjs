@@ -6,7 +6,7 @@ import path from 'path';
 import { loadEpisode, OUT } from './lib.mjs';
 const { META, L } = loadEpisode();
 const pub = META.publish;
-if (!pub) { console.error('script.js 的 META 里还没有 publish（titles / description / tags），先写好再运行。'); process.exit(1); }
+if (!pub) { console.error('META in script.js has no publish block yet (titles / description / tags); write it first.'); process.exit(1); }
 
 const ts = (t) => {
   t = Math.floor(t);
@@ -27,7 +27,7 @@ const PLATFORMS = [
   ['douyin', '抖音', 30, 1000],
   ['shipinhao', '视频号（短标题）', 16, 1000],
   ['xiaohongshu', '小红书', 20, 1000],
-].filter(([k]) => !pub.platforms || pub.platforms.includes(k));   // META.publish.platforms: 只发其中几个平台时只检查它们
+].filter(([k]) => !pub.platforms || pub.platforms.includes(k));   // META.publish.platforms: when publishing to only some platforms, check only those
 const len = (s) => [...s].length;
 const warn = [];
 const md = [`# 发布信息 · ${META.title || ''}`, '', `> 时长 **${ts(L.duration)}**。章节时间码由 script.js 自动算出，和视频完全对齐；改了口播要重新运行 \`npm run publish\`。`, ''];
@@ -43,13 +43,13 @@ for (const [, name, , max] of PLATFORMS) if (len(desc) > max) warn.push(`简介�
 md.push('', '## 简介（含章节，可直接粘贴）', '', '```', desc, '```', '');
 md.push('## 分段章节', '', '> B 站「分段章节」、YouTube 章节（第一条必须是 00:00、至少 3 段、每段 ≥ 10 秒）都用这份。', '', '```', ...chapterLines, '```', '');
 const short = chapters.map((c, i) => [c, (chapters[i + 1]?.start ?? L.duration) - c.start]).filter(([, d]) => d < 10);
-const ytChapters = !pub.platforms || pub.platforms.includes('youtube');   // 不发 YouTube 就不检查它的章节规则
+const ytChapters = !pub.platforms || pub.platforms.includes('youtube');   // not publishing to YouTube: skip its chapter rules
 if (ytChapters && chapters.length < 3) warn.push('章节少于 3 段，YouTube 不会识别');
 if (ytChapters) for (const [c] of short) warn.push(`章节「${c.section}」不到 10 秒，YouTube 不会识别`);
 md.push('| 时间段 | 小标题 | 时长 |', '|---|---|---|');
 chapters.forEach((c, i) => { const e = chapters[i + 1]?.start ?? L.duration; md.push(`| ${ts(c.start)} – ${ts(e)} | ${c.section} | ${ts(e - c.start)} |`); });
 if (pub.tags?.length) md.push('', '## 标签', '', pub.tags.map((t) => '#' + t).join(' '));
-// META.publish.captions: { douyin, xiaohongshu, … } 各平台单独的发布文案（直接复制粘贴），按平台字数上限检查
+// META.publish.captions: { douyin, xiaohongshu, … } a ready-to-paste caption per platform, checked against its length limit
 if (pub.captions) {
   md.push('', '## 各平台文案（直接复制）');
   for (const [k, name, , max] of PLATFORMS) {

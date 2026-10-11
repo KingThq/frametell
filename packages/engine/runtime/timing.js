@@ -52,7 +52,7 @@
   /** opts.gap overrides GAP (script.js META.gap); opts.voice = SCRIPT.VOICE switches to real audio durations. */
   function layout(pages, opts = {}) {
     const voice = opts.voice || null;
-    const V = { ...VOICE, ...(opts.pace || {}) };   // META.pace: { maxHold, gap } 放宽配音片的停顿（默认很紧凑）
+    const V = { ...VOICE, ...(opts.pace || {}) };   // META.pace: { maxHold, gap } loosens a voiced film's pauses (tight by default)
     const gap = voice ? V.gap : opts.gap ?? GAP;
     let t = 0;
     const out = pages.map((pg, idx) => {
@@ -83,7 +83,7 @@
         return cue;
       });
       const speechEnd = ct;
-      const after = pg.after || 0;   // 这一页讲完后多停几秒再翻（给画面落定、让人消化）
+      const after = pg.after || 0;   // extra seconds after the page's last line before it turns (lets the picture settle and sink in)
       const last = idx === pages.length - 1;
       const end = speechEnd + after + (last ? (voice ? pg.tail ?? V.tail : 2) : gap);   // pg.tail: longer ending hold on the last page
       t = end;

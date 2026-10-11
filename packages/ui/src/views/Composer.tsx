@@ -57,7 +57,7 @@ export function Composer({ run, project, viewing }: { run: RunView; project: Pro
     if (cur.length >= MAX_REFS) { setNote(t('conversation.composer.maxRefs', { n: MAX_REFS })); return cur; }
     return [...cur, { key: k, ref: r }];
   });
-  // the workbench hands over pages, lines and frames; 「改这一页」-style prompts still prefill the words
+  // the workbench hands over pages, lines and frames; “change this page”-style prompts still prefill the words
   useEffect(() => {
     const onRef = (e: Event) => { add((e as CustomEvent<Ref>).detail); focus(); };
     const onCompose = (e: Event) => { const t = (e as CustomEvent<string>).detail; setText((cur) => (cur.trim() ? cur : t)); focus(); };

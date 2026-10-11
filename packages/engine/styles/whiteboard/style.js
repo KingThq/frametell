@@ -1,4 +1,4 @@
-/* 白板手绘: a clean white board, sketchy multi-stroke marker lines, a few marker colours; RSA-Animate style explainers. */
+/* Whiteboard sketch: a clean white board, sketchy multi-stroke marker lines, a few marker colours; RSA-Animate style explainers. */
 window.STYLE = {
   id: 'whiteboard',
   // markers wobble more than a pen and go over a line twice; the default line is a fat marker tip

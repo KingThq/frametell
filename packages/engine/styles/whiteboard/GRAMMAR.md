@@ -1,38 +1,38 @@
-# 白板手绘 · 语法卡
+# Whiteboard sketch · grammar card
 
-参照：RSA Animate、白板动画讲解（一支马克笔边讲边画）。下面的语法凭经验写成，没有逐帧实测；拿到样片后要实测校准。
+Reference: RSA Animate and whiteboard explainer animation (one marker, drawing while talking). These rules come from experience, not frame-by-frame measurement; calibrate them against real sample films.
 
-## 一句话
+## In one sentence
 
-一个人站在白板前，一边讲一边用马克笔把想法画出来。观众看到的是「思路正在被画出来」，不是做好的图。
+Someone stands at a whiteboard and draws their thinking with a marker as they talk. Viewers watch the idea being drawn, not a finished diagram.
 
-## 画面
+## Picture
 
-- **白板是白的。** 近白底，只有一点斜向反光和极淡的擦痕；不要纸纹、点阵、横线。
-- **黑笔是主角。** 结构、轮廓、文字都用黑色（`ink`）；红（`red`）、蓝（`blue`）、绿（`green`）、橙（`orange`）四支彩笔只用来圈、标、打勾、强调。一屏彩笔不超过两种。
-- **马克笔线条。** 粗（默认 3.4）、略抖、来回描两遍；线头线尾可以不严丝合缝。框可以有缺口，箭头可以歪一点。
-- **填色很少。** 框大多不填色，留白板本色；需要分组时用极淡的 `*F` 底色加斜排线，像马克笔快速涂了一下。黄色（`yellow`）只当荧光笔用（`P.mark` / `markSpan`），不拿来画线。
-- **简笔图标 + 手写字。** 人、钟、齿轮、文件这类简笔图标配一两个词；字用霞鹜文楷手写体，屏上每个元素不超过 8 个字，正文字号不小于 36px。
-- **画面从左往右、从上往下长。** 和真人在白板上写字的顺序一致；一页画满就擦掉（整页淡出）或镜头移到白板的下一块空白。
-- **关系用线画出来。** 因果用箭头，对比用一条竖线把白板分成两半，归纳用一个大圈把几样东西圈在一起。
+- **The whiteboard is white.** A near-white ground with only a slight diagonal sheen and very faint erase marks; no paper texture, dot grid or ruled lines.
+- **The black marker is the lead.** Structure, outlines and text are all black (`ink`); the four colour markers, red (`red`), blue (`blue`), green (`green`) and orange (`orange`), are only for circling, labelling, ticking and emphasis. At most two colour markers on one screen.
+- **Marker lines.** Thick (3.4 by default), a little shaky, traced twice back and forth; line ends need not meet exactly. Boxes may have gaps and arrows may lean a little.
+- **Very little fill.** Most boxes are unfilled, leaving the board's own white; when grouping is needed, use a very light `*F` tint with diagonal hatching, like a quick pass with a marker. Yellow (`yellow`) is only a highlighter (`P.mark` / `markSpan`), never a line colour.
+- **Stick icons plus handwriting.** Simple icons such as a person, a clock, a gear or a file, with a word or two; text is in the LXGW WenKai handwritten face, each on-screen element at most 8 characters in Chinese (about 4 words in English), body text at least 36px.
+- **The picture grows left to right, top to bottom.** The same order as a real person writing on a whiteboard; when a page is full, wipe it (whole-page fade) or move the camera to the next blank section of board.
+- **Draw relationships as lines.** Cause and effect with arrows, contrast with a vertical line splitting the board in two, summary with a big circle around several things.
 
-## 动作与镜头
+## Motion and camera
 
-- **一切都是「画出来」的。** 形状用描绘（`dur` 0.5–1.0 秒），文字逐字写出（`cps` 10–14）；不用淡入、弹跳、飞入。
-- **笔跟着嘴走。** 说到哪个词，就在那一刻画哪样东西（`P.cw` 卡词）；画的速度略快于说话，留出半拍让观众看。
-- **强调靠笔，不靠特效。** 关键处补一笔：圈起来（`ring`）、划线（`underline`）、打叉（`cross`）、打勾（`check`）、荧光笔扫一下（`mark`）。
-- **镜头少动。** 默认固定全景；画到细节时快推一次（`P.push`，1.15–1.25×），画完拉回。换话题时横移到白板的另一块（`P.pan`），像摄像机跟着手走。
+- **Everything is drawn.** Shapes are traced (`dur` 0.5–1.0 s) and text is written character by character (`cps` 10–14); no fade-ins, bounces or fly-ins.
+- **The pen follows the voice.** Draw each thing the moment its word is said (word cues with `P.cw`); draw slightly faster than the speech, leaving half a beat for viewers to look.
+- **Emphasis comes from the pen, not from effects.** At the key moment add one stroke: circle it (`ring`), underline it (`underline`), cross it out (`cross`), tick it (`check`), sweep the highlighter (`mark`).
+- **The camera barely moves.** A fixed wide shot by default; push in once on a detail (`P.push`, 1.15–1.25×) and pull back when it is drawn. When the topic changes, pan to another section of board (`P.pan`), like a camera following the hand.
 
-## 节奏
+## Pacing
 
-- 开场 3 秒内落下第一笔，画的是这期要回答的那个问题里最具体的东西。
-- 每页 10–20 秒，页内每 2–4 秒有一笔新东西出现；白板讲解的节奏比插画风快。
-- 结尾把整页的图收成一个圈或一条箭头，指向最后一个词；不收在居中的金句卡上。
+- Within the first 3 seconds the first stroke lands, drawing the most concrete thing in the question this film answers.
+- 10–20 seconds per page, something new drawn every 2–4 seconds; whiteboard explainers run faster than illustration.
+- End by gathering the whole page's drawing into a circle or one arrow pointing at the last word; never on a centred quote card.
 
-## 绝不
+## Never
 
-- 彩色大色块、渐变、阴影、发光、霓虹、蓝紫色调。
-- 照片质感、3D、写实插画（那是别的风格）。
-- 整段文字一次性淡入；PPT 式「标题 + 三个卡片」。
-- 一屏同时用四种以上颜色，或拿黄色画线。
-- 纸纹、黑板质感、暖色牛皮纸底（那是安静书房和黑板）。
+- Large colour blocks, gradients, shadows, glows, neon, blue-purple tones.
+- Photographic texture, 3D, realistic illustration (those are other styles).
+- Fading in a whole paragraph at once; the slide layout of "title + three cards".
+- More than four colours on one screen, or drawing lines in yellow.
+- Paper texture, chalkboard texture, warm kraft-paper grounds (those are study and chalkboard).

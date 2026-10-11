@@ -1,50 +1,49 @@
-# 现成组件库（engine/lib/）
+# Ready-made components (engine/lib/)
 
-需要时用 `node engine/tools/use-extra.mjs <文件名>` 拷进本项目并登记（并行安全），再 Read 该文件看用法。用不上就别用，手写也可以。每个文件都能单独用、可以任意组合，名字互不覆盖。数据（标签、颜色、数值）都由页面传进去，组件里不写死任何题材。
+When you need one, run `node engine/tools/use-extra.mjs <file name>` to copy it into this project and register it (safe in parallel), then Read that file for its usage. If you don't need one, don't use it; drawing by hand is fine. Each file works on its own and they combine freely without name clashes. All data (labels, colours, values) is passed in by the page; no component hard-codes a subject.
 
-通用的 `P.move(L, fn)`（驱动图层）、`P.pathAt(d)`（沿路径取点）、`PV.keys`（关键帧）、`PV.mix`（混色）、`PV.arcAt`（弧线上的点）、`PV.mmss`、`PV.tw`（估字宽）在引擎里，直接用，不用登记。
+The general helpers `P.move(L, fn)` (drive a layer), `P.pathAt(d)` (points along a path), `PV.keys` (keyframes), `PV.mix` (colour mix), `PV.arcAt` (a point on an arc), `PV.mmss` and `PV.tw` (estimated text width) are in the engine: use them directly, no registering.
 
-| 文件 | 组件 |
+| File | Components |
 |---|---|
-| `warm.js` | 暖调叙事插画的比喻物：`ground` 地面 / `snowball` 会长大的雪球 / `jar` 装硬币的玻璃罐（水位）/ `coin` 硬币（可下落）/ `tree` 会生长结果的树 / `trail` 山路（可铺开，带行走点）/ `hand` 不露脸的手 / `calendar` 台历 / `tag` 写在物上的数字标签（可计数到念出的那个词） |
-| `gauges.js` | tank 会溢出的水箱 / gauge 半圆表盘 / loopRing 环上节点 + 跑动的点 / stampF 带底纸的印章 |
-| `meters.js` | hist 带容量线的时间直方图 / meter 竖向水位 / clock 秒表 |
-| `switches.js` | breaker 会跳闸的开关 / hbar 带阈值的横条 / mtag 等宽标签 / loopTrack 椭圆循环 + 阶段框 / door 会亮的出口 |
-| `waffle.js` | waffle 小人方阵（占比） |
-| `cells.js` | cells 按阅读顺序填满的格子 / win 带标题和计数的格子窗口 / place3d 单层 3D 摆放 / PV.fmt、PV.fmtK 数字格式 |
-| `messages.js` | msgcol 消息列（行会缩短、掉落、改标签）/ flip2 双面 3D 翻卡 / cellgrid 按顺序填的方格 |
-| `radar.js` | radar(cx, cy, r, axes, vals) 雷达图 / msgs 消息叠（可收成一张卡） |
-| `segments.js` | strip 一整条分段带（段宽随时间变，可标保留段和重做段） |
-| `terminal.js` | term 终端 / gantt 甘特图 + 播放头 / flow 沿折线流动的小包 |
-| `fsm.js` | fsm 状态机 + 游标 / plot 随时间画出的折线图 |
-| `gates.js` | stageDots(steps, cur) 阶段圆点 / gates3d 3D 纵深门廊 / pkt 跟着函数走的小包 |
-| `pipeline.js` | pipeline 小包流过一列步骤，产出飞进结果面板 |
-| `flowgraph.js` | graph 节点图 + run() 走动的状态包 / switcher 道岔 / packet 信封小包 / ckstack 3D 卡片摞 / PV.hlx、PV.colX 代码卡列位 |
-| `sequence.js` | seq 双方时序图 + 飞行消息 / jsonPanel 打字出现的 JSON / fold3d 翻倒成标签的卡片 / stack3d 3D 层叠板 |
-| `matrix.js` | matrix 行×列格子收拢到中枢（N×M → N+M）/ tape 滚动的单行消息日志 / editor 编辑器窗口 / flipc 双面翻卡 / stage3d 3D 纵深舞台 / PV.bytes |
-| `dialog.js` | dlg 带两个按钮的确认框 / lock 会打开的锁 / plates3d 粗到细的筛板 |
-| `receipt.js` | receipt 一行行打印的小票 / zipper 两列逐行比对的拉链 |
-| `filetree.js` | filetree(x, y, rows) 目录树 / ftile 文件小卡 / fly 弧线飞行标签 |
-| `notes.js` | memfile 逐行写入的文件卡 / mcard 折角便签 / markLines 按渲染行荧光 / PV.age 由新变旧的配色 |
-| `layers.js` | netgraph 按时间生长的节点网 / layers3d 3D 层叠板（带 proj 屏幕投影）/ fcard 可追加、划线、高亮的文档卡 / flip 两面翻卡 |
-| `tower.js` | tower3d 3D 层叠塔（带 proj 钉标签）/ flipcard 翻面标签卡 / memcard 折角文件卡（可带标签） |
-| `pointcloud.js` | space3d 3D 点云 / chunkText 文本按块上色 / lanes 两条泳道的站点 + 箭头 |
-| `ranking.js` | rankList 平滑换位的名次表 / PV.softPos、PV.orderPos 名次位置 / tower 叠层方块 / PV.proj2d 二维点投到框里 |
-| `scorecard.js` | scoretubes(x, y, items) 评分管 / ruler(x, y, w, items) 分色尺 / badge(x, y, name) logo + 名字 / PV.rise |
-| `bookshelf.js` | shelf 3D 书架（书脊宽高来自数据，可抽出一本） |
-| `bots.js` | bot 带名牌的机器人 / env 弧线飞行信封 / jfile 行追加的文件卡 / timer 时钟 + 读数 |
-| `debris.js` | demo「示意」小标签 / fall 碎片掉落 / srv 服务器框 / PV.blink 状态灯闪烁 |
+| `warm.js` | Metaphor objects for warm illustrated stories: `ground` the ground / `snowball` a snowball that grows / `jar` a glass jar of coins (fill level) / `coin` a coin (can drop) / `tree` a tree that grows and bears fruit / `trail` a mountain path (unrolls, with a walking point) / `hand` a hand, no face / `calendar` a desk calendar / `tag` a number label written on an object (can count up to the spoken word) |
+| `gauges.js` | tank a tank that overflows / gauge a semicircular dial / loopRing nodes on a ring + a running dot / stampF a stamp with its backing paper |
+| `meters.js` | hist a time histogram with a capacity line / meter a vertical level / clock a stopwatch |
+| `switches.js` | breaker a switch that trips / hbar a horizontal bar with a threshold / mtag a monospace label / loopTrack an elliptical loop + stage boxes / door an exit that lights up |
+| `waffle.js` | waffle a grid of little figures (proportions) |
+| `cells.js` | cells cells that fill in reading order / win a window of cells with a title and a count / place3d one-layer 3D placement / PV.fmt, PV.fmtK number formatting |
+| `messages.js` | msgcol a message column (rows shorten, drop, relabel) / flip2 a two-sided 3D flip card / cellgrid squares that fill in order |
+| `radar.js` | radar(cx, cy, r, axes, vals) a radar chart / msgs a stack of messages (can collapse into one card) |
+| `segments.js` | strip one segmented band (segment widths change over time; can mark kept and redone segments) |
+| `terminal.js` | term a terminal / gantt a Gantt chart + playhead / flow packets flowing along a polyline |
+| `fsm.js` | fsm a state machine + cursor / plot a line chart drawn over time |
+| `gates.js` | stageDots(steps, cur) stage dots / gates3d a 3D receding gateway / pkt a packet that follows a function |
+| `pipeline.js` | pipeline packets flow through a column of steps; the output flies into a results panel |
+| `flowgraph.js` | graph a node graph + run() a moving state packet / switcher a railway switch / packet an envelope packet / ckstack a 3D stack of cards / PV.hlx, PV.colX code-card column positions |
+| `sequence.js` | seq a two-party sequence diagram + flying messages / jsonPanel JSON that types itself in / fold3d a card that folds down into a label / stack3d 3D stacked boards |
+| `matrix.js` | matrix a rows × columns grid collapsing into a hub (N×M → N+M) / tape a scrolling one-line message log / editor an editor window / flipc a two-sided flip card / stage3d a 3D receding stage / PV.bytes |
+| `dialog.js` | dlg a confirm dialog with two buttons / lock a lock that opens / plates3d coarse-to-fine sieve plates |
+| `receipt.js` | receipt a receipt printing line by line / zipper a zipper comparing two columns line by line |
+| `filetree.js` | filetree(x, y, rows) a directory tree / ftile a small file card / fly a label flying along an arc |
+| `notes.js` | memfile a file card written line by line / mcard a dog-eared note / markLines highlight by rendered line / PV.age colours that age from new to old |
+| `layers.js` | netgraph a node network that grows over time / layers3d 3D stacked boards (with a proj screen projection) / fcard a document card you can append to, strike through and highlight / flip a two-sided flip card |
+| `tower.js` | tower3d a 3D stacked tower (proj to pin labels) / flipcard a label card that flips / memcard a dog-eared file card (optionally labelled) |
+| `pointcloud.js` | space3d a 3D point cloud / chunkText text coloured in chunks / lanes stations on two swim lanes + arrows |
+| `ranking.js` | rankList a ranking that reorders smoothly / PV.softPos, PV.orderPos rank positions / tower stacked blocks / PV.proj2d project 2D points into a box |
+| `scorecard.js` | scoretubes(x, y, items) score tubes / ruler(x, y, w, items) a colour-banded ruler / badge(x, y, name) logo + name / PV.rise |
+| `bookshelf.js` | shelf a 3D bookshelf (spine widths and heights from data; one book can be pulled out) |
+| `bots.js` | bot a robot with a name tag / env an envelope flying along an arc / jfile a file card that appends lines / timer a clock + readout |
+| `debris.js` | demo a small "illustration" tag / fall falling debris / srv a server box / PV.blink a blinking status light |
 
-## 引擎的已知坑
-- `PV.ease` 没有 `in`，加速曲线手写 `u*u`。
-- `P.line` 不支持 dashed（只有箭头支持）；`P.line` 返回的 handle 可以 `.hide()`。
-- `code().hl` 按字符列定位，JetBrains Mono 每个字符约 0.6× 字号；高亮偏了就截图对位。
-- `P.follow` 没有左对齐选项，需要时手动设 `el.style.textAlign`。
-- `P.slider` 刻度标签固定 26px。
-- `text()` 生成的空格是 `&nbsp;`，按英文单词 `markSpan` 定位前先把 `\u00a0` 换成空格。
-- 代码卡高亮器会把字符串里的 `//`（如 `https://`）当注释，需要时在两个斜杠间插零宽空格。
-- CSS 3D 翻面用 `visibility:hidden` 藏背面无效（每一笔自带 visibility:visible），要用 opacity。
-- 拼图第一帧偶尔在字体加载前截到，画面会缺内容；单独重截一次即可。
-- `P.code` 的 `label` 参数注释里有，但没实现。
-- `P.cam` 拉远后页标题会被页眉渐变压淡；推近时注意别切字。
-
+## Known engine pitfalls
+- `PV.ease` has no `in`; write an accelerating curve by hand as `u*u`.
+- `P.line` does not support dashed (only arrows do); the handle `P.line` returns can `.hide()`.
+- `code().hl` positions by character column; in JetBrains Mono a character is about 0.6× the font size. If a highlight is off, check it against a screenshot.
+- `P.follow` has no left-align option; set `el.style.textAlign` by hand when needed.
+- `P.slider` tick labels are fixed at 26px.
+- Spaces produced by `text()` are `&nbsp;`; replace ` ` with a space before locating English words for `markSpan`.
+- The code-card highlighter treats `//` inside a string (as in `https://`) as a comment; when needed, put a zero-width space between the slashes.
+- Hiding a back face with `visibility:hidden` does not work for CSS 3D flips (every stroke carries visibility:visible); use opacity.
+- The first frame of a contact sheet is occasionally captured before fonts load and misses content; take that shot again on its own.
+- `P.code`'s `label` option is documented in a comment but not implemented.
+- After `P.cam` pulls out, the page title is dimmed by the header gradient; when pushing in, take care not to cut text.

@@ -13,103 +13,116 @@ const DIR = path.join(path.dirname(createRequire(import.meta.url).resolve('@fram
 const read = (f: string) => fs.readFileSync(path.join(DIR, f), 'utf8');
 const grammar = (style: string) => {
   const f = path.join(ENGINE_DIR, 'styles', style, 'GRAMMAR.md');
-  return fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : `风格：${style}`;
+  return fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : `Style: ${style}`;
 };
 
+/** fallback names; the panel shows its own translated names for these ids */
 export const STYLES: { id: string; name: string; summary: string }[] = [
-  { id: 'warm-story', name: '暖调叙事插画', summary: '温暖的扁平插画，一个比喻物贯穿全片，适合投资、生活、心理类知识' },
-  { id: 'study', name: '安静书房', summary: '纸面手绘，墨线与淡彩，适合读书、历史、方法论' },
-  { id: 'whiteboard', name: '白板手绘', summary: '白板上马克笔边讲边画，适合概念拆解、商业模式、方法论和流程' },
-  { id: 'chalkboard', name: '黑板', summary: '墨绿黑板上的粉笔板书，适合数学、物理、历史等一步步推导的课堂式讲解' },
-  { id: 'tech-dark', name: '科技深色', summary: '石墨深色底上的干净架构图与代码，适合软件、AI、系统原理等工程类讲解' },
+  { id: 'warm-story', name: 'Warm illustration', summary: 'Warm flat illustration with one metaphor object carried through the film; for investing, everyday life and psychology' },
+  { id: 'study', name: 'Quiet study', summary: 'Hand-drawn on paper, ink lines and light washes; for books, history and methods' },
+  { id: 'whiteboard', name: 'Whiteboard', summary: 'Marker on a whiteboard, drawn while explaining; for breaking down concepts, business models, methods and processes' },
+  { id: 'chalkboard', name: 'Chalkboard', summary: 'Chalk on a dark green board; for maths, physics, history and other step-by-step classroom explanations' },
+  { id: 'tech-dark', name: 'Dark technical', summary: 'Clean architecture diagrams and code on dark graphite; for software, AI and how systems work' },
 ];
 
 export function plannerSystem(style: string) {
-  return [read('PLANNER.md'), '---\n# 本片风格（画面 Agent 会照着画，分镜要写得出来）\n\n' + grammar(style), '---\n' + read('LIB.md')].join('\n\n');
+  return [read('PLANNER.md'), '---\n# This film\'s style (the page agent draws to it, so the storyboard must be drawable in it)\n\n' + grammar(style), '---\n' + read('LIB.md')].join('\n\n');
 }
 /** the page agent's system prompt: process, the style's grammar, the drawing API, the style's components with a worked
  *  example page, and the wider component library (the stable part of every page session, so it caches well) */
 export function pageSystem(style: string, extras: string[] = []) {
-  return [read('PAGE.md'), '---\n# 本片风格\n\n' + grammar(style), '---\n' + read('API.md'), '---\n' + pagePack(style, extras), '---\n' + read('LIB.md')].join('\n\n');
+  return [read('PAGE.md'), '---\n# This film\'s style\n\n' + grammar(style), '---\n' + read('API.md'), '---\n' + pagePack(style, extras), '---\n' + read('LIB.md')].join('\n\n');
 }
 
-/** the film's language (narration, on-screen text) and the language the director reports in (the panel's) */
+/** the film's language (narration, on-screen text) and the language the director reports in (the user's) */
 export type Lang = 'zh' | 'en';
 export interface Brief { topic?: string; audience?: string; durationSec: number; notes?: string; lang?: Lang; replyLang?: Lang }
 
-/** What a stage must know about the language; nothing for a Chinese film, the prompts' own language. It goes in the user
- *  messages, never the system prompts, so every film shares the cached part whatever its language. */
-export function langNote(stage: 'storyboard' | 'script' | 'page' | 'revise', lang?: Lang, replyLang?: Lang) {
-  const reply = replyLang === 'en' ? '\n给用户的汇报用英文写。' : '';
-  if (lang !== 'en') return reply;
-  return '\n' + {
-    storyboard: '影片语言：**英文**。storyboard.json 写 `"lang": "en"`；title、summary、section、say 和拍点的 object / action / text 都用英文写：屏上字每个元素 ≤ 5 个英文单词，拍点 `at` 卡到词时写英文单词（`c2:thirty`）。',
-    script: '影片语言：**英文**。cue 是一句口语化的英文短句，≤ 12 个单词，一页 3–8 句；数字写阿拉伯数字（1,000、30%），口播里怎么念就怎么写单位（years、dollars）。',
-    page: '本片是英文片：画面上所有的字（标题、标签、数字的单位）都用英文写，与口播一致；英文比中文长，给文字留够宽度。',
-    revise: '本片是英文片：改口播时用英文写，句子数量不变；给画面 Agent 的修改说明用中文写即可。',
-  }[stage] + reply;
+const LANG_NAME: Record<Lang, string> = { zh: 'Simplified Chinese', en: 'English' };
+/** the language everything said to the user is written in: the user's own, never the prompts' */
+export const replyNote = (replyLang?: Lang, lang?: Lang) => `Write everything you say to the user in ${LANG_NAME[replyLang ?? lang ?? 'zh']}.`;
+
+/** What a stage must know about the language: the film's (narration, on-screen text) and the user's (the reports). It goes
+ *  in the user messages, never the system prompts, so every film shares the cached part whatever its language. */
+export function langNote(stage: 'storyboard' | 'script' | 'page' | 'revise', lang: Lang = 'zh', replyLang?: Lang) {
+  const film = {
+    zh: {
+      storyboard: 'Film language: **Chinese**. In storyboard.json write `"lang": "zh"`; write title, summary, section, say and each beat\'s object / action / text in Simplified Chinese: on-screen text at most 8 characters per element, and a beat tied to a word names the Chinese word as spoken (`c2:三十年`).',
+      script: 'Film language: **Chinese**. A cue is one short spoken sentence in Simplified Chinese, at most 16 characters, 3–8 per page; write numbers in Arabic digits and units as they are spoken (年, 元).',
+      page: 'This is a Chinese film: all text on screen (titles, labels, units) is in Simplified Chinese, matching the narration.',
+      revise: 'This is a Chinese film: rewrite narration in Simplified Chinese, keeping the number of cues; your notes to the page agent can be in English.',
+    },
+    en: {
+      storyboard: 'Film language: **English**. In storyboard.json write `"lang": "en"`; write title, summary, section, say and each beat\'s object / action / text in English: on-screen text at most 5 English words per element, and a beat tied to a word names the English word (`c2:thirty`).',
+      script: 'Film language: **English**. A cue is one short spoken English sentence, at most 12 words, 3–8 per page; write numbers in Arabic digits (1,000, 30%) and units as they are spoken (years, dollars).',
+      page: 'This is an English film: all text on screen (titles, labels, units) is in English, matching the narration. English runs longer than Chinese, so leave enough width for text.',
+      revise: 'This is an English film: rewrite narration in English, keeping the number of cues; your notes to the page agent can be in English.',
+    },
+  }[lang][stage];
+  // the page agent's one sentence is shown to the user too
+  return `\n${film}\n${replyNote(replyLang, lang)}`;
 }
 
 export function storyboardPrompt(brief: Brief, style: string, materials: string[]) {
   return [
-    '阶段 1：分镜。',
-    `用户需求：${materials.length ? '把资料做成' : '做'}一条约 ${Math.round(brief.durationSec / 60 * 10) / 10} 分钟的讲解视频。` + (brief.topic ? `主题：${brief.topic}。` : '') + (brief.audience ? `观众：${brief.audience}。` : ''),
-    materials.length ? '' : '没有资料：用你自己的知识来讲。只用公认、可核实的事实和数字，拿不准的就不写具体数字；屏上的每个数字都要写进对应页的 say 里（服务端会用 say 核对数字出处）。',
-    brief.notes ? `补充要求：${brief.notes}` : '',
-    `风格：${style}（storyboard.json 的 style 写 "${style}"）。`,
-    `资料：${materials.map((m) => 'materials/' + m).join('、') || '（无，按主题写）'}`,
-    '写好 storyboard.json 后停下汇报。' + langNote('storyboard', brief.lang, brief.replyLang),
+    'Stage 1: storyboard.',
+    `The request: ${materials.length ? 'turn the material into' : 'make'} an explainer film of about ${Math.round(brief.durationSec / 60 * 10) / 10} minutes.` + (brief.topic ? ` Topic: ${brief.topic}.` : '') + (brief.audience ? ` Audience: ${brief.audience}.` : ''),
+    materials.length ? '' : 'There is no material: explain it from your own knowledge. Use only well-established, checkable facts and numbers; when unsure, leave the number out. Every number on screen must also appear in that page\'s say (the server checks where numbers come from against say).',
+    brief.notes ? `Further notes from the user: ${brief.notes}` : '',
+    `Style: ${style} (write "${style}" as the style in storyboard.json).`,
+    `Material: ${materials.map((m) => 'materials/' + m).join(', ') || '(none; write from the topic)'}`,
+    'Stop and report once storyboard.json is written.' + langNote('storyboard', brief.lang, brief.replyLang),
   ].filter(Boolean).join('\n');
 }
 
-export function storyboardFixPrompt(issues: { level: string; page?: string; beat?: number; msg: string }[]) {
-  return ['服务端检查了 storyboard.json，下面这些问题要改（红色必须改，黄色酌情）：', ...issues.map((i) => `- [${i.level === 'red' ? '红' : '黄'}] ${i.page ?? '全片'}${i.beat != null ? ` 拍点${i.beat + 1}` : ''}：${i.msg}`), '改好后停下，一句话说明改了什么。'].join('\n');
+export function storyboardFixPrompt(issues: { level: string; page?: string; beat?: number; msg: string }[], brief?: Brief) {
+  return ['The server checked storyboard.json; fix the issues below (red must be fixed, yellow at your judgement):', ...issues.map((i) => `- [${i.level === 'red' ? 'red' : 'yellow'}] ${i.page ?? 'whole film'}${i.beat != null ? ` beat ${i.beat + 1}` : ''}: ${i.msg}`), 'Stop once fixed and say in one sentence what you changed. ' + replyNote(brief?.replyLang, brief?.lang)].join('\n');
 }
 
 export function scriptPrompt(feedback?: string, brief?: Brief) {
-  return [feedback ? `用户对分镜的修改意见：${feedback}\n先按意见改好 storyboard.json，再写口播。` : '用户已确认分镜，没有修改。', '阶段 2：写 script.js，运行 node engine/tools/script.mjs 看估算时长，然后停下汇报。' + langNote('script', brief?.lang, brief?.replyLang)].join('\n');
+  return [feedback ? `The user's changes to the storyboard: ${feedback}\nFirst update storyboard.json to match, then write the narration.` : 'The user approved the storyboard without changes.', 'Stage 2: write script.js, run node engine/tools/script.mjs to see the estimated length, then stop and report.' + langNote('script', brief?.lang, brief?.replyLang)].join('\n');
 }
 
-export function pagePrompt(sb: Storyboard, id: string, t: PageTiming, lang: Lang | undefined = sb.lang) {
+export function pagePrompt(sb: Storyboard, id: string, t: PageTiming, lang: Lang | undefined = sb.lang, replyLang?: Lang) {
   const p = sb.pages.find((x) => x.id === id);
   const outline = sb.pages.map((x) => `- ${x.id} ${x.section}`).join('\n');
-  return `你负责 **${id}** 这一页。
+  return `You own page **${id}**.
 
-全片：${sb.title} —— ${sb.summary}
-全片结构：
+The film: ${sb.title} — ${sb.summary}
+Its structure:
 ${outline}
 
-## 本页分镜
-- 章节：${p?.section ?? ''}
-- 讲什么：${p?.say ?? ''}
-- 核心镜头：${p?.core ? '是' : '否'}
-- 拍点：
-${(p?.beats || []).map((b, i) => `  ${i + 1}. [${b.at}] ${b.object} —— ${b.action}${b.camera ? `（镜头：${b.camera}）` : ''}${b.text ? `，屏上字「${b.text}」` : ''}`).join('\n')}
+## This page's storyboard
+- Section: ${p?.section ?? ''}
+- What it says: ${p?.say ?? ''}
+- Key page: ${p?.core ? 'yes' : 'no'}
+- Beats:
+${(p?.beats || []).map((b, i) => `  ${i + 1}. [${b.at}] ${b.object} — ${b.action}${b.camera ? ` (camera: ${b.camera})` : ''}${b.text ? `, on-screen text "${b.text}"` : ''}`).join('\n')}
 
-## 本页口播与时间（真实配音）
-本页长 ${(t.end - t.start).toFixed(2)}s，口播在 ${(t.speechEnd - t.start).toFixed(2)}s 结束（P.endT）。
-${t.cues.map((c) => `- c${c.i}：页内 ${c.at}s「${c.text}」`).join('\n')}
+## This page's narration and timing (real voice)
+The page lasts ${(t.end - t.start).toFixed(2)}s; its narration ends at ${(t.speechEnd - t.start).toFixed(2)}s (P.endT).
+${t.cues.map((c) => `- c${c.i}: at ${c.at}s in the page, "${c.text}"`).join('\n')}
 
-写好 pages/${id}.js 后停下，一句话说明你画了什么。${langNote('page', lang)}`;
+Stop once pages/${id}.js is written and say in one sentence what you drew.${langNote('page', lang, replyLang)}`;
 }
 
 export function checkPrompt(round: number, issues: LintIssue[], times: { t: number; local: number }[]) {
-  const lint = issues.length ? issues.map((i) => `- ${i.local}s：${i.msg}`).join('\n') : '（lint 没有发现问题）';
-  return `第 ${round} 轮检查。
+  const lint = issues.length ? issues.map((i) => `- ${i.local}s: ${i.msg}`).join('\n') : '(lint found nothing)';
+  return `Check round ${round}.
 
-lint 结果：
+Lint:
 ${lint}
 
-附图是本页在这些页内时刻的截图（从左到右、从上到下）：${times.map((x) => x.local.toFixed(1) + 's').join('、')}。
-对照清单认真看图。有问题就改好 pages 文件再停下；没有问题只回复 DONE；有意保留的问题回复 FLAGGED: 原因。
-改的时候用 edit 只改出问题的那几处（字号、位置、时间点），**不要用 write 重写整个文件**——整页重写要几分钟，一处 edit 只要几秒；改完不用再读一遍文件。
-**把这一轮的所有修改放在同一次回复里**（一次回复可以调用多次 edit），每个 edit 都带上 finish: true：改完这一轮就结束，不用再回复，系统会重新检查并截图给你看。`;
+The attached sheet shows the page at these moments within it (left to right, top to bottom): ${times.map((x) => x.local.toFixed(1) + 's').join(', ')}.
+Go through the checklist against the pictures. If something is wrong, fix the page file; if nothing is, reply only DONE; for a problem you keep on purpose, reply FLAGGED: <reason>.
+Fix with edit, only where the problem is (a size, a position, a moment). **Never rewrite the whole file with write**: a full rewrite takes minutes, one edit takes seconds. No need to read the file again afterwards.
+**Put all of this round's edits in one reply** (one reply can call edit several times), each with finish: true: the round ends once they apply, no reply needed, and the server checks again and sends you new pictures.`;
 }
 
-export function reviewPrompt(issues: LintIssue[], flagged: string[]) {
-  return `全部页面已完成，现在做**全片检查**（不是某一页）。附图是每页中段和结尾的截图，按页顺序排列。
-${issues.length ? '全片 lint 结果：\n' + issues.map((i) => `- ${i.page} ${i.local}s：${i.msg}`).join('\n') : 'lint 没有发现问题。'}
-${flagged.length ? '\n这些页自检后仍有问题：' + flagged.join('；') : ''}
+export function reviewPrompt(issues: LintIssue[], flagged: string[], replyLang?: Lang) {
+  return `All pages are done. Now check the **whole film** (not one page). The attached sheet shows each page in the middle and at the end, in page order.
+${issues.length ? 'Lint for the whole film:\n' + issues.map((i) => `- ${i.page} ${i.local}s: ${i.msg}`).join('\n') : 'Lint found nothing.'}
+${flagged.length ? '\nThese pages still had problems after their own checks: ' + flagged.join('; ') : ''}
 
-用 edit 改局部，不要重写整个页面文件。只修跨页的问题和明显的缺陷（风格不统一、某页明显空、文字出界或重叠），最多改 2 页；小瑕疵不改。改完停下，用一句大白话告诉用户改了哪一页、看起来有什么不同（比如「第 5 页的番茄钟在后半段会闪一下，已经修好」），不要用 lint、determinism、p05 这类术语；没有要改的就回复 DONE。`;
+Fix locally with edit; never rewrite a whole page file. Fix only problems across pages and obvious defects (styles that don't match, a page that is clearly empty, text off the page or overlapping), at most 2 pages; leave small blemishes. When done, stop and tell the user in one plain sentence which page you changed and how it looks different (e.g. "The timer on page 5 flickered in its second half; that's fixed"), without terms like lint, determinism or p05. If nothing needs changing, reply DONE. ${replyNote(replyLang)}`;
 }

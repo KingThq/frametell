@@ -1,4 +1,4 @@
-/* 黑板 */
+/* Chalkboard */
 :root { --ink: #F1ECE1; --soft: #CBC6BA; --muted: #929A92; --band-color: rgba(34, 46, 41, 0.97); }
 #frame { background: #223029; color: var(--ink); }
 #vignette { background: radial-gradient(ellipse 78% 72% at 50% 46%, transparent 55%, rgba(8, 12, 10, 0.42) 100%); }

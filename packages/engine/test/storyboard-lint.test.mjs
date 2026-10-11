@@ -21,18 +21,18 @@ test('a well-formed storyboard passes', () => {
 
 test('each red rule fires on a deliberately bad storyboard', () => {
   const cases = [
-    ['物只是版面词', (sb) => { sb.pages[1].beats[0].object = '三个卡片'; }, /版面词/],
-    ['空的物', (sb) => { sb.pages[1].beats[0].object = ''; }, /「物」是空的/],
-    ['万能动作', (sb) => { sb.pages[1].beats[0].action = '依次出现'; }, /万能词/],
-    ['屏上字超长', (sb) => { sb.pages[1].beats[0].text = '复利是世界第八大奇迹啊'; }, /个字/],
-    ['首页文字主导', (sb) => { sb.pages[0].beats = [beat('大标题', '写出来', '为什么要存钱'), beat('要点列表', '滑入')]; }, /第一页是文字主导/],
-    ['尾页金句卡', (sb) => { sb.pages[2].beats[1] = beat('金句', '浮现', '时间是朋友'); }, /最后一个拍点是文字|最后一页是文字主导/],
-    ['数字无出处', (sb) => { sb.pages[1].beats[1].text = '×25'; sb.pages[1].beats[0].text = '40 年'; }, /找不到出处/],
-    ['只有一个拍点', (sb) => { sb.pages[1].beats.pop(); }, /至少要有 2 个/],
-    ['画脸的角色', (sb) => { sb.pages[1].beats[0].object = '一个Q版小人'; }, /画脸的角色/],
-    ['缺风格', (sb) => { delete sb.style; }, /缺少 style/],
-    ['风格不存在', (sb) => { sb.style = 'neon-cyber'; }, /不存在/],
-    ['缺 cast', (sb) => { delete sb.cast; }, /缺少 cast/],
+    ['object is only a layout word', (sb) => { sb.pages[1].beats[0].object = '三个卡片'; }, /layout word/],
+    ['empty object', (sb) => { sb.pages[1].beats[0].object = ''; }, /object is empty/],
+    ['catch-all action', (sb) => { sb.pages[1].beats[0].action = '依次出现'; }, /catch-all word/],
+    ['on-screen text too long', (sb) => { sb.pages[1].beats[0].text = '复利是世界第八大奇迹啊'; }, /characters/],
+    ['text-led first page', (sb) => { sb.pages[0].beats = [beat('大标题', '写出来', '为什么要存钱'), beat('要点列表', '滑入')]; }, /first page is text-led/],
+    ['quote card on the last page', (sb) => { sb.pages[2].beats[1] = beat('金句', '浮现', '时间是朋友'); }, /last beat is text|last page is text-led/],
+    ['number without a source', (sb) => { sb.pages[1].beats[1].text = '×25'; sb.pages[1].beats[0].text = '40 年'; }, /has no source/],
+    ['only one beat', (sb) => { sb.pages[1].beats.pop(); }, /at least 2/],
+    ['character with a face', (sb) => { sb.pages[1].beats[0].object = '一个Q版小人'; }, /character with a face/],
+    ['missing style', (sb) => { delete sb.style; }, /missing style/],
+    ['unknown style', (sb) => { sb.style = 'neon-cyber'; }, /does not exist/],
+    ['missing cast', (sb) => { delete sb.cast; }, /missing cast/],
   ];
   for (const [name, mutate, re] of cases) {
     const sb = good(); mutate(sb);
@@ -44,23 +44,23 @@ test('text-dominated share above 30% is red', () => {
   const sb = good();
   sb.pages[1].beats = [beat('关键词', '写出', '复利'), beat('标题', '弹出', '时间')];
   sb.pages[2].beats.unshift(beat('文字', '淡入', '本金'));
-  assert.ok(reds(sb).some((m) => /文字主导的拍点占/.test(m)));
+  assert.ok(reds(sb).some((m) => /text-led beats are/.test(m)));
 });
 
 test('Chinese numerals in the source ground arabic numbers on screen', () => {
   const sb = good();
   sb.pages[1].beats[0].text = '60%';
-  assert.ok(reds(sb, { source: source + '大约百分之六十的人' }).every((m) => !/出处/.test(m)));
+  assert.ok(reds(sb, { source: source + '大约百分之六十的人' }).every((m) => !/has no source/.test(m)));
   sb.pages[1].beats[0].text = '2025 年';
-  assert.ok(reds(sb, { source: source + '二零二五年' }).every((m) => !/出处/.test(m)));
+  assert.ok(reds(sb, { source: source + '二零二五年' }).every((m) => !/has no source/.test(m)));
   sb.pages[1].beats[0].text = '3万';
-  assert.ok(reds(sb, { source: source + '三万元' }).every((m) => !/出处/.test(m)));
+  assert.ok(reds(sb, { source: source + '三万元' }).every((m) => !/has no source/.test(m)));
 });
 
 test('three identical cameras in a row is a yellow', () => {
   const sb = good();
   for (const p of sb.pages) for (const b of p.beats) b.camera = '推近';
-  assert.ok(msgs(sb).some((m) => m.startsWith('yellow') && /连续三个拍点/.test(m)));
+  assert.ok(msgs(sb).some((m) => m.startsWith('yellow') && /three beats in a row/.test(m)));
 });
 
 test('an English storyboard is held to the same rules, in English words', () => {
@@ -72,5 +72,5 @@ test('an English storyboard is held to the same rules, in English words', () => 
   assert.deepEqual(reds(sb), []);
   sb.pages[0].beats[0] = { at: 'c0', object: 'a big title card', action: 'appears', text: 'Compound interest is the eighth wonder of the world' };
   const r = reds(sb);
-  assert.ok(r.some((m) => /版面词/.test(m)) && r.some((m) => /万能词/.test(m)) && r.some((m) => /9 个单词/.test(m)), r.join('\n'));
+  assert.ok(r.some((m) => /layout word/.test(m)) && r.some((m) => /catch-all word/.test(m)) && r.some((m) => /9 words/.test(m)), r.join('\n'));
 });

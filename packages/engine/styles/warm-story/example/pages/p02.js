@@ -1,4 +1,4 @@
-/* p02 只存不投：硬币一枚接一枚落进罐子，水位匀速上涨，标签数到 360,000。 */
+/* p02 Saving without investing: coins drop into the jar one by one, the level rises steadily, the label counts to 360,000. */
 ENGINE.visual('p02', (P) => {
   P.title('一枚一枚地变多', { accent: 'orange' });
   P.ground(800, { at: 0 });

@@ -1,4 +1,4 @@
-/* p05 收束：左边描出一卷竹简，竖着写下「勾三股四弦五」，一条粉笔箭头从竹简拉到右边三角形的斜边，把 5 圈住。 */
+/* p05 Close: a bamboo scroll traced on the left with 「勾三股四弦五」 written down it; a chalk arrow runs from the scroll to the triangle's hypotenuse on the right and circles the 5. */
 ENGINE.visual('p05', (P) => {
   P.title('勾三股四弦五', { accent: 'yellow' });
   const t0 = P.c(0), t1 = P.c(1), t2 = P.c(2);

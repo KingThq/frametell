@@ -1,2 +1,2 @@
-/* 安静书房 (default): warm paper, ink line drawings, the runtime's own palette and background. */
+/* Quiet study (default): warm paper, ink line drawings, the runtime's own palette and background. */
 window.STYLE = { id: 'study' };

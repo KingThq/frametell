@@ -12,7 +12,7 @@ export interface SynthOptions {
   voice: string;
   /** -50..100 (Volcengine speech_rate); ElevenLabs maps it onto speed */
   rate?: number;
-  /** a tone instruction, e.g. 「像跟朋友分享一个发现，轻松真诚」 (Volcengine only) */
+  /** a tone instruction in the voice's language, e.g. relaxed and sincere, like sharing a find with a friend (Volcengine only) */
   instruction?: string;
   pitch?: number;
   signal?: AbortSignal;
@@ -57,7 +57,7 @@ export function volcengineTts(apiKey: string): TtsProvider {
         if (f.sentence?.words) words.push(...f.sentence.words);
         if (f.code && f.code !== 20000000) err = `code=${f.code} ${f.message ?? ''}`;
       }
-      if (res.status !== 200 || err || !chunks.length || !words.length) throw new Error(`火山 TTS ${res.status} ${err ?? '没有返回音频'}`);
+      if (res.status !== 200 || err || !chunks.length || !words.length) throw new Error(`Volcengine TTS ${res.status} ${err ?? 'returned no audio'}`);
       return { audio: Buffer.concat(chunks), words };
     }),
   };
@@ -78,7 +78,7 @@ export function elevenLabsTts(apiKey: string, model = 'eleven_multilingual_v2'):
       if (!res.ok) throw new Error(`ElevenLabs ${res.status} ${(await res.text()).slice(0, 200)}`);
       const j = (await res.json()) as { audio_base64: string; alignment?: { characters: string[]; character_start_times_seconds: number[]; character_end_times_seconds: number[] } };
       const a = j.alignment;
-      if (!a) throw new Error('ElevenLabs 没有返回时间戳');
+      if (!a) throw new Error('ElevenLabs returned no timestamps');
       const words = a.characters.map((ch, i) => ({ word: ch, startTime: a.character_start_times_seconds[i], endTime: a.character_end_times_seconds[i] }));
       return { audio: Buffer.from(j.audio_base64, 'base64'), words };
     }),

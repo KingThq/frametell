@@ -97,7 +97,7 @@
  *  logo(name, cx, cy, size, { at, dur, mono: colour key — only for single-colour simple-icons marks }) */
 PV.Builder.prototype.logo = function (name, cx, cy, size = 100, o = {}) {
   const L = (window.PV.LOGOS || {})[name];
-  if (!L) throw new Error(`logo "${name}" 不存在：先在项目目录运行 node engine/tools/logos.mjs ${name}，并在 META.extras 里登记 extras/logos.js`);
+  if (!L) throw new Error(`logo "${name}" does not exist: run node engine/tools/logos.mjs ${name} in the project directory first and register extras/logos.js in META.extras`);
   const el = PV.h('div', 'logo', L.svg, this.html);
   Object.assign(el.style, { position: 'absolute', left: cx - size / 2 + 'px', top: cy - size / 2 + 'px', width: size + 'px', height: size + 'px' });
   const svg = el.firstChild;

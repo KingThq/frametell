@@ -1,4 +1,4 @@
-/* p04 过期：副本格下长出青色寿命条；响应头代码卡逐行打出、max-age 那行高亮；寿命条缩到零、副本变灰，下一个请求穿过缓存奔向源站。 */
+/* p04 Expiry: a teal lifetime bar grows under the copy cell; a response-header code card types out line by line with the max-age line highlighted; the bar shrinks to zero, the copy greys out, and the next request passes through the cache to the origin. */
 ENGINE.visual('p04', (P) => {
   P.title('副本会过期', { accent: 'orange' });
   const { clamp, ease } = PV, N = PV.NET;

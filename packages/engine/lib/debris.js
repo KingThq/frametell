@@ -1,10 +1,10 @@
-/* Marks and boxes: a small 「示意」 tag for made-up examples and illustrative numbers (demo), a layer that drops off the page like
+/* Marks and boxes: a small "示意" ("illustrative") tag for made-up examples and illustrative numbers (demo), a layer that drops off the page like
  * debris (fall), a server / container box with a heading (srv) and a square-wave blinker for status lights (PV.blink). Pure in lt. */
 (function () {
   const { clamp, ease, Builder } = PV;
   const B = Builder.prototype;
 
-  /** demo(x, y, o) — a small muted "示意" tag (for made-up examples and illustrative numbers). o: { at, label, w } */
+  /** demo(x, y, o) — a small muted "示意" ("illustrative") tag (for made-up examples and illustrative numbers). o: { at, label, w } */
   B.demo = function (x, y, o = {}) {
     const label = o.label ?? '示意';
     return this.chip(x, y, o.w ?? Math.max(90, label.length * 26 + 30), label, { color: 'muted', h: 42, size: 24, at: o.at ?? 0 });

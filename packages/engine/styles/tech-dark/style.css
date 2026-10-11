@@ -1,4 +1,4 @@
-/* 科技深色 */
+/* Tech dark */
 :root { --ink: #E8E6E1; --soft: #A9ADB1; --muted: #73797F; --band-color: rgba(21, 23, 26, 0.97);
   --latin: 'JetBrains Mono', 'SF Mono', monospace; }
 #frame { background: #15171A; color: var(--ink); }

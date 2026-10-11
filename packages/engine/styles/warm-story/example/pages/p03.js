@@ -1,4 +1,4 @@
-/* p03 复利：一颗小雪球从坡顶滚下，越滚越大，冲到坡底停住。 */
+/* p03 Compounding: a small snowball rolls from the top of the slope, growing as it goes, and comes to rest at the bottom. */
 ENGINE.visual('p03', (P) => {
   P.title('收益也会生钱', { accent: 'blue' });
   const X0 = 220, Y0 = 430, X1 = 1720, Y1 = 800;

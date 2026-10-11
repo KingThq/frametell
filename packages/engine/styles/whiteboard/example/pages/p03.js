@@ -1,4 +1,4 @@
-/* p03 休息：时间线上一个番茄接一小段绿色休息格，再画出后面三个，上方括起来写 ×4，末端拉出一段 15–30 的长休息格，上面一杯茶。 */
+/* p03 Breaks: on a timeline, one tomato followed by a short green break cell, then three more, bracketed above with ×4; at the end a long 15–30 break cell stretches out with a cup of tea on it. */
 ENGINE.visual('p03', (P) => {
   P.title('四个番茄，一次长休', { accent: 'green' });
   const t0 = P.c(0), t1 = P.c(1), t2 = P.c(2);

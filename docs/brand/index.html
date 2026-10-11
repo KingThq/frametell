@@ -3,19 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>画说 · Frametell 品牌手册</title>
+<title>画说 · Frametell brand guide</title>
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Noto+Serif+SC:wght@700;900&display=swap">
 <style>
-/* 布局：一列 1080px 的手册，每节「左侧小标题 + 右侧内容」，物料按真实比例摆放 */
+/* layout: a single 1080px column; each section is "small heading on the left + content on the right", assets shown at true proportions */
 :root {
   --paper: #F5F5F0; --paper-2: #EFECE4; --surface: #FFFFFF;
   --ink: #1C1917; --ink-2: #57534E; --ink-3: #7A736C;
   --line: #E7E5E2; --line-2: #D6D3CF;
   --accent: #D4A574; --accent-ink: #9C6A3A;
-  /* 标志颜色：角框 / 圆点 */
+  /* mark colours: corners / dot */
   --mb: #1C1917; --ma: #D4A574;
   --f-cn: "Noto Serif SC", "Songti SC", "STSong", serif;
   --f-ui: Inter, "PingFang SC", "Hiragino Sans GB", system-ui, sans-serif;
@@ -56,13 +56,13 @@ p { margin: 0; }
 .btn-ghost { font: 500 12px var(--f-ui); color: var(--ink-2); background: var(--surface); border: 1px solid var(--line-2); border-radius: 10px; padding: 6px 12px; cursor: pointer; }
 .btn-ghost:hover { color: var(--ink); }
 
-/* 字标：中文为主，英文退成小号、字距放宽的大写，中间一条细线 */
+/* wordmark: Chinese leads, English steps back to a small size, separated by a hairline */
 .lockup { display: inline-flex; align-items: center; gap: .5em; line-height: 1; white-space: nowrap; }
 .lockup svg { flex-shrink: 0; }
 .cn { font-family: var(--f-cn); font-weight: 700; letter-spacing: .06em; color: var(--ink); }
 .lockup .en { font: 600 .36em var(--f-ui); letter-spacing: -.005em; color: var(--ink-3); border-left: 1px solid var(--line-2); padding: .35em 0 .35em .9em; }
 .lockup .by { font: 500 .24em var(--f-ui); letter-spacing: .18em; color: var(--ink-3); text-transform: uppercase; margin-left: .3em; }
-/* 「画说」纯字标：引号就是取景框的两个角 */
+/* the 「画说」 wordmark alone: the quotation marks are the two corners of the viewfinder */
 .qw { display: inline-flex; align-items: center; gap: .04em; line-height: 1; white-space: nowrap; }
 .qw svg { width: .5em; height: 1.2em; flex-shrink: 0; }
 
@@ -163,7 +163,7 @@ section > header p { margin-top: 6px; color: var(--ink-3); font-size: 13px; }
 
 .screen { width: 100%; aspect-ratio: 16 / 9; border-radius: 12px; border: 1px solid var(--line); overflow: hidden; position: relative; max-width: 100%; container-type: inline-size; }
 
-/* 片头：两只角从画外合拢成取景框 → 圆点亮起（开始录）→ 字标 */
+/* opening: the two corners close in from off-frame into a viewfinder → the dot lights up (recording) → wordmark */
 .bumper { background: #0C0A09; display: grid; place-items: center; --mb: #F5F5F0; --ma: #E0B88A; }
 .bumper .row { display: flex; align-items: center; gap: 3cqw; }
 .bumper svg { width: 10cqw; height: auto; overflow: visible; }
@@ -186,7 +186,7 @@ section > header p { margin-top: 6px; color: var(--ink-3); font-size: 13px; }
   @keyframes fadeOnly { from { opacity: 0; } to { opacity: 1; } }
 }
 
-/* 片尾 */
+/* closing card */
 .endcard { background: #F5F5F0; color: #1C1917; display: grid; grid-template-columns: 1.1fr 1fr; --mb: #1C1917; --ma: #D4A574; }
 .endcard .l { padding: 7cqw 0 7cqw 7cqw; display: flex; flex-direction: column; justify-content: space-between; }
 .endcard .k { font: 500 1.5cqw var(--f-ui); letter-spacing: .14em; color: #7A736C; }
@@ -204,7 +204,7 @@ section > header p { margin-top: 6px; color: var(--ink-3); font-size: 13px; }
 .endcard .wm svg { width: 2.6cqw; height: auto; }
 .endcard .wm .cn { font-size: 1.9cqw; color: #1C1917; }
 
-/* 视频角标 */
+/* video corner bug */
 .corner { background: #E9DFCC; }
 .corner .art { position: absolute; inset: 0; display: grid; place-items: center; }
 .corner .art p { font: 900 5cqw/1.4 var(--f-cn); color: #2B2622; text-align: center; letter-spacing: .06em; }
@@ -216,7 +216,7 @@ section > header p { margin-top: 6px; color: var(--ink-3); font-size: 13px; }
 
 .banner-img { width: 100%; height: auto; border-radius: 12px; border: 1px solid var(--line); display: block; }
 
-/* 引用卡片：「」延展到画面里的引文 */
+/* quote card: 「」 extended to a quotation in the frame */
 .quote { background: #1C1917; display: grid; place-items: center; }
 .quote .q { position: relative; width: 70%; padding: 4cqw 5cqw; }
 .quote .q p { font: 700 3.4cqw/1.6 var(--f-cn); color: #F5F5F4; letter-spacing: .04em; }
@@ -238,7 +238,7 @@ footer { border-top: 1px solid var(--line); padding-block: 28px 48px; color: var
 <body>
 
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
-  <!-- 标志：「」既是中文引号，也是取景框的两个角；中间一点是录制中 -->
+  <!-- the mark: 「」 are both Chinese quotation marks and the two corners of a viewfinder; the dot in the middle means recording -->
   <symbol id="m" viewBox="0 0 64 64">
     <path style="fill:var(--mb)" d="M8 8H31V14.5H14.5V31H8Z"/>
     <path style="fill:var(--mb)" d="M56 56H33V49.5H49.5V33H56Z"/>
@@ -258,8 +258,8 @@ footer { border-top: 1px solid var(--line); padding-block: 28px 48px; color: var
     <div class="inner">
       <span class="lockup" style="font-size:17px"><svg width="22" height="22"><use href="#m"/></svg><span class="cn">画说</span></span>
       <span style="display:flex;align-items:center;gap:12px">
-        <span class="cap mono">品牌手册 v0.2 · 2026-10</span>
-        <button class="btn-ghost" id="theme-toggle" type="button">切换深浅色</button>
+        <span class="cap mono">Brand guide v0.2 · 2026-10</span>
+        <button class="btn-ghost" id="theme-toggle" type="button">Toggle light / dark</button>
       </span>
     </div>
   </div>
@@ -271,31 +271,31 @@ footer { border-top: 1px solid var(--line); padding-block: 28px 48px; color: var
   </div>
 
   <section>
-    <header><h2>名字</h2><p>中文和英文说的是同一件事</p></header>
+    <header><h2>Name</h2><p>The Chinese and the English say the same thing</p></header>
     <div class="body">
       <div class="cards2">
         <div class="card">
-          <span class="k">中文</span>
+          <span class="k">Chinese</span>
           <span class="cn" style="font-size:40px;line-height:1.1">画说</span>
           <div class="eq"><b>话说</b><span>→</span><b>画说</b></div>
-          <p class="prose">“话说天下大势……”是说书人开场的第一句。把“话”换成“画”，就是这个产品在做的事：<strong>让画面开口讲</strong>。</p>
+          <p class="prose">“话说天下大势……” (“the story goes: the great affairs of the realm…”) is how a traditional storyteller opens. Swap 话 (speech) for 画 (picture) and you have what this product does: <strong>pictures that speak</strong>.</p>
         </div>
         <div class="card">
           <span class="k">English</span>
           <span style="font:600 30px var(--f-ui);letter-spacing:-.01em;line-height:1.4">Frametell</span>
           <div class="eq"><i>frame</i><span>=</span><b>画</b><span>·</span><i>tell</i><span>=</span><b>说</b></div>
-          <p class="prose">frame 是取景框，也是画面里的一帧；tell 是讲。<strong>框住一个画面，把它讲清楚</strong>。名字和标志说的是同一件事：「」就是那个 frame。英语里 frame story（框架叙事）也是讲故事的说法。</p>
+          <p class="prose">A frame is a viewfinder, and also one frame of a picture; to tell is to explain. <strong>Frame a picture and tell it clearly.</strong> The name and the mark say the same thing: 「」 is that frame. In English, a frame story is also a way of telling a story.</p>
         </div>
       </div>
-      <p class="prose">中文语境写“画说”，英文语境写“Frametell”，两个都出现时中文在前。背书 <strong>by Sitor Team</strong> 只出现在完整组合、片尾和 README 里。</p>
+      <p class="prose">Write “画说” in Chinese contexts and “Frametell” in English ones; when both appear, Chinese comes first. The endorsement <strong>by Sitor Team</strong> appears only in the full lockup, the closing card and the README.</p>
     </div>
   </section>
 
   <section>
-    <header><h2>标志</h2><p>引号是“说”，取景框是“画”</p></header>
+    <header><h2>Mark</h2><p>The quotation marks are “tell”, the viewfinder is “frame”</p></header>
     <div class="body">
       <div class="construct">
-        <svg viewBox="0 0 64 64" role="img" aria-label="标志结构图">
+        <svg viewBox="0 0 64 64" role="img" aria-label="Construction of the mark">
           <defs><pattern id="grid" width="4" height="4" patternUnits="userSpaceOnUse"><path d="M4 0H0V4" fill="none" style="stroke:var(--line)" stroke-width=".2"/></pattern></defs>
           <rect width="64" height="64" fill="url(#grid)"/>
           <use href="#m"/>
@@ -313,15 +313,15 @@ footer { border-top: 1px solid var(--line); padding-block: 28px 48px; color: var
           </g>
         </svg>
         <ol>
-          <li><strong>两只角。</strong>左上「、右下」，既是中文引号，也是取景框的两个角。笔画 6.5，臂长 23，都落在 48 × 48 的方格里。</li>
-          <li><strong>一个点。</strong>中间焦糖色的圆点，是录制中的指示灯，也是画面的焦点。圆点外留出一圈空白（虚线），不能贴到角上。</li>
-          <li><strong>只有两种颜色。</strong>角用墨色或纸色，点用焦糖色。不加渐变、描边、投影。</li>
+          <li><strong>Two corners.</strong> 「 top left and 」 bottom right: both Chinese quotation marks and the two corners of a viewfinder. Stroke 6.5, arm length 23, all within a 48 × 48 grid.</li>
+          <li><strong>One dot.</strong> The caramel dot in the middle is the recording light and the focus of the picture. Keep a ring of clear space around it (dashed) so it never touches the corners.</li>
+          <li><strong>Only two colours.</strong> Corners in ink or paper, the dot in caramel. No gradients, outlines or drop shadows.</li>
         </ol>
       </div>
       <div class="tiles">
-        <div class="tile light"><svg viewBox="0 0 64 64"><use href="#m"/></svg><span class="label">浅底 · #1C1917 + #D4A574</span></div>
-        <div class="tile dark"><svg viewBox="0 0 64 64"><use href="#m"/></svg><span class="label">深底 · #F5F5F0 + #E0B88A</span></div>
-        <div class="tile caramel"><svg viewBox="0 0 64 64"><use href="#m"/></svg><span class="label">焦糖底 · #1C1917 + #F5F5F0</span></div>
+        <div class="tile light"><svg viewBox="0 0 64 64"><use href="#m"/></svg><span class="label">On light · #1C1917 + #D4A574</span></div>
+        <div class="tile dark"><svg viewBox="0 0 64 64"><use href="#m"/></svg><span class="label">On dark · #F5F5F0 + #E0B88A</span></div>
+        <div class="tile caramel"><svg viewBox="0 0 64 64"><use href="#m"/></svg><span class="label">On caramel · #1C1917 + #F5F5F0</span></div>
         <div class="tile" style="background:var(--surface)">
           <div class="sizes">
             <figure><svg width="16" height="16"><use href="#m-sm"/></svg><figcaption>16</figcaption></figure>
@@ -330,78 +330,78 @@ footer { border-top: 1px solid var(--line); padding-block: 28px 48px; color: var
             <figure><svg width="48" height="48"><use href="#m"/></svg><figcaption>48</figcaption></figure>
             <figure><svg width="72" height="72"><use href="#m"/></svg><figcaption>72</figcaption></figure>
           </div>
-          <span class="label" style="color:var(--ink-3)">24px 及以下用小尺寸版：笔画加粗，圆点放大</span>
+          <span class="label" style="color:var(--ink-3)">At 24px and below, use the small-size version: heavier strokes, a larger dot</span>
         </div>
       </div>
     </div>
   </section>
 
   <section>
-    <header><h2>组合</h2><p>按场合挑一个，别临时拼</p></header>
+    <header><h2>Lockups</h2><p>Pick one for the occasion; don't improvise</p></header>
     <div class="body">
       <div class="lockups">
         <div class="lk wide">
           <div class="stage"><span class="lockup" style="font-size:48px"><svg width="50" height="50"><use href="#m"/></svg><span class="cn">画说</span><span class="en">Frametell</span><span class="by">by Sitor Team</span></span></div>
-          <span class="cap">完整组合：官网、README、发布会、对外介绍</span>
+          <span class="cap">Full lockup: website, README, launches, external introductions</span>
         </div>
         <div class="lk">
           <div class="stage"><span class="qw cn" style="font-size:54px"><svg viewBox="0 0 20 48"><use href="#q-open"/></svg>画说<svg viewBox="0 0 20 48"><use href="#q-close"/></svg></span></div>
-          <span class="cap">纯字标「画说」：引号本身就是标志。海报、片尾、社交封面</span>
+          <span class="cap">Wordmark 「画说」 alone: the quotation marks are the mark. Posters, closing cards, social covers</span>
         </div>
         <div class="lk">
           <div class="stage"><span class="stacked"><svg width="60" height="60"><use href="#m"/></svg><span class="cn">画说</span><span class="en">Frametell</span></span></div>
-          <span class="cap">竖排：方形位置、启动页</span>
+          <span class="cap">Stacked: square spaces, splash screens</span>
         </div>
         <div class="lk">
           <div class="stage"><span class="lockup" style="font-size:36px"><svg width="38" height="38"><use href="#m"/></svg><span class="cn">画说</span></span></div>
-          <span class="cap">只用中文：应用顶栏、国内平台、视频角标</span>
+          <span class="cap">Chinese only: the app's top bar, Chinese platforms, the video corner bug</span>
         </div>
         <div class="lk">
           <div class="stage"><span class="lockup" style="font-size:36px"><svg width="38" height="38"><use href="#m"/></svg><span style="font:600 26px var(--f-ui);letter-spacing:-.01em;color:var(--ink)">Frametell</span></span></div>
-          <span class="cap">只用英文：海外、GitHub、英文界面</span>
+          <span class="cap">English only: outside China, GitHub, the English interface</span>
         </div>
       </div>
     </div>
   </section>
 
   <section>
-    <header><h2>色彩</h2><p>沿用 Ink &amp; Paper，焦糖色只给圆点和主操作</p></header>
+    <header><h2>Colour</h2><p>Ink &amp; Paper; caramel only for the dot and the primary action</p></header>
     <div class="body">
       <div class="swatches">
-        <div class="sw"><div class="chip" style="background:#1C1917"></div><div class="meta"><b>墨</b><span>#1C1917</span></div></div>
-        <div class="sw"><div class="chip" style="background:#0C0A09"></div><div class="meta"><b>夜</b><span>#0C0A09</span></div></div>
-        <div class="sw"><div class="chip" style="background:#F5F5F0"></div><div class="meta"><b>纸</b><span>#F5F5F0</span></div></div>
-        <div class="sw"><div class="chip" style="background:#E0B88A"></div><div class="meta"><b>焦糖 · 亮</b><span>#E0B88A · 深底</span></div></div>
-        <div class="sw"><div class="chip" style="background:#D4A574"></div><div class="meta"><b>焦糖</b><span>#D4A574 · 浅底</span></div></div>
-        <div class="sw"><div class="chip" style="background:#9C6A3A"></div><div class="meta"><b>焦糖 · 字</b><span>#9C6A3A · 浅底文字</span></div></div>
+        <div class="sw"><div class="chip" style="background:#1C1917"></div><div class="meta"><b>Ink</b><span>#1C1917</span></div></div>
+        <div class="sw"><div class="chip" style="background:#0C0A09"></div><div class="meta"><b>Night</b><span>#0C0A09</span></div></div>
+        <div class="sw"><div class="chip" style="background:#F5F5F0"></div><div class="meta"><b>Paper</b><span>#F5F5F0</span></div></div>
+        <div class="sw"><div class="chip" style="background:#E0B88A"></div><div class="meta"><b>Caramel · bright</b><span>#E0B88A · on dark</span></div></div>
+        <div class="sw"><div class="chip" style="background:#D4A574"></div><div class="meta"><b>Caramel</b><span>#D4A574 · on light</span></div></div>
+        <div class="sw"><div class="chip" style="background:#9C6A3A"></div><div class="meta"><b>Caramel · text</b><span>#9C6A3A · text on light</span></div></div>
       </div>
     </div>
   </section>
 
   <section>
-    <header><h2>字体</h2><p>品牌字只用在字标和大标题</p></header>
+    <header><h2>Type</h2><p>Brand faces only in the wordmark and large headlines</p></header>
     <div class="body">
       <div class="type-rows">
-        <div class="type-row"><span class="cap">中文字标</span><span class="sample cn" style="font-size:36px">画说万物</span></div>
-        <div class="type-row"><span class="cap">英文字标</span><span class="sample" style="font:600 26px var(--f-ui);letter-spacing:-.01em">Frametell</span></div>
-        <div class="type-row"><span class="cap">界面正文</span><span class="sample" style="font-size:15px">导演 Agent 先出分镜给你确认，再写口播、配音、逐页画面并自检。<br>The director drafts a storyboard for your sign-off, then draws every page.</span></div>
-        <div class="type-row"><span class="cap">数字</span><span class="sample mono" style="font-size:15px">¥ 3.42 · 04:36 · 128,400 tokens</span></div>
+        <div class="type-row"><span class="cap">Chinese wordmark</span><span class="sample cn" style="font-size:36px">画说万物</span></div>
+        <div class="type-row"><span class="cap">English wordmark</span><span class="sample" style="font:600 26px var(--f-ui);letter-spacing:-.01em">Frametell</span></div>
+        <div class="type-row"><span class="cap">Interface body</span><span class="sample" style="font-size:15px">导演 Agent 先出分镜给你确认，再写口播、配音、逐页画面并自检。<br>The director drafts a storyboard for your sign-off, then draws every page.</span></div>
+        <div class="type-row"><span class="cap">Numbers</span><span class="sample mono" style="font-size:15px">¥ 3.42 · 04:36 · 128,400 tokens</span></div>
       </div>
-      <p class="prose cap">中文 Noto Serif SC Bold，英文字标 Inter SemiBold 大写、字距 0.26em，界面 Inter + PingFang SC，数字 JetBrains Mono。</p>
+      <p class="prose cap">Chinese: Noto Serif SC Bold. English wordmark: Inter SemiBold. Interface: Inter + PingFang SC. Numbers: JetBrains Mono.</p>
     </div>
   </section>
 
   <section>
-    <header><h2>物料</h2><p>按真实比例摆放</p></header>
+    <header><h2>Assets</h2><p>Shown at true proportions</p></header>
     <div class="body">
       <div class="goods">
-        <div class="good"><div class="stage"><div class="appicon ink"><svg viewBox="0 0 64 64"><use href="#m"/></svg></div></div><span class="cap"><span>App 图标 · 墨底</span><span class="mono">frametell-app-icon.svg</span></span></div>
-        <div class="good"><div class="stage"><div class="appicon car"><svg viewBox="0 0 64 64"><use href="#m"/></svg></div></div><span class="cap"><span>App 图标 · 焦糖底（备选）</span></span></div>
-        <div class="good"><div class="stage"><div class="avatar"><svg viewBox="0 0 64 64"><use href="#m"/></svg></div></div><span class="cap"><span>社交头像</span></span></div>
+        <div class="good"><div class="stage"><div class="appicon ink"><svg viewBox="0 0 64 64"><use href="#m"/></svg></div></div><span class="cap"><span>App icon · ink ground</span><span class="mono">frametell-app-icon.svg</span></span></div>
+        <div class="good"><div class="stage"><div class="appicon car"><svg viewBox="0 0 64 64"><use href="#m"/></svg></div></div><span class="cap"><span>App icon · caramel ground (alternative)</span></span></div>
+        <div class="good"><div class="stage"><div class="avatar"><svg viewBox="0 0 64 64"><use href="#m"/></svg></div></div><span class="cap"><span>Social avatar</span></span></div>
 
         <div class="good w3">
           <div class="stage" style="aspect-ratio:auto;padding:28px 20px 0;align-items:end"><div class="tabbar"><svg width="16" height="16"><use href="#m-sm"/></svg><span>画说 · 宋朝的钱为什么不够用</span><span class="x">×</span></div></div>
-          <span class="cap"><span>浏览器标签</span><span class="mono">favicon.svg</span></span>
+          <span class="cap"><span>Browser tab</span><span class="mono">favicon.svg</span></span>
         </div>
         <div class="good w3">
           <div class="stage" style="aspect-ratio:auto;padding:24px 16px">
@@ -411,7 +411,7 @@ footer { border-top: 1px solid var(--line); padding-block: 28px 48px; color: var
               <span class="right"><span class="mono hide-sm">¥ 3.42</span><span class="btn">导出</span></span>
             </div>
           </div>
-          <span class="cap"><span>应用顶栏 · 52px，英文界面换成 Frametell</span></span>
+          <span class="cap"><span>App top bar · 52px; Frametell in the English interface</span></span>
         </div>
 
         <div class="good w6">
@@ -425,7 +425,7 @@ footer { border-top: 1px solid var(--line); padding-block: 28px 48px; color: var
               <div class="words"><span class="cn">画说</span><span class="en">Frametell</span></div>
             </div>
           </div>
-          <span class="cap"><span>片头 · 1.8 秒：两只角从画外合拢 → 圆点亮起，开始录 → 字标</span><button class="btn-ghost" id="replay" type="button">重播</button></span>
+          <span class="cap"><span>Opening · 1.8 s: the corners close in from off-frame → the dot lights up, recording → wordmark</span><button class="btn-ghost" id="replay" type="button">Replay</button></span>
         </div>
 
         <div class="good w6">
@@ -438,7 +438,7 @@ footer { border-top: 1px solid var(--line); padding-block: 28px 48px; color: var
             <div class="r"><div class="next"><span class="nc tl"></span><span class="nc br"></span><div class="play"></div><span>12:08</span></div></div>
             <div class="wm"><svg viewBox="0 0 64 64"><use href="#m"/></svg><span class="cn">画说</span></div>
           </div>
-          <span class="cap"><span>片尾 · 1920 × 1080：下一期用取景框框住，右下角署名，导出时可关闭</span></span>
+          <span class="cap"><span>Closing card · 1920 × 1080: next episode framed by the viewfinder, credit bottom right, can be turned off on export</span></span>
         </div>
 
         <div class="good w3">
@@ -447,48 +447,48 @@ footer { border-top: 1px solid var(--line); padding-block: 28px 48px; color: var
             <div class="bug"><svg viewBox="0 0 64 64"><use href="#m-sm"/></svg><span>画说</span></div>
             <div class="sub">朝廷发现，铜不够用了。</div>
           </div>
-          <span class="cap"><span>视频角标 · 右上，80% 不透明度</span></span>
+          <span class="cap"><span>Video corner bug · top right, 80% opacity</span></span>
         </div>
         <div class="good w3">
           <div class="screen quote">
             <div class="q"><span class="qc tl"></span><span class="qc br"></span>
-              <p>铜钱铸得越多，市面上反而越少。</p><small>示例引文 · 引用卡片样式</small>
+              <p>铜钱铸得越多，市面上反而越少。</p><small>Sample quotation · quote-card style</small>
             </div>
           </div>
-          <span class="cap"><span>引用卡片 · 「」延展到画面里的引文</span></span>
+          <span class="cap"><span>Quote card · 「」 extended to a quotation in the frame</span></span>
         </div>
 
         <div class="good w6">
           <picture>
             <source media="(prefers-color-scheme: dark)" srcset="readme/banner-zh-dark.png">
-            <img class="banner-img" src="readme/banner-zh-light.png" alt="画说 README 横幅">
+            <img class="banner-img" src="readme/banner-zh-light.png" alt="画说 · Frametell README banner">
           </picture>
-          <span class="cap"><span>GitHub README 横幅 · 1280 × 640 @2x，中英文 × 深浅色四版，源文件 banner.html</span><span class="mono">readme/</span></span>
+          <span class="cap"><span>GitHub README banner · 1280 × 640 @2x, four versions (Chinese / English × light / dark), source banner.html</span><span class="mono">readme/</span></span>
         </div>
       </div>
     </div>
   </section>
 
   <section>
-    <header><h2>用法</h2><p>几条底线</p></header>
+    <header><h2>Usage</h2><p>A few hard lines</p></header>
     <div class="body">
       <div class="rules">
         <div class="rule">
-          <h3><span class="dot" style="background:#3E8E5E"></span>这样用</h3>
+          <h3><span class="dot" style="background:#3E8E5E"></span>Do</h3>
           <ul>
-            <li>标志四周至少留出一只角的笔画宽度（约标志宽度的 1/8）。</li>
-            <li>两只角永远是左上、右下，和中文引号的方向一致。</li>
-            <li>24px 及以下换小尺寸版。</li>
-            <li>画面里的引文、取景、焦点提示，可以借用「」两只角的语言。</li>
+            <li>Leave clear space round the mark of at least one corner's stroke width (about 1/8 of the mark's width).</li>
+            <li>The corners are always top left and bottom right, matching the direction of Chinese quotation marks.</li>
+            <li>At 24px and below, switch to the small-size version.</li>
+            <li>Quotations, framing and focus cues in the picture may borrow the language of the 「」 corners.</li>
           </ul>
         </div>
         <div class="rule">
-          <h3><span class="dot" style="background:#C0442B"></span>别这样用</h3>
+          <h3><span class="dot" style="background:#C0442B"></span>Don't</h3>
           <ul>
-            <li>不补成四只角：四角就成了扫码框，“引号”这层意思没了。</li>
-            <li>不把圆点换成三角播放键，不给圆点换颜色。</li>
-            <li>不加渐变、发光、描边、投影。</li>
-            <li>英文名永远写成 Frametell：只有首字母大写，任何地方都不写成全大写的 FRAMETELL。不写成“画说 Studio”或“Frametell AI”；“by Sitor Team”不进界面顶栏和视频角标。</li>
+            <li>Don't complete it to four corners: four corners make a QR-code scanner frame and lose the quotation-mark meaning.</li>
+            <li>Don't turn the dot into a triangular play button or change its colour.</li>
+            <li>No gradients, glows, outlines or drop shadows.</li>
+            <li>The English name is always written Frametell: only the first letter capitalised, never FRAMETELL in all capitals anywhere. Never “画说 Studio” or “Frametell AI”; “by Sitor Team” never goes in the interface's top bar or the video corner bug.</li>
           </ul>
         </div>
       </div>
@@ -497,7 +497,7 @@ footer { border-top: 1px solid var(--line); padding-block: 28px 48px; color: var
 
   <footer>
     <span>画说 · Frametell · by <a href="https://sitor.ai">Sitor Team</a> · frametell.ai</span>
-    <span class="mono">docs/brand · v0.2 · 商标与域名待查</span>
+    <span class="mono">docs/brand · v0.2 · trademark and domain checks pending</span>
   </footer>
 </div>
 

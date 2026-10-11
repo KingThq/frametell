@@ -10,38 +10,38 @@ web
 
 ## Users
 
-第一优先是**知识创作者**：讲投资、心理学、历史、科学、读书、技术的人。他们手里有资料（文档、PDF、PPT、图片、一段 Markdown），想把它变成一条 1–10 分钟、画面会动、可以直接发布的讲解视频。
+First priority is **knowledge creators**: people who explain investing, psychology, history, science, books or technology. They have material (documents, PDFs, slides, images, a page of Markdown) and want to turn it into a 1–10 minute explainer video that moves and is ready to publish.
 
-他们在自己的电脑上安装 Frametell，通常在一段专注的时间里使用：把资料交给导演 Agent，看着它一步步做，在分镜这样的关键节点拍板，最后拿到成片、字幕和发布信息。他们不碰代码，也不想调参数。
+They install Frametell on their own computer and usually use it in a focused session: hand the material to the director agent, watch it work step by step, sign off at key moments such as the storyboard, and come away with the film, subtitles and publishing notes. They don't touch code and don't want to tune parameters.
 
 ## Product Purpose
 
-开源的 AI 讲解视频工作室。导演 Agent 先出分镜给用户确认，再写口播、配音、逐页画面并自检，最后渲染成 1080p 视频。任何模型都能用，Relay 是推荐首选；素材和密钥都留在用户电脑上。
+An open-source AI explainer-video studio. The director agent first drafts a storyboard for the user to approve, then writes the narration, voices it, draws each page and checks its own work, and finally renders a 1080p video. Any model can drive it, with Relay as the recommended first choice; material and keys stay on the user's computer.
 
-成功的样子：第一次就拿到一条能直接发布的视频；任何时刻都知道 Agent 在做什么、花了多少钱；想改时能指着某一页说清楚改什么。
+What success looks like: a video ready to publish on the first try; knowing at every moment what the agent is doing and what it has cost; when something should change, being able to point at a page and say what.
 
 ## Positioning
 
-一整套成熟的视频引擎加上看得见的导演 Agent：不是从零生成，所以效果稳、省 token、每一步都可控。
+A complete, mature video engine plus a visible director agent: nothing is generated from scratch, so results are stable, token-efficient and controllable at every step.
 
 ## Brand Personality
 
-安静、精确、温润。Studio 是 Relay 的一部分：同一套 Ink & Paper 语言，深色是默认，像一间晚上亮着暖灯的工作室。界面退在后面，视频本身是房间里最亮的东西。过程像一位靠谱的同事在旁边边做边说，成片出来时有一点小小的仪式感。
+Quiet, precise, warm. Studio is part of Relay: the same Ink & Paper language, dark by default, like a studio with a warm lamp on at night. The interface steps back; the video itself is the brightest thing in the room. The process feels like a dependable colleague talking you through the work as it goes, with a small sense of ceremony when the film is done.
 
 ## Anti-references
 
-- 霓虹渐变、玻璃拟态、发光描边、蓝紫色调的「AI 产品」模板。
-- 只给一个转圈和百分比、把过程藏起来的黑箱生成器。
-- 堆满参数旋钮和轨道的专业剪辑软件界面。
+- The "AI product" template: neon gradients, glassmorphism, glowing edges, blue-purple palettes.
+- Black-box generators that show only a spinner and a percentage and hide the process.
+- Professional editing software crowded with parameter knobs and tracks.
 
 ## Design Principles
 
-- **成品是主角，过程透明。** 工作台始终把视频放在视觉中心；对话流讲清楚 Agent 在做什么、为什么，但不抢画面。
-- **在关键处拍板。** 分镜确认、需要关注的页面、出错时的继续，都在用户正在看的地方就地处理，不用弹窗打断。
-- **钱和时间说清楚。** 已花费、所用模型、每个阶段的耗时任何时刻一眼可见。
-- **与 Relay 同一套语言。** token、组件和动效沿用 Ink & Paper；Studio 是 Relay 的一部分。
-- **失败也优雅。** 出错时说清楚发生了什么、下一步能做什么，一键继续。
+- **The film is the star; the process is transparent.** The workspace always keeps the video at the visual centre; the conversation explains what the agent is doing and why without competing with the picture.
+- **Decide at the moments that matter.** Storyboard sign-off, pages that need attention and continuing after an error are all handled in place, where the user is already looking, never by an interrupting pop-up.
+- **Be clear about money and time.** Amount spent, model in use and the time each stage took are visible at a glance at any moment.
+- **One language with Relay.** Tokens, components and motion follow Ink & Paper; Studio is part of Relay.
+- **Fail gracefully.** When something goes wrong, say what happened and what can be done next, and continue with one click.
 
 ## Accessibility & Inclusion
 
-正文对比度 ≥ 4.5:1；状态不只靠颜色，总配文字或图标；完整的键盘路径与可见焦点；尊重 `prefers-reduced-motion`。界面默认中文，文案为后续英文版留好结构。
+Body text contrast ≥ 4.5:1; state never relies on colour alone and always comes with text or an icon; a complete keyboard path with visible focus; respect `prefers-reduced-motion`. The interface defaults to Chinese, with copy structured for an English version to follow.

@@ -1,4 +1,4 @@
-/* 科技深色: a calm graphite ground, crisp clean lines, mono labels and one teal accent; for software and engineering. */
+/* Tech dark: a calm graphite ground, crisp clean lines, mono labels and one teal accent; for software and engineering. */
 window.STYLE = {
   id: 'tech-dark',
   // drawn like a diagram, not a sketch: almost no wobble, one stroke, a lighter line weight

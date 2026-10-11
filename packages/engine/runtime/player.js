@@ -1,5 +1,6 @@
-/* 浏览器预览播放器（只在直接打开 index.html 时启用；?render / ?t 截图出片不走这里）。
- * 点击画面或空格：播放 / 暂停；← →：前后 5 秒；F：全屏；底部进度条可拖动。有配音（SCRIPT.VOICE）就同步播放每句的音频。 */
+/* The in-browser preview player (only when index.html is opened directly; ?render / ?t captures do not use it).
+ * Click the picture or press Space: play / pause; ← →: 5 s back / forward; F: full screen; the bar at the bottom can be dragged.
+ * With narration (SCRIPT.VOICE), each line's audio plays in sync. */
 (function () {
   const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
@@ -7,7 +8,7 @@
     const dur = ENGINE.layout.duration;
     let t = Math.min(from, dur), playing = false, t0 = 0, wall = 0;
 
-    // ── 配音：每句一个 <audio>，播放时按当前时刻对齐 ──
+    // ── narration: one <audio> per line, aligned to the current time while playing ──
     const clips = ENGINE.layout.pages.flatMap((p) => p.cues).filter((c) => c.audio)
       .map((c) => ({ at: c.audioAt ?? c.start, d: c.dur ?? c.end - c.start, src: c.audio, el: null }));
     const sfx = TIMING.sfxTimes ? TIMING.sfxTimes(ENGINE.layout).map((s) => ({ ...s, el: null })) : [];
@@ -37,7 +38,7 @@
       }
     };
 
-    // ── 控制条 ──
+    // ── control bar ──
     const css = document.createElement('style');
     css.textContent = `
 #pv-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 99; display: flex; align-items: center; gap: 14px; padding: 14px 22px 18px;
@@ -53,11 +54,11 @@
     document.head.appendChild(css);
     const bar = document.createElement('div');
     bar.id = 'pv-bar';
-    bar.innerHTML = '<button id="pv-play" title="播放 / 暂停（空格）">▶</button><span id="pv-time"></span><input id="pv-seek" type="range" min="0" step="0.05"><button id="pv-fs" title="全屏（F）">⛶</button>';
+    bar.innerHTML = '<button id="pv-play" title="Play / pause (Space)">▶</button><span id="pv-time"></span><input id="pv-seek" type="range" min="0" step="0.05"><button id="pv-fs" title="Full screen (F)">⛶</button>';
     document.body.appendChild(bar);
     const hint = document.createElement('div');
     hint.id = 'pv-hint';
-    hint.innerHTML = '<span>点击画面或按空格开始播放</span>';
+    hint.innerHTML = '<span>Click the picture or press Space to play</span>';
     document.body.appendChild(hint);
     const $ = (id) => document.getElementById(id);
     const seek = $('pv-seek');
@@ -100,13 +101,13 @@
       else if (e.code === 'ArrowLeft') jump(t - 5);
       else if (e.code === 'KeyF') fullscreen();
     });
-    // 嵌在 Studio 面板里：面板可以跳到某句、开始或暂停（{ type: 'studio:seek', t, play }）
+    // embedded in the Studio panel: the panel can jump to a line, play or pause ({ type: 'studio:seek', t, play })
     addEventListener('message', (e) => {
       const m = e.data;
       if (m?.type === 'studio:seek') { jump(+m.t || 0); if (m.play && !playing) play(); }
       else if (m?.type === 'studio:pause') pause();
     });
-    // 播放时鼠标不动 2 秒，控制条自动隐藏
+    // while playing, the control bar hides after 2 s without mouse movement
     let idle;
     addEventListener('mousemove', () => { bar.classList.remove('idle'); clearTimeout(idle); idle = setTimeout(() => playing && bar.classList.add('idle'), 2000); });
     show();

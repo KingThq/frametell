@@ -15,7 +15,7 @@ import { findChrome } from './bins.mjs';
 export const { chromium } = createRequire(import.meta.url)('playwright-core');
 
 if (!fs.existsSync(path.join(EP, 'script.js'))) {
-  console.error(`没有找到 ${path.join(EP, 'script.js')} —— 请在视频项目目录里运行。`);
+  console.error(`no ${path.join(EP, 'script.js')}: run this from a video project directory.`);
   process.exit(1);
 }
 
@@ -43,10 +43,10 @@ export async function openStage(query, launchArgs = []) {
   page.on('requestfailed', (r) => {
     const u = decodeURIComponent(r.url());
     if (/\/pages\/p\w+\.js$/.test(u)) missing.push(path.basename(u, '.js'));
-    else console.error('加载失败', u);
+    else console.error('failed to load', u);
   });
   await page.goto(pageUrl(query), { timeout: 120000 });
-  if (missing.length) console.log(`还没写画面的页（显示为标题）：${missing.join(' ')}`);
+  if (missing.length) console.log(`pages with no visual yet (shown as a title): ${missing.join(' ')}`);
   const duration = await page.evaluate(() => window.__ready);
   return { browser, page, duration };
 }

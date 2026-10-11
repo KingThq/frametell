@@ -1,5 +1,6 @@
-/* 组件样片：engine/lib 里每个组件文件一页，用示例数据把它的组件都画一遍。也是回归测试（test/lib.test.mjs）：所有组件一起加载，
- * 不许有运行时错误，名字不许互相覆盖。改了组件或加了组件，同步改这里。 */
+/* Component gallery: one page per component file in engine/lib, each drawing its components with sample data. Also a regression
+ * test (test/lib.test.mjs): every component loads together, with no runtime errors and no name clobbering another.
+ * When a component changes or is added, update this file too. */
 (function (root) {
   const META = {
     style: 'study',

@@ -1,4 +1,4 @@
-/* p01 开场：书桌后坐着一个人，消息气泡从四周一个接一个画进来戳向他；右边的待办本上四件事，旁边一个红色大问号。 */
+/* p01 Opening: a person sits behind a desk while message bubbles are drawn in from all sides, one after another, poking at them; a to-do pad on the right lists four things, with a big red question mark beside it. */
 ENGINE.visual('p01', (P) => {
   P.title('一个下午去哪了？', { accent: 'red' });
   const t0 = P.c(0), t1 = P.c(1), t2 = P.c(2);

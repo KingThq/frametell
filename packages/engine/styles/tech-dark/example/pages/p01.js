@@ -1,4 +1,4 @@
-/* p01 开场：浏览器和远处的源站之间一条长虚线，青色请求块滑过去再滑回来，计时器跟着滚到 120 ms。 */
+/* p01 Opening: a long dashed line between the browser and the distant origin; a teal request block slides over and back while the timer rolls to 120 ms. */
 ENGINE.visual('p01', (P) => {
   P.title('一来一回 120 ms', { accent: 'blue' });
   const { clamp } = PV, N = PV.NET;

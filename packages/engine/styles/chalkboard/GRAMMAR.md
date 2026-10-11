@@ -1,37 +1,37 @@
-# 黑板 · 语法卡
+# Chalkboard · grammar card
 
-参照：老师在黑板上推导一道题、物理/数学/历史课堂板书。下面的语法凭经验写成，没有逐帧实测；拿到样片后要实测校准。
+Reference: a teacher working a problem through on a chalkboard; the board work of a physics, maths or history class. These rules come from experience, not frame-by-frame measurement; calibrate them against real sample films.
 
-## 一句话
+## In one sentence
 
-一位好老师在黑板前把一件事一步步推出来。画面安静、有粉笔灰的手感，重点永远是「这一步怎么来的」。
+A good teacher at the board derives one thing step by step. The picture is quiet and dusty with chalk, and the point is always "where did this step come from".
 
-## 画面
+## Picture
 
-- **墨绿近黑的板面。** 底色是深绿黑石板，带细粉笔灰颗粒和几片擦过的淡痕；不再加别的底纹。
-- **色板是反过来的。** `ink` 是粉笔白，`paper` 是比板面略亮一档的石板色；所有 `*F` 填充都是贴近板面的暗色调，框只比板面亮一点点，**绝不出现发亮的浅色块**。
-- **粉笔线条。** 线略粗（3.6）、略抖、带颗粒缺口、稍透明；不追求平滑。
-- **粉彩粉笔。** 白色写结构和文字；黄（`yellow`/`orange`）标答案和关键数，粉（`red`）标错误和代价，蓝（`blue`）标已知条件，绿（`green`）标结论。一屏最多两种彩色粉笔。
-- **板书式排版。** 左边写已知，中间推导，右边或底下框出结论；公式（`P.tex`）、数轴、坐标系、示意图都可以直接画在板上。正文字号不小于 36px，每个元素不超过 8 个字（公式除外）。
-- **结论要框起来。** 推导的最后一步用一个粉笔框或双下划线圈住，这是板书的「句号」。
+- **A green-black board.** The ground is a deep green-black slate with fine chalk-dust grain and a few faint erased smudges; add no other texture.
+- **The palette is inverted.** `ink` is chalk white and `paper` is a slate one step lighter than the board; every `*F` fill is a dark tone close to the board, so a box is only a little lighter than the board. **Never a glowing light block.**
+- **Chalk lines.** A little thick (3.6), a little shaky, with grainy gaps and slight transparency; do not chase smoothness.
+- **Pastel chalks.** White for structure and text; yellow (`yellow` / `orange`) marks the answer and the key number, pink (`red`) marks mistakes and costs, blue (`blue`) marks the givens, green (`green`) marks conclusions. At most two coloured chalks on one screen.
+- **Board-work layout.** Givens on the left, the derivation in the middle, the conclusion boxed on the right or at the bottom; formulas (`P.tex`), number lines, axes and diagrams can be drawn straight onto the board. Body text at least 36px; each element at most 8 characters in Chinese (about 4 words in English), formulas excepted.
+- **Box the conclusion.** The last step of a derivation gets a chalk box or a double underline: it is the full stop of the board work.
 
-## 动作与镜头
+## Motion and camera
 
-- **写出来，不是贴上去。** 文字逐字写（`cps` 8–12，比白板慢一点），线和框描出来（`dur` 0.6–1.0 秒）。
-- **一步一步推。** 每句口播只多写一步；上一步留在板上不擦，观众能回头看。
-- **强调用粉笔：** 在关键数字下面划两道、在条件旁画个圈、在错的一步上打叉；荧光笔（`mark`）在这里是一抹淡淡的粉笔涂抹，不要叠很多层。
-- **镜头像坐在第一排。** 默认固定全景；写到细节时快推（`P.push`，1.15–1.3×）停住，写完拉回。黑板写满了就横移到下一块（`P.pan`），不做整页翻转。
+- **Written, not pasted.** Text is written character by character (`cps` 8–12, a little slower than whiteboard); lines and boxes are traced (`dur` 0.6–1.0 s).
+- **One step at a time.** Each line of narration adds exactly one step; earlier steps stay on the board, unerased, so viewers can look back.
+- **Emphasis in chalk:** two strokes under a key number, a circle beside a condition, a cross over the wrong step. The highlighter (`mark`) is a faint chalk smear here; do not stack layers of it.
+- **The camera sits in the front row.** A fixed wide shot by default; push in quickly on a detail (`P.push`, 1.15–1.3×), hold, and pull back once it is written. When the board is full, pan to the next section of board (`P.pan`); never flip the whole page.
 
-## 节奏
+## Pacing
 
-- 开场 3 秒内在板上写下这期的问题（一道题、一个数、一个年份）。
-- 每页 12–20 秒，页内每 3–5 秒多一步；推导类内容可以慢，但不能静止超过 6 秒。
-- 结尾回到开场写下的问题，把答案写在它旁边并框起来。
+- Within the first 3 seconds, write this film's question on the board (a problem, a number, a year).
+- 12–20 seconds per page, one more step every 3–5 seconds; derivations may be slow but never still for more than 6 seconds.
+- End by returning to the question written at the start, writing the answer beside it and boxing it.
 
-## 绝不
+## Never
 
-- 浅色大色块、白底卡片、发光描边（在深色板上会像灯箱）。
-- 霓虹、渐变、蓝紫色调、科技网格。
-- 照片、3D、扁平插画的大面积纯色物体。
-- 一次性淡入整段文字；一屏写满小字。
-- 白板马克笔的鲜艳色和粗黑线（那是白板手绘）。
+- Large light blocks, white cards, glowing outlines (on a dark board they look like lightboxes).
+- Neon, gradients, blue-purple tones, tech grids.
+- Photos, 3D, large flat-colour objects from flat illustration.
+- Fading in a whole paragraph at once; filling a screen with small text.
+- Whiteboard marker brights and thick black lines (that is the whiteboard style).

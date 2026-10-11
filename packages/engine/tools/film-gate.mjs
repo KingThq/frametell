@@ -75,11 +75,11 @@ export function measure(file, { subBand = 0.15 } = {}) {
   let longest = 0, cur = 0;
   for (let i = 0; i < diff.length; i++) { cur = diff[i] < STILL ? cur + 1 : 0; longest = Math.max(longest, cur); }
 
-  const gates = [{ key: 'blank', name: '中段空画面', level: runs.length ? 'red' : 'green', value: runs }];
+  const gates = [{ key: 'blank', name: 'blank stretch mid-film', level: runs.length ? 'red' : 'green', value: runs }];
   const report = [
-    { key: 'fast_ratio', name: '快速运动帧占比', value: +fastRatio.toFixed(3), note: '衡量翻页式 PPT 感；尚未标定，只报告' },
-    { key: 'still_ratio', name: '静止帧占比', value: +stillRatio.toFixed(3), note: '静止本身不是坏事，只报告' },
-    { key: 'longest_still_s', name: '最长连续静止', value: +(longest / FPS).toFixed(1), unit: '秒', level: longest / FPS > 8 ? 'yellow' : 'green' },
+    { key: 'fast_ratio', name: 'fast-motion frames', value: +fastRatio.toFixed(3), note: 'measures a flip-through slideshow feel; not calibrated yet, reported only' },
+    { key: 'still_ratio', name: 'still frames', value: +stillRatio.toFixed(3), note: 'stillness is not bad in itself; reported only' },
+    { key: 'longest_still_s', name: 'longest still run', value: +(longest / FPS).toFixed(1), unit: 's', level: longest / FPS > 8 ? 'yellow' : 'green' },
   ];
   return { file, duration: info.duration, gates, report, red: gates.some((g) => g.level === 'red') };
 }
@@ -89,12 +89,12 @@ if (process.argv[1] && import.meta.url === pathToFileURL(fs.realpathSync(process
   const file = process.argv[2];
   const i = process.argv.indexOf('--sub-band');
   let res;
-  try { res = measure(file, { subBand: i > 0 ? +process.argv[i + 1] : 0.15 }); } catch (e) { console.error(`读不了 ${file}: ${e.message}`); process.exit(1); }
+  try { res = measure(file, { subBand: i > 0 ? +process.argv[i + 1] : 0.15 }); } catch (e) { console.error(`cannot read ${file}: ${e.message}`); process.exit(1); }
   if (process.argv.includes('--json')) console.log(JSON.stringify(res));
   else {
-    console.log(`film-gate: ${res.red ? '红灯' : '通过'} · ${res.duration.toFixed(1)}s`);
-    for (const g of res.gates) console.log(`  ${g.level === 'red' ? '✗' : '✓'} ${g.name}${g.value.length ? '：' + g.value.map((r) => `${r.at}s 起 ${r.seconds}s`).join('，') : ''}`);
-    for (const r of res.report) console.log(`  · ${r.name} ${r.value}${r.unit || ''}${r.level === 'yellow' ? '（去看看这一段）' : ''}`);
+    console.log(`film-gate: ${res.red ? 'failed' : 'passed'} · ${res.duration.toFixed(1)}s`);
+    for (const g of res.gates) console.log(`  ${g.level === 'red' ? '✗' : '✓'} ${g.name}${g.value.length ? ': ' + g.value.map((r) => `${r.seconds}s from ${r.at}s`).join(', ') : ''}`);
+    for (const r of res.report) console.log(`  · ${r.name} ${r.value}${r.unit || ''}${r.level === 'yellow' ? ' (worth a look)' : ''}`);
   }
   process.exit(res.red ? 2 : 0);
 }

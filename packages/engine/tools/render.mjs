@@ -1,4 +1,4 @@
-// Parallel render → out/<name>-无字幕.mp4, then burn subtitles → out/<name>-有字幕.mp4 (an English film: -no-subtitles / -with-subtitles). Run from a project dir:
+// Parallel render → out/<name>-no-subtitles.mp4, then burn subtitles → out/<name>-with-subtitles.mp4 (a Chinese film keeps Chinese file names). Run from a project dir:
 // node engine/tools/render.mjs [--portrait] [--hw] [--fps 60]
 //   --hw: hardware H.264 (Apple media engine) for chunks and the subtitle pass — frees the CPU for the browsers; slightly larger files [--workers 12] [--from 0] [--to <end>] [--name <file name>] [--skip-video] [--skip-subs]
 import { spawn, execFileSync } from 'child_process';
@@ -16,9 +16,9 @@ const { META, L, TIMING } = loadEpisode();
 // a voiced episode must have audio for every cue (stale voice.js after editing cues → those cues would be silent)
 if (META.voice) {
   const missing = L.pages.flatMap((p) => p.cues.filter((c) => !c.audio).map((c) => `${p.id}「${c.text}」`));
-  if (missing.length) { console.error(`✗ 这些句子没有配音，先跑 tts：\n${missing.join('\n')}`); process.exit(1); }
+  if (missing.length) { console.error(`✗ these lines have no narration yet; voice them first:\n${missing.join('\n')}`); process.exit(1); }
 }
-// --portrait: 1080×1920 from pages-portrait/, files get a 竖版 tag; children inherit PORTRAIT=1
+// --portrait: 1080×1920 from pages-portrait/, files get a portrait tag; children inherit PORTRAIT=1
 if (PORTRAIT) process.env.PORTRAIT = '1';
 if (has('hw')) process.env.HW = '1';
 const FPS = +arg('fps', 60), W = +arg('workers', 12), name = arg('name', META.name || 'video') + (PORTRAIT ? (META.lang === 'en' ? '-portrait' : '-竖版') : '');
@@ -31,7 +31,7 @@ fs.mkdirSync(chunkDir, { recursive: true });
 const lock = path.join(OUT, '.render.lock');
 const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
 if (fs.existsSync(lock) && alive(+fs.readFileSync(lock, 'utf8'))) {
-  console.error(`已有一次出片在跑（pid ${fs.readFileSync(lock, 'utf8')}），等它结束再开。`);
+  console.error(`a render is already running (pid ${fs.readFileSync(lock, 'utf8')}); wait for it to finish.`);
   process.exit(1);
 }
 fs.writeFileSync(lock, String(process.pid));
@@ -139,6 +139,6 @@ for (const f of [nosub, withsub]) {
   if (!fs.existsSync(f)) continue;
   const d = await dur(f);
   const ok = Math.abs(d - (to - from)) < 1;
-  console.log(`${ok ? '✓' : '✗ 时长不对'} ${path.basename(f)}  ${d.toFixed(1)}s（应为 ${(to - from).toFixed(1)}s）`);
+  console.log(`${ok ? '✓' : '✗ wrong length'} ${path.basename(f)}  ${d.toFixed(1)}s (expected ${(to - from).toFixed(1)}s)`);
   if (!ok) process.exitCode = 1;
 }

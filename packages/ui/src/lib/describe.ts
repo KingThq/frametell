@@ -1,5 +1,5 @@
 // Tool calls in plain words. The runtimes report a tool name and a (possibly truncated) JSON summary of its arguments;
-// a knowledge creator should read「读资料《番茄工作法》」, not {"path":"materials/番茄工作法.md"}.
+// a knowledge creator should read “Read “Pomodoro””, not {"path":"materials/pomodoro.md"}.
 import { t, type MessageKey } from '../i18n';
 import type zhRun from '../i18n/zh/run';
 
@@ -78,7 +78,7 @@ export function describeTool(name: string, summary: string, form: 'step' | 'star
   return a ? actText(a, form) : name;
 }
 
-/** collapse runs of the same description: 「读资料《A》、写分镜、检查分镜 2 次」 */
+/** collapse runs of the same description: “Read “A”, Wrote the storyboard, Checked the storyboard ×2” */
 export function summarizeTools(calls: { name: string; summary: string }[]): { text: string; count: number }[] {
   const out: { text: string; count: number }[] = [];
   for (const c of calls) {
@@ -91,5 +91,5 @@ export function summarizeTools(calls: { name: string; summary: string }[]): { te
 
 export const pageName = pageNo;
 
-/** one step with its repeats, in words: 「修改口播稿 2 次」 */
+/** one step with its repeats, in words: “Revised the narration ×2” */
 export const stepText = (s: { text: string; count: number }) => (s.count > 1 ? t('run.repeat', { text: s.text, n: s.count }) : s.text);

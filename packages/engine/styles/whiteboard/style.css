@@ -1,4 +1,4 @@
-/* 白板手绘 */
+/* Whiteboard sketch */
 :root { --ink: #1E2226; --soft: #4B5158; --muted: #8C939B; --band-color: rgba(250, 251, 251, 0.97); }
 #frame { background: #F7F8F7; }
 /* a whiteboard has no warm vignette: only a cool, very light falloff where the board meets its frame */

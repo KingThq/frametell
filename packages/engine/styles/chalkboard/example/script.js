@@ -1,4 +1,4 @@
-/* 黑板 · 标杆项目：勾股定理。按 styles/chalkboard/GRAMMAR.md 画（板书一步步推，结论框起来），也用作这套风格的回归测试。 */
+/* Chalkboard · benchmark film: the Pythagorean theorem. Drawn to styles/chalkboard/GRAMMAR.md (board work derived step by step, the conclusion boxed); also this style's regression test. */
 (function (root) {
   const META = {
     style: 'chalkboard',

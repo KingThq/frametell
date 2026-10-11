@@ -1,4 +1,4 @@
-/* p02 未命中：虚线中段描出缓存节点；请求块撞进去闪出 MISS、穿过去到源站；响应回来时在缓存里落下一份副本，再回到浏览器。 */
+/* p02 Miss: the cache node is traced midway along the dashed line; the request block hits it, flashes MISS and passes through to the origin; the response leaves a copy in the cache on its way back to the browser. */
 ENGINE.visual('p02', (P) => {
   P.title('中间放一个缓存', { accent: 'blue' });
   const N = PV.NET;

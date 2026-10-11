@@ -1,4 +1,4 @@
-/* p04 被打断：一个消息气泡带着箭头冲向正在走的番茄，箭头被折向一张便签，便签上写「稍后：回消息」；番茄扫完一圈，旁边打绿勾。 */
+/* p04 Interrupted: a message bubble with an arrow rushes at the running tomato, the arrow is bent toward a sticky note reading 「稍后：回消息」 (later: reply); the tomato completes its sweep and gets a green tick. */
 ENGINE.visual('p04', (P) => {
   P.title('先记下来', { accent: 'orange' });
   const { clamp, lerp } = PV;

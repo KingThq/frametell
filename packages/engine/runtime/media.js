@@ -1,13 +1,16 @@
-/* media.js · 真实素材（截图、视频片段的帧序列、角色表演、浏览器窗口）放进手绘画面里，全部由时间 lt 驱动。
- * 片段帧放在项目目录 assets/clips/<name>/f000.jpg…，帧数登记在 window.CLIP_FRAMES（项目的 extras 里生成，见 engine/README.md）。
- *   P.img(src, x, y, w, h, o)           静态图（o.fit/pos/r/shadow/mask/pop）
- *   P.clip(name, x, y, w, h, o)         帧序列片段 assets/clips/<name>/f000.jpg…（o.fps/speed/from/to/loop/start）
- *   P.cameo(kind, cx, cy, size, o)      角色表演片段（clips/c-<kind>），纸面柔边 + 正片叠底融进背景
- *   P.browser(x, y, w, h, o)            浏览器窗口：地址栏 + 截图（o.src/url/crop/dpr/pan），返回 { mark(rect, o), ring(rect, o), toStage(rect) }
- * 静态图（截图、插图）建页时预加载，main.js 等 document.fonts.ready 时一并等它们解码完。
- * 片段帧**按需加载**：画到哪一帧才加载哪一帧（顺手预取后面几帧），最近用过的留在一个有上限的缓存里，其余释放——
- * 否则每个出片进程都要把几千帧解码进内存，12 个进程会把 48GB 内存吃满。没加载完的帧由 window.__frameReady(t) 等待：
- * 引擎的 render-chunk / snap 在截图前会 await 它（等本帧所有图片解码完再重画一次），所以逐帧输出仍然确定、不闪。 */
+/* media.js · real material (screenshots, video clips as frame sequences, character cameos, browser windows) placed into the
+ * hand-drawn picture, all driven by the time lt.
+ * Clip frames live in the project at assets/clips/<name>/f000.jpg…; frame counts are registered in window.CLIP_FRAMES
+ * (generated into the project's extras, see engine/README.md).
+ *   P.img(src, x, y, w, h, o)           still image (o.fit/pos/r/shadow/mask/pop)
+ *   P.clip(name, x, y, w, h, o)         frame-sequence clip assets/clips/<name>/f000.jpg… (o.fps/speed/from/to/loop/start)
+ *   P.cameo(kind, cx, cy, size, o)      character cameo clip (clips/c-<kind>), soft paper edge + multiply into the background
+ *   P.browser(x, y, w, h, o)            browser window: address bar + screenshot (o.src/url/crop/dpr/pan), returns { mark(rect, o), ring(rect, o), toStage(rect) }
+ * Still images are preloaded while the page is built; main.js waits for them to decode along with document.fonts.ready.
+ * Clip frames load **on demand**: a frame loads when it is drawn (the next few are prefetched), recently used ones stay in a
+ * bounded cache, the rest are released — otherwise every render process would decode thousands of frames, and 12 of them
+ * fill 48 GB of memory. Frames still loading are awaited through window.__frameReady(t): the engine's render-chunk / snap
+ * await it before each capture (redrawing once every image of the frame has decoded), so the output stays deterministic. */
 (function () {
   const { h, s, clamp, ease, smooth, col, Builder } = PV;
   const B = Builder.prototype;
@@ -19,7 +22,7 @@
     const im = new Image();
     im.src = src;
     // wait for load (reliable), then try decode (can reject under memory pressure; harmless)
-    pending.push(new Promise((res) => { im.onload = res; im.onerror = () => { console.error('图片加载失败 ' + src); res(); }; }).then(() => im.decode().catch(() => {})));
+    pending.push(new Promise((res) => { im.onload = res; im.onerror = () => { console.error('image failed to load ' + src); res(); }; }).then(() => im.decode().catch(() => {})));
     cache.set(src, im);
     return im;
   }
@@ -33,7 +36,7 @@
     if (im) { FRAMES.delete(src); FRAMES.set(src, im); return im; }    // refresh LRU position
     im = new Image();
     im.src = src;
-    const p = im.decode().catch(() => new Promise((res) => { if (im.complete) res(); else { im.onload = res; im.onerror = () => { console.error('图片加载失败 ' + src); res(); }; } }))
+    const p = im.decode().catch(() => new Promise((res) => { if (im.complete) res(); else { im.onload = res; im.onerror = () => { console.error('image failed to load ' + src); res(); }; } }))
       .then(() => { im._ok = im.naturalWidth > 0; waiting.delete(p); });
     waiting.add(p);
     FRAMES.set(src, im);
@@ -83,7 +86,7 @@
   /** Frame-sequence clip on a canvas. Frame index = from + (lt − start)·fps·speed, clamped (or looped). */
   B.clip = function (name, x, y, w, hh, o = {}) {
     const n = (window.CLIP_FRAMES || {})[name];
-    if (!n) { console.error('没有登记片段 ' + name); return null; }
+    if (!n) { console.error('clip not registered: ' + name); return null; }
     const el = frameBox(this, x, y, w, hh, o);
     const cv = h('canvas', null, null, el);
     cv.width = Math.round(w * (o.res ?? 1.25)); cv.height = Math.round(hh * (o.res ?? 1.25));

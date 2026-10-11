@@ -1,4 +1,4 @@
-/* p05 收束：一排四个番茄从左到右画出来，每个下面写上一件事，绿笔一个接一个打勾，最后一个被圈起来。 */
+/* p05 Close: a row of four tomatoes is drawn left to right, each with one task written under it; the green marker ticks them one by one and the last is circled. */
 ENGINE.visual('p05', (P) => {
   P.title('一件一件做完', { accent: 'green' });
   const t0 = P.c(0), t1 = P.c(1), t2 = P.c(2);

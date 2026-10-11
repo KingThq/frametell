@@ -14,7 +14,7 @@
 
   /**
    * scoretubes(x, y, items, o) — one vertical tube per item; tube i fills to val(i, lt) (0 .. the top level). Optional second segment on
-   * top: extra(i, lt). o: { at, levels: names of the score steps from 0, e.g. ['', '基础', '完整', '最完备'] (default four unnamed steps, 0..3), tw: 104, gap: 34, h: 300,
+   * top: extra(i, lt). o: { at, levels: names of the score steps from 0, e.g. ['', 'basic', 'complete', 'thorough'] (default four unnamed steps, 0..3), tw: 104, gap: 34, h: 300,
    *   val, extra, extraColor: 'faint', labels: true, showLevels: true, size }
    * Returns { cx(i) → tube centre x, top(i, lt) → screen y of the fill top, W }.
    */

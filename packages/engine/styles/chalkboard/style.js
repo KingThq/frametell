@@ -1,4 +1,4 @@
-/* 黑板: a green-black slate, chalk lines that are a little rough and translucent, pastel chalk colours, dust in the corners. */
+/* Chalkboard: a green-black slate, chalk lines that are a little rough and translucent, pastel chalk colours, dust in the corners. */
 (function () {
   // chalk grain: punch small holes in every drawn layer (lines and fills) so it reads as chalk on slate, not as a vector stroke
   const defs = '<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>' +

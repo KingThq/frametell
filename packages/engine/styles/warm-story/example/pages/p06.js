@@ -1,4 +1,4 @@
-/* p06 收束：树苗从土里长出来，长高结满果子；一只手把一枚硬币埋进树下的土里。 */
+/* p06 Close: a sapling grows out of the soil, grows tall and fills with fruit; a hand buries a coin in the soil under the tree. */
 ENGINE.visual('p06', (P) => {
   P.title('越早开始越好', { accent: 'green' });
   P.ground(780, { at: 0 });

@@ -1,4 +1,4 @@
-/* p02 一个番茄：红笔描出番茄、绿笔补叶子，扇面从顶上扫起、中间写 25；箭头连到「写报告」并圈住，其余几项划掉。 */
+/* p02 One tomato: the red marker traces a tomato and the green adds leaves, a sector sweeps from the top with 25 in the middle; an arrow links to 「写报告」 (write the report), circled, and the other items are crossed out. */
 ENGINE.visual('p02', (P) => {
   P.title('二十五分钟，一件事', { accent: 'red' });
   const { clamp, ease } = PV;

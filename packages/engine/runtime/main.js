@@ -14,7 +14,7 @@
   ].join(',');
 
   const only = q.get('only') ? q.get('only').split(',') : null;
-  // 预览时把画面缩放到窗口里并居中（画面比窗口大时，grid 居中会贴左上角，所以直接算位置）
+  // preview: scale the frame into the window and centre it (a grid would pin an oversized frame to the top left, so place it directly)
   const frameScale = () => {
     const k = Math.min(innerWidth / STAGE.w, innerHeight / STAGE.h);
     Object.assign(frame.style, { position: 'absolute', left: `${(innerWidth - STAGE.w) / 2}px`, top: `${(innerHeight - STAGE.h) / 2}px`, transform: `scale(${k})` });
@@ -41,8 +41,8 @@
   const t0 = q.has('t') ? parseFloat(q.get('t')) : null;
   if (t0 != null) { window.__ready.then(() => ENGINE.renderAt(t0)); return; }
   if (q.has('render')) return;
-  // live preview（直接打开 index.html）：播放器见 player.js；?from=秒 从某处开始，默认带字幕（?nosubs 关掉）
-  frame.style.visibility = 'hidden';   // 第一遍建页会露出所有元素，等就绪再显示，避免「闪一下」
+  // live preview (index.html opened directly): the player is player.js; ?from=seconds starts there; subtitles on by default (?nosubs turns them off)
+  frame.style.visibility = 'hidden';   // the first build pass shows every element: stay hidden until ready, so nothing flashes
   window.__ready.then(() => {
     frameScale();
     frame.style.visibility = '';

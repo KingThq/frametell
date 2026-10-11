@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { crashText } from './director.js';
 
-const raw = `lint 失败：node:internal/modules/run_main:123
+const raw = `lint failed: node:internal/modules/run_main:123
     triggerUncaughtException(
     ^
 

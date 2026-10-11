@@ -24,7 +24,7 @@ const mimeOf = (f: string) => (/\.png$/i.test(f) ? 'image/png' : /\.webp$/i.test
 const short = toolSummary;
 
 export function claudeRuntime(o: ClaudeRuntimeOptions): AgentRuntime {
-  if (!o.apiKey) throw new Error('Claude Agent SDK 运行时需要 API key（Anthropic 或 Relay）；不支持使用 Claude 订阅登录');
+  if (!o.apiKey) throw new Error('The Claude Agent SDK runtime needs an API key (Anthropic or a compatible gateway); a Claude subscription login is not supported');
   return {
     id: 'claude-agent-sdk',
     model: { provider: o.baseUrl?.includes('relay') ? 'relay' : 'anthropic', id: o.model },
@@ -60,7 +60,7 @@ export function claudeRuntime(o: ClaudeRuntimeOptions): AgentRuntime {
                   const p = String(ti.file_path || '');
                   const blocked = (/^(Write|Edit)$/.test(h.tool_name) && (/(^|\/)engine(_modules)?\//.test(path.relative(s.cwd, path.resolve(s.cwd, p))) || path.relative(s.cwd, path.resolve(s.cwd, p)).startsWith('..')))
                     || (h.tool_name === 'Bash' && /\brender\.mjs\b|\bnpm (i|install)\b|\bcurl\b|\bwget\b/.test(String(ti.command || '')));
-                  if (blocked) return { decision: 'block', reason: '引擎目录和项目外的文件是只读的；页面会话里不能渲染、安装依赖或联网' };
+                  if (blocked) return { decision: 'block', reason: 'The engine directory and files outside the project are read-only; a page session cannot render, install dependencies or use the network' };
                   const abs = path.resolve(s.cwd, p);
                   const refused = h.tool_name === 'Write' && p ? rewriteRefusal(path.relative(s.cwd, abs), fs.existsSync(abs) ? fs.readFileSync(abs, 'utf8') : undefined) : undefined;
                   return refused ? { decision: 'block', reason: refused } : {};

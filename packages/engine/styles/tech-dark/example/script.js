@@ -1,4 +1,4 @@
-/* 科技深色 · 标杆项目：缓存。按 styles/tech-dark/GRAMMAR.md 画（干净的架构图，请求真的沿路径流动，青色是唯一强调色），也用作这套风格的回归测试。 */
+/* Tech dark · benchmark film: caching. Drawn to styles/tech-dark/GRAMMAR.md (a clean architecture diagram, requests really flowing along paths, teal the only accent); also this style's regression test. */
 (function (root) {
   const META = {
     style: 'tech-dark',

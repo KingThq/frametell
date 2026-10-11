@@ -1,4 +1,4 @@
-/* p05 收束：一串请求块从浏览器连续发出，大部分在缓存处折返、命中计数往上跳，源站只接到零星几个琥珀色请求；最后一个请求在缓存折返回到浏览器。 */
+/* p05 Close: a stream of request blocks leaves the browser; most turn back at the cache as the hit counter climbs, and the origin gets only a few amber requests; the last one turns back at the cache to the browser. */
 ENGINE.visual('p05', (P) => {
   P.title('源站只接少数请求', { accent: 'blue' });
   const N = PV.NET;

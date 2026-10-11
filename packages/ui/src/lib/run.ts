@@ -40,7 +40,7 @@ export interface PageView {
   thumb?: string;
   lastText?: string;
   tools: number;
-  /** what it is writing right now, while the model streams it: 「已写 212 行」 */
+  /** what it is writing right now, while the model streams it: “212 lines written” */
   progress?: string;
   /** what this page's agent is doing right now (pages are drawn side by side, each says its own) */
   activity?: RunView['activity'];

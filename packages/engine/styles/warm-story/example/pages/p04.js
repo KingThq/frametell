@@ -1,4 +1,4 @@
-/* p04 对比：两个罐子并排，右边的水位冲过左边，标签数到 1,490,359，中间拉出 ×4.14。 */
+/* p04 Comparison: two jars side by side, the right one's level surges past the left, the label counts to 1,490,359, and ×4.14 stretches between them. */
 ENGINE.visual('p04', (P) => {
   P.title('差了四倍多', { accent: 'red' });
   P.ground(820, { at: 0 });

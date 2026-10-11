@@ -1,4 +1,4 @@
-/* 白板手绘 · 标杆项目：番茄工作法。按 styles/whiteboard/GRAMMAR.md 画（马克笔边讲边画，彩笔只做强调），也用作这套风格的回归测试。 */
+/* Whiteboard sketch · benchmark film: the Pomodoro Technique. Drawn to styles/whiteboard/GRAMMAR.md (drawn with a marker while talking, colour markers only for emphasis); also this style's regression test. */
 (function (root) {
   const META = {
     style: 'whiteboard',

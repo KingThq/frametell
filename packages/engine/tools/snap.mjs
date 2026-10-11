@@ -14,7 +14,7 @@ const subs = si >= 0 ? (args.splice(si, 1), true) : false;
 const hi = args.indexOf('--sheet');
 const sheet = hi >= 0 ? args.splice(hi, 2)[1] : null;
 const bad = args.filter((a) => !Number.isFinite(Number(a)));
-if (bad.length || !args.length) { console.error(`时刻参数不对：${bad.join(' ') || '（没有给时刻）'}`); process.exit(1); }
+if (bad.length || !args.length) { console.error(`bad time arguments: ${bad.join(' ') || '(no times given)'}`); process.exit(1); }
 const dir = path.join(OUT, 'snap');
 fs.mkdirSync(dir, { recursive: true });
 const { browser, page, duration } = await openStage('render' + (only ? '&only=' + only : '') + (subs ? '&subs' : ''));

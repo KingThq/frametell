@@ -380,7 +380,7 @@ export function Stage({ run, project, selected, onSelect, playKey, onRef }: { ru
   const ids = run.pageOrder.length ? run.pageOrder : run.storyboard?.pages.map((p) => p.id) || [];
   const tlKey = `${run.stages.script.status}-${run.stages.narrate.status}-${run.ready?.at ?? ''}-${run.video?.path ?? ''}`;
   const tl = useTimeline(project.id, tlKey);
-  useEffect(() => { if (playKey) { onSelect(undefined); setView('film'); } }, [playKey]);   // 「播放」from the conversation
+  useEffect(() => { if (playKey) { onSelect(undefined); setView('film'); } }, [playKey]);   // “Play” from the conversation
   const focused = useMemo(() => (selected && ids.includes(selected) ? selected : undefined), [selected, ids]);
   const exported = film(run);
   const cut = exported ? (subs ? exported.path : exported.noSubs) : undefined;

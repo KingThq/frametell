@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { narrate, type TtsProvider } from '@frametell/voice';
 import { Project, type LintIssue, type PageTiming, type Storyboard } from './project.js';
-import { checkPrompt, langNote, pagePrompt, pageSystem, plannerSystem, reviewPrompt, scriptPrompt, storyboardFixPrompt, storyboardPrompt, type Brief } from './prompts.js';
+import { checkPrompt, langNote, pagePrompt, pageSystem, plannerSystem, replyNote, reviewPrompt, scriptPrompt, storyboardFixPrompt, storyboardPrompt, type Brief } from './prompts.js';
 import { addUsage, emptyUsage, type AgentRuntime, type AgentSession, type Thinking, type TokenUsage, type TurnResult } from './runtime/types.js';
 import type { PageStatus, Stage, StudioEvent } from './events.js';
 
@@ -40,7 +40,7 @@ interface State {
   cursors?: Record<string, number>;
   /** per-page instructions of the revision in progress */
   revision?: Record<string, string>;
-  /** the change to the finished film being made, until it is done: 「继续」 after a failure picks it up again */
+  /** the change to the finished film being made, until it is done: "Continue" after a failure picks it up again */
   change?: string;
 }
 
@@ -55,9 +55,9 @@ export function crashText(raw: string, id: string): string {
   return [err.replace(/ at file:\/\/\S+/, ''), ...at.map((a) => `  at ${a}`)].join('\n').slice(0, 800);
 }
 
-const crashPrompt = (id: string, crash: string) => `pages/${id}.js 运行时报错，还没法截图检查：
+const crashPrompt = (id: string, crash: string) => `pages/${id}.js throws when it runs, so it cannot be checked with screenshots yet:
 ${crash}
-先修好这个错误：多半是调用了不存在的函数或参数不对，用法以「本片的组件与范例」为准，不要猜引擎的 API。用 edit 改需要改的地方，所有修改放在同一次回复里，每个 edit 都带上 finish: true，修好就结束，不用再回复。`;
+Fix this error first: it is most likely a call to a function that does not exist, or wrong arguments. Go by this film's components and worked example, never guess the engine's API. Fix it with edit, all edits in one reply, each with finish: true: the round ends once they apply, no reply needed.`;
 
 /**
  * A page that already works, changed: the current code is handed over, and the change is made with targeted edits.
@@ -65,12 +65,12 @@ ${crash}
  */
 const revisionNote = (id: string, fix: string, code: string) => `
 
-这一页是**修改**：成片已经做好，用户要求改这一页。修改说明：${fix}
-下面是现在的 pages/${id}.js，已经给你了，不用再读：
+This page is a **revision**: the film is finished and the user asked for a change to this page. The change: ${fix}
+Here is the current pages/${id}.js; it is already given, so don't read it again:
 \`\`\`js
 ${code}
 \`\`\`
-用 edit 只改需要改的地方，**不要用 write 重写整个文件**；**所有修改放在同一次回复里**（一次回复可以调用多次 edit），每个 edit 都带上 finish: true：改完就结束，不用再回复，也不用再读一遍文件，检查截图会告诉你效果。`;
+Change only what needs changing, with edit; **never rewrite the whole file with write**. **Put all the edits in one reply** (one reply can call edit several times), each with finish: true: you're done once they apply, no reply needed and no need to read the file again; the check screenshots will show the result.`;
 
 // A page is drafted at the model's full thinking level; its check rounds (look at the contact sheet, fix what is off) are
 // small edits and run at medium, which on a gateway's …-high model means its …-medium sibling: most of a check round's
@@ -101,9 +101,11 @@ export class Director {
     const all = this.state.notes ?? [], cur = (this.state.cursors ??= {})[key] ?? 0;
     if (cur >= all.length) return '';
     this.state.cursors[key] = all.length; this.save();
-    return `\n\n用户刚刚补充了要求（和这一页相关就照做，不相关就忽略）：\n${all.slice(cur).map((n) => `- ${n}`).join('\n')}`;
+    return `\n\nThe user just added (follow it if it concerns this page, otherwise ignore it):\n${all.slice(cur).map((n) => `- ${n}`).join('\n')}`;
   }
   get usage() { return this.state.usage; }
+  /** what the user reads (notes, failures, the film's history), in the user's language */
+  private say(zh: string, en: string) { return this.o.brief.replyLang === 'en' ? en : zh; }
 
   private emit(e: StudioEvent) { this.o.emit?.(e); }
   private save() {
@@ -153,7 +155,9 @@ export class Director {
     const s = await this.session('planner', plannerSystem(this.o.style), MAX.planTurns, this.state.planner);
     let r = await this.send(s, storyboardPrompt(this.o.brief, this.o.style, materials));
     this.state.planner = s.ref; this.save();
-    if (!this.project.exists('storyboard.json')) this.fail('storyboard', `没有写出 storyboard.json：${r.error || r.text}`);
+    // a turn can end without the file (seen: a gateway answering a one-token "." mid-turn); ask once more, as for pages
+    if (!this.project.exists('storyboard.json') && r.stopReason !== 'max_turns') r = await this.send(s, 'storyboard.json does not exist yet; write it, then stop and report. ' + replyNote(this.o.brief.replyLang, this.o.brief.lang));
+    if (!this.project.exists('storyboard.json')) this.fail('storyboard', this.say(`没有写出分镜：${r.error || r.text}`, `No storyboard was written: ${r.error || r.text}`));
     // the film's language is the server's to say (the page agents and the checks read it from here)
     try {
       const j = this.project.storyboard();
@@ -164,9 +168,9 @@ export class Director {
       this.emit({ type: 'storyboard_check', round, issues });
       const reds = issues.filter((i) => i.level === 'red');
       if (!reds.length || round > MAX.storyboardFix) break;
-      r = await this.send(s, storyboardFixPrompt(issues));
+      r = await this.send(s, storyboardFixPrompt(issues, this.o.brief));
     }
-    await this.commit('分镜');
+    await this.commit(this.say('分镜', 'Storyboard'));
     await s.close();
     const sb = this.project.storyboard();
     this.state.stage = 'approval'; this.save();
@@ -186,8 +190,8 @@ export class Director {
     // the planner rewrites script.js: put the server-owned fields back (a lost META.voice once rendered a silent film)
     this.serverMeta();
     const check = await this.project.scriptCheck();
-    if (check.code) this.fail('script', `口播脚本有错：${check.err || check.out} ${r.error ?? ''}`);
-    await this.commit('口播');
+    if (check.code) this.fail('script', this.say(`口播脚本有错：`, `The narration script has an error: `) + `${check.err || check.out} ${r.error ?? ''}`);
+    await this.commit(this.say('口播', 'Narration'));
     await s.close();
     this.state.stage = 'narrate'; this.save();
     this.emit({ type: 'stage', stage: 'script', status: 'done', detail: check.out.split('\n').pop() });
@@ -225,12 +229,12 @@ export class Director {
     this.state.stage = 'narrate'; this.save();
     if (!this.o.tts || !this.o.voice) {
       this.state.stage = 'pages'; this.save();
-      this.emit({ type: 'stage', stage: 'narrate', status: 'skipped', detail: '没有配置配音，用估算时长' });
+      this.emit({ type: 'stage', stage: 'narrate', status: 'skipped', detail: this.say('没有配置配音，用估算时长', 'No voice set up; using estimated timing') });
       return;
     }
     this.serverMeta();
     const r = await narrate(this.o.dir, { tts: this.o.tts, voice: this.o.voice, signal: this.o.signal, onProgress: (e) => this.emit({ type: 'narrate', ...e }) });
-    await this.commit('配音');
+    await this.commit(this.say('配音', 'Voice'));
     this.state.stage = 'pages'; this.save();
     this.emit({ type: 'stage', stage: 'narrate', status: 'done', detail: `${r.duration.toFixed(1)}s${r.warnings.length ? '；' + r.warnings.join('；') : ''}` });
   }
@@ -258,8 +262,8 @@ export class Director {
     await Promise.all([first, ...Array.from({ length: n - 1 }, worker)]);
     this.firstTurn = undefined;
     const bad = Object.entries(this.state.pages).filter(([, s]) => s.status === 'failed').map(([id]) => id);
-    this.emit({ type: 'stage', stage: 'pages', status: bad.length ? 'failed' : 'done', detail: bad.length ? `失败：${bad.join('、')}` : undefined });
-    if (bad.length) throw new Error(`这些页没有画出来：${bad.join('、')}`);
+    this.emit({ type: 'stage', stage: 'pages', status: bad.length ? 'failed' : 'done', detail: bad.length ? this.say(`失败：${bad.join('、')}`, `Failed: ${bad.join(', ')}`) : undefined });
+    if (bad.length) throw new Error(this.say(`这些页没有画出来：${bad.join('、')}`, `These pages were not drawn: ${bad.join(', ')}`));
     this.state.stage = 'review'; this.save();
   }
 
@@ -286,11 +290,11 @@ export class Director {
     try {
       const s = await this.session(`page-${id}`, pageSystem(this.o.style, STYLE_EXTRAS[this.o.style] ?? []), MAX.pageTurns);
       const fix = this.state.revision?.[id];
-      let r = await this.send(s, pagePrompt(sb, id, t, this.o.brief.lang) + (fix ? revisionNote(id, fix, this.project.read(`pages/${id}.js`)) : '') + this.unseen(`page-${id}`));
-      if (!this.project.exists(`pages/${id}.js`)) r = await this.send(s, `还没有 pages/${id}.js，请写出来再停下。`);
-      if (!this.project.exists(`pages/${id}.js`)) throw new Error(r.error || '没有写出页面文件');
+      let r = await this.send(s, pagePrompt(sb, id, t, this.o.brief.lang, this.o.brief.replyLang) + (fix ? revisionNote(id, fix, this.project.read(`pages/${id}.js`)) : '') + this.unseen(`page-${id}`));
+      if (!this.project.exists(`pages/${id}.js`)) r = await this.send(s, `pages/${id}.js does not exist yet; write it, then stop.`);
+      if (!this.project.exists(`pages/${id}.js`)) throw new Error(r.error || this.say('没有写出页面文件', 'No page file was written'));
       st.ref = s.ref;
-      await this.commit(`${id}：初稿`);
+      await this.commit(this.say(`${id}：初稿`, `${id}: first draft`));
       let issues: LintIssue[] = [];
       const rounds = fix ? MAX.revisionRounds : MAX.pageRounds;   // a revision starts from a checked page
       for (let round = 1; round <= rounds + 1; round++) {
@@ -303,7 +307,7 @@ export class Director {
           if (round > rounds) throw new Error(crash);
           this.setPage(id, { ...st, issues: [crash] });
           r = await this.send(s, crashPrompt(id, crash) + this.unseen(`page-${id}`), undefined, CHECK_THINKING);
-          await this.commit(`${id}：修运行错误`);
+          await this.commit(this.say(`${id}：修运行错误`, `${id}: fix a runtime error`));
           continue;
         }
         if (round > rounds) break;
@@ -311,7 +315,7 @@ export class Director {
         const sheet = await this.project.snap(`${id}-r${round}`, times.map((x) => x.t), [id]);
         this.setPage(id, { ...st, issues: issues.map((i) => i.msg) }, { sheet });
         r = await this.send(s, checkPrompt(round, issues, times) + this.unseen(`page-${id}`), [sheet], CHECK_THINKING);
-        await this.commit(`${id}：第 ${round} 轮修改`);
+        await this.commit(this.say(`${id}：第 ${round} 轮修改`, `${id}: check round ${round}`));
         const reply = r.text.trim();
         if (/^FLAGGED/i.test(reply)) { st.status = 'flagged'; st.issues = [reply.replace(/^FLAGGED:?\s*/i, '')]; break; }
         if (/^DONE\b/i.test(reply) && !issues.length) { st.status = 'ok'; st.issues = []; break; }
@@ -343,15 +347,15 @@ export class Director {
     const issues = await this.project.lint(undefined, ['--determinism']);
     const flagged = Object.entries(this.state.pages).filter(([, s]) => s.status === 'flagged').map(([id, s]) => `${id}（${s.issues.join('，')}）`);
     if (!issues.length && !flagged.length) {
-      this.emit({ type: 'stage', stage: 'review', status: 'skipped', detail: '全片 lint 通过，各页自检通过' });
+      this.emit({ type: 'stage', stage: 'review', status: 'skipped', detail: this.say('全片检查通过，各页自检通过', 'The whole film passed its checks, and every page passed its own') });
       return this.ready();
     }
     const tl = await this.project.timeline();
     const sheet = await this.project.snap('review', tl.pages.flatMap((p) => [(p.start + p.end) / 2, p.end - 0.35]), undefined, 400);
     const s = await this.session('review', pageSystem(this.o.style, STYLE_EXTRAS[this.o.style] ?? []), MAX.pageTurns);
     for (let round = 1; round <= MAX.reviewRounds; round++) {
-      const r = await this.send(s, reviewPrompt(round === 1 ? issues : await this.project.lint(), flagged) + (this.o.brief.replyLang === 'en' ? '\n给用户的话用英文写。' : ''), [sheet]);
-      await this.commit(`全片检查：第 ${round} 轮`);
+      const r = await this.send(s, reviewPrompt(round === 1 ? issues : await this.project.lint(), flagged, this.o.brief.replyLang), [sheet]);
+      await this.commit(this.say(`全片检查：第 ${round} 轮`, `Whole-film check: round ${round}`));
       if (/^DONE\b/i.test(r.text.trim())) break;
     }
     await s.close();
@@ -372,7 +376,7 @@ export class Director {
     this.emit({ type: 'stage', stage: 'render', status: 'start' });
     this.serverMeta();
     // a narrated film must carry its narration: check before spending minutes on frames
-    if (this.o.voice && !/\bvoice:\s*\{/.test(this.project.read('script.js'))) this.fail('render', 'script.js 里丢了配音设置（META.voice），已停止渲染');
+    if (this.o.voice && !/\bvoice:\s*\{/.test(this.project.read('script.js'))) this.fail('render', this.say('口播脚本里丢了配音设置，已停止渲染', 'The narration script lost its voice settings; rendering stopped'));
     const out = await this.project.render({ workers: o.workers, signal: this.o.signal, onLine: (line) => { if (!/^\[(chunk|seg)-/.test(line)) this.emit({ type: 'render', line }); } });
     const g = this.project.gate(out.withSubs);
     this.emit({ type: 'gate', red: g.red, blank: g.gates.find((x) => x.key === 'blank')?.value ?? [], report: g.report.map((r) => ({ name: r.name, value: r.value, unit: r.unit })) });
@@ -391,23 +395,25 @@ export class Director {
     const t0 = Date.now();
     this.state.change = request; this.save();
     const sb = this.project.storyboard();
-    const named = sb.pages.filter((p, i) => new RegExp(`\\b${p.id}\\b|第\\s*${i + 1}\\s*页`).test(request)).map((p) => p.id);
+    const named = sb.pages.filter((p, i) => new RegExp(`\\b${p.id}\\b|第\\s*${i + 1}\\s*页|\\bpage\\s*${i + 1}\\b`, 'i').test(request)).map((p) => p.id);
     // a change to the picture of the page(s) it names needs no planning: it goes straight to those pages' agents.
     // Anything that may touch the words (narration, subtitles, timing), or names no page, is planned first
     // (not 讲 or 说: 「讲 ABC 的那部分」 points at a picture, and sent a centering fix through a minute of planning)
-    const words = /口播|文案|台词|配音|字幕|旁白|这句|句子|念|时长|节奏/;
+    // the user's own words, in either language
+    const words = /口播|文案|台词|配音|字幕|旁白|这句|句子|念|时长|节奏|\b(narrat\w*|script|voice\w*|subtitles?|captions?|wording|sentences?|timing|pac(e|ing))\b/i;
     const direct = named.length > 0 && named.length <= 2 && !words.test(request.replace(/<references>[\s\S]*?<\/references>/, ''));
     let plan: { pages: { id: string; note: string }[] } | undefined = direct ? { pages: named.map((id) => ({ id, note: request })) } : undefined;
     if (!plan) {
-      this.emit({ type: 'note', text: '收到，我先看看要改哪几页' });
+      this.emit({ type: 'note', text: this.say('收到，我先看看要改哪几页', 'Got it. Let me see which pages this touches') });
       await this.planRevision(request, sb, named);
-      try { plan = JSON.parse(this.project.read('.studio/revision.json')); } catch { this.fail('pages', '导演没有写出修改计划（.studio/revision.json）'); }
+      try { plan = JSON.parse(this.project.read('.studio/revision.json')); } catch { this.fail('pages', this.say('导演没有写出修改计划', 'The director did not write a plan for the change')); }
     }
     const tPlan = Date.now();
     const ids = plan!.pages.map((p) => p.id).filter((id) => sb.pages.some((p) => p.id === id));
-    if (!ids.length) this.fail('pages', '修改计划里没有可以改的页');
-    const which = ids.map((id) => `第 ${sb.pages.findIndex((p) => p.id === id) + 1} 页`).join('、');
-    this.emit({ type: 'note', text: direct ? `直接改${which}的画面，其余的保持不变` : `要重画${which}，其余的保持不变` });
+    if (!ids.length) this.fail('pages', this.say('修改计划里没有可以改的页', 'The plan for the change names no page to change'));
+    const nums = ids.map((id) => sb.pages.findIndex((p) => p.id === id) + 1);
+    const which = this.say(nums.map((n) => `第 ${n} 页`).join('、'), (nums.length > 1 ? 'pages ' : 'page ') + nums.join(', '));
+    this.emit({ type: 'note', text: direct ? this.say(`直接改${which}的画面，其余的保持不变`, `Changing the picture on ${which}; everything else stays as it is`) : this.say(`要重画${which}，其余的保持不变`, `Redrawing ${which}; everything else stays as it is`) });
     this.serverMeta();
     if (this.o.tts && this.o.voice) await narrate(this.o.dir, { tts: this.o.tts, voice: this.o.voice, signal: this.o.signal });   // cached pages cost nothing
     this.state.revision = Object.fromEntries(plan!.pages.map((p) => [p.id, p.note]));
@@ -419,8 +425,10 @@ export class Director {
     this.state.revision = undefined; this.save();
     const tPages = Date.now();
     // where the time went, in one line, so a slow step is seen (and can be fixed) instead of only felt
-    const sec = (ms: number) => `${Math.max(1, Math.round(ms / 1000))} 秒`;
-    this.beforeReady = () => this.emit({ type: 'note', text: `这次改了 ${sec(Date.now() - t0)}：${direct ? '' : `想怎么改 ${sec(tPlan - t0)} · `}${tDraw - tPlan > 1500 ? `配音 ${sec(tDraw - tPlan)} · ` : ''}画和自检 ${sec(tPages - tDraw)} · 全片检查 ${sec(Date.now() - tPages)}` });
+    const sec = (ms: number) => this.say(`${Math.max(1, Math.round(ms / 1000))} 秒`, `${Math.max(1, Math.round(ms / 1000))} s`);
+    this.beforeReady = () => this.emit({ type: 'note', text: this.say(
+      `这次改了 ${sec(Date.now() - t0)}：${direct ? '' : `想怎么改 ${sec(tPlan - t0)} · `}${tDraw - tPlan > 1500 ? `配音 ${sec(tDraw - tPlan)} · ` : ''}画和自检 ${sec(tPages - tDraw)} · 全片检查 ${sec(Date.now() - tPages)}`,
+      `This change took ${sec(Date.now() - t0)}: ${direct ? '' : `planning ${sec(tPlan - t0)} · `}${tDraw - tPlan > 1500 ? `voice ${sec(tDraw - tPlan)} · ` : ''}drawing and checks ${sec(tPages - tDraw)} · whole-film check ${sec(Date.now() - tPages)}`) });
     await this.review();
     this.state.change = undefined; this.save();
   }
@@ -437,19 +445,19 @@ export class Director {
     fs.rmSync(this.project.file('.studio/revision.json'), { force: true });   // last change's plan is not this one's
     // hand over what the decision needs up front (the script, and the code of the pages the request names) — reading
     // them file by file costs a model round trip each
-    const code = named.map((id) => `pages/${id}.js：\n\`\`\`js\n${this.project.read(`pages/${id}.js`)}\n\`\`\``).join('\n\n');
-    await this.send(s, `成片已经做好。用户对成片的修改意见：
+    const code = named.map((id) => `pages/${id}.js:\n\`\`\`js\n${this.project.read(`pages/${id}.js`)}\n\`\`\``).join('\n\n');
+    await this.send(s, `The film is finished. The user's change to it:
 ${request}
 
-判断要改哪几页、每页怎么改：只改需要改的页（通常 1–2 页）。只有用户要改口播时才动 script.js，改对应的句子并保持句子数量不变。
+Decide which pages to change and how: change only the pages that need it (usually 1–2). Touch script.js only when the user asks to change the narration; then change the matching cues and keep their number the same.
 ${langNote('revise', this.o.brief.lang, this.o.brief.replyLang).trim()}
-把决定写进 .studio/revision.json：{ "pages": [{ "id": "p03", "note": "给画面 Agent 的修改说明，具体到物和动作" }] }，然后一句话告诉用户你要改什么。
-下面已经给了分镜、script.js${named.length ? ' 和提到的页面代码' : ''}，不用再读它们；别的页需要时再读 pages/<id>.js。
-你只决定改哪几页、每页改成什么样，具体怎么写代码由画面 Agent 去做：不要查引擎、不要截图、不要跑工具。用户指着某一页（<references> 里的 page）时，通常就是改那一页。
+Write the decision to .studio/revision.json: { "pages": [{ "id": "p03", "note": "the change for the page agent, down to objects and actions" }] }, then tell the user in one sentence what you will change.
+The storyboard and script.js${named.length ? ' and the code of the pages mentioned' : ''} are given below; don't read them again. Read pages/<id>.js for other pages only if you need to.
+You decide only which pages change and what they should become; the page agent writes the code. Don't look into the engine, take screenshots or run tools. When the user points at a page (a page in <references>), that is usually the page to change.
 
-分镜：${sb.pages.map((p) => `${p.id} ${p.section}：${p.say}`).join('\n')}
+Storyboard: ${sb.pages.map((p) => `${p.id} ${p.section}: ${p.say}`).join('\n')}
 
-script.js：
+script.js:
 \`\`\`js
 ${this.project.read('script.js')}
 \`\`\`${code ? `\n\n${code}` : ''}`);

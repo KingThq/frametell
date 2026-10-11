@@ -1,50 +1,50 @@
-# Frametell · 设计系统
+# Frametell · Design system
 
-沿用 Relay 的 **Ink & Paper**：暖纸面、墨色文字、一个焦糖色强调色，靠字体和细节做出质感，不用霓虹、玻璃和渐变。Studio 默认深色（Relay 的 dark 一套），可切换浅色。
+Follows Relay's **Ink & Paper**: warm paper, ink text and a single caramel accent; the quality comes from type and detail, not neon, glass or gradients. Studio is dark by default (Relay's dark set) and can switch to light.
 
-## 场景
+## Scene
 
-晚上，知识创作者坐在电脑前，交给导演 Agent 做一条视频，自己时不时看一眼进度、在分镜处拍板。房间暗，屏幕上最亮的是视频画面（暖调插画本身是浅色的纸面），界面是围绕它的一圈安静的墨色。
+Evening. A knowledge creator sits at the computer, hands a video to the director agent, glances at the progress now and then and signs off at the storyboard. The room is dark; the brightest thing on screen is the video (warm illustrations are themselves light paper), and the interface is a quiet ring of ink around it.
 
-## Tokens（`web/src/styles/tokens.css`，RGB 三元组，Tailwind 可带透明度）
+## Tokens (`web/src/styles/tokens.css`, RGB triplets so Tailwind can add opacity)
 
-| Token | 深色（默认） | 浅色 | 用途 |
+| Token | Dark (default) | Light | Use |
 |---|---|---|---|
-| `paper` | `#0C0A09` | `#F5F5F0` | 页面底 |
-| `paper-2` | `#141210` | `#EFECE4` | 下沉的面板（左栏） |
-| `surface` | `#181513` | `#FFFFFF` | 卡片、输入框 |
-| `surface-2` | `#1F1C19` | `#FAF8F3` | 悬停、选中 |
-| `ink` / `ink-2` / `ink-3` | `#F5F5F4` / `#B0A9A3` / `#8F8780` | `#1C1917` / `#57534E` / `#7A736C` | 主 / 次 / 弱文字 |
-| `line` / `line-2` | `#292522` / `#3D3834` | `#E7E5E2` / `#D6D3CF` | 发丝线 / 悬停线 |
-| `accent` | `#E0B88A` | `#D4A574` | 焦糖：主操作、当前、Agent 正在做的事 |
-| `accent-ink` | `#E4C096` | `#9C6A3A` | 焦糖文字 |
-| `jade` | `#6FBF8E` | `#3E8E5E` | 通过、完成 |
-| `seal` | `#E2765E` | `#C0442B` | 错误、需要关注；少用 |
+| `paper` | `#0C0A09` | `#F5F5F0` | Page background |
+| `paper-2` | `#141210` | `#EFECE4` | Recessed panels (left column) |
+| `surface` | `#181513` | `#FFFFFF` | Cards, inputs |
+| `surface-2` | `#1F1C19` | `#FAF8F3` | Hover, selected |
+| `ink` / `ink-2` / `ink-3` | `#F5F5F4` / `#B0A9A3` / `#8F8780` | `#1C1917` / `#57534E` / `#7A736C` | Primary / secondary / faint text |
+| `line` / `line-2` | `#292522` / `#3D3834` | `#E7E5E2` / `#D6D3CF` | Hairlines / hover lines |
+| `accent` | `#E0B88A` | `#D4A574` | Caramel: the primary action, the current item, what the agent is doing now |
+| `accent-ink` | `#E4C096` | `#9C6A3A` | Caramel text |
+| `jade` | `#6FBF8E` | `#3E8E5E` | Passed, done |
+| `seal` | `#E2765E` | `#C0442B` | Errors, needs attention; use sparingly |
 
-不要写死颜色值，也不要写 `bg-white dark:bg-…` 这种成对类：token 已经随主题切换。
+Never hard-code colour values, and never write paired classes like `bg-white dark:bg-…`: the tokens already switch with the theme.
 
-## 字体
+## Type
 
-- 界面：`Inter` + `PingFang SC`（系统中文字体回退），正文 14px，辅助 12–13px。
-- 品牌：`Playfair Display` 斜体，只用在 Studio 字标和首页一句话标题。
-- 数字（费用、时长、token）：`JetBrains Mono` + `tabular-nums`。
+- Interface: `Inter` + `PingFang SC` (the system Chinese fallback); body 14px, secondary 12–13px.
+- Brand: `Playfair Display` italic, only for the Studio wordmark and the one-line headline on the home screen.
+- Numbers (cost, duration, tokens): `JetBrains Mono` + `tabular-nums`.
 
-## 布局
+## Layout
 
-- 顶栏 52px：家纹 + 「Studio」字标、项目标题、状态、已花费、模型、导出。
-- 工作台：左栏对话与 Agent 过程（400–440px，可折叠），右侧工作台（播放器 16:9 居中 + 分页时间条 + 分镜 / 口播 / 导出）。
-- 间距 4px 基数；卡片圆角 16px，控件 10px，标签 6px。发丝线 + 极淡阴影。
+- Top bar 52px: the mark + the "Studio" wordmark, project title, status, spent so far, model, export.
+- Workspace: a left column with the conversation and the agent's process (400–440px, collapsible), and on the right the workbench (16:9 player centred + the page timeline strip + storyboard / narration / export).
+- 4px spacing base; card radius 16px, controls 10px, tags 6px. Hairlines plus very faint shadows.
 
-## 动效
+## Motion
 
-- 反馈 120–150ms，状态切换 200–250ms，面板进出 320ms；缓动 `cubic-bezier(.16,1,.3,1)`，不弹跳。
-- **焦点动效**：分页时间条。每页从虚线框（排队）→ 一道焦糖色的描线沿边框走（正在画）→ 缩略图淡入（完成）。它直接对应 Agent 在做的事，是整个界面唯一着重设计的动效。
-- 对话流新消息上浮 6px 淡入；`prefers-reduced-motion` 下只保留淡入。
+- Feedback 120–150ms, state changes 200–250ms, panels in and out 320ms; easing `cubic-bezier(.16,1,.3,1)`, no bounce.
+- **The signature motion**: the page timeline strip. Each page goes from a dashed frame (queued) → a caramel stroke tracing round its border (being drawn) → its thumbnail fading in (done). It maps directly to what the agent is doing and is the only motion in the interface designed for emphasis.
+- New messages in the conversation rise 6px and fade in; with `prefers-reduced-motion`, only the fade remains.
 
-## 规则
+## Rules
 
-- 一个区域只有一个主操作；焦糖色只给当下最重要的那件事。
-- 状态不只靠颜色：配文字或图标。
-- 不用模态框处理分镜确认和错误：就地在对话流里处理。
-- 设置是居中的 Modal：左边分类（一张注册表，加一类设置就加一条），需要时中间是列表（服务商、配音），右边是详情。服务商一律用官方标识（`assets/providers`）。
-- 不用原生 `<select>`：选择用自定义的弹出列表（`ModelPicker`、`VoicePicker`）——44px 高的字段、焦糖焦点环、带层次阴影的弹层、分组与 logo、可搜索、完整的键盘路径。
+- One primary action per area; caramel goes only to the single most important thing right now.
+- State is never shown by colour alone: pair it with text or an icon.
+- No modals for storyboard sign-off or errors: handle them in place, in the conversation.
+- Settings is a centred modal: categories on the left (a registry: adding a kind of setting adds one entry), a list in the middle when needed (providers, voices), details on the right. Providers always use their official marks (`assets/providers`).
+- No native `<select>`: choices use custom pop-up lists (`ModelPicker`, `VoicePicker`): 44px-tall fields, a caramel focus ring, a layered shadow on the pop-over, groups with logos, search, and a complete keyboard path.

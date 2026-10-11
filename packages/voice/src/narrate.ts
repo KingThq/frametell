@@ -53,7 +53,7 @@ function spans(spoken: string[], words: WordTime[], warn: (m: string) => void) {
     sp[k] = sp[k] ? { s: sp[k]!.s, e: w.endTime } : { s: w.startTime, e: w.endTime };
     pos += n;
   }
-  if (pos !== acc) warn(`时间戳字数 ${pos} ≠ 文本字数 ${acc}（数字或英文的读法被改写了），按比例兜底`);
+  if (pos !== acc) warn(`timestamps cover ${pos} characters but the text has ${acc} (numbers or English were read differently); timing falls back to proportions`);
   return sp.map((x, i) => x || sp[i - 1] || { s: 0, e: 0.3 });
 }
 
@@ -121,7 +121,7 @@ function charOnsets(cueText: string, spokenText: string, words: WordTime[], word
 export async function narrate(dir: string, opts: NarrateOptions): Promise<NarrateResult> {
   const { SCRIPT } = loadScript(dir);
   const V: VoiceMeta = { ...(SCRIPT.META.voice || {}), ...(opts.voice || {}) } as VoiceMeta;
-  if (!V.speaker) throw new Error('没有设置配音音色（META.voice.speaker）');
+  if (!V.speaker) throw new Error('no voice set (META.voice.speaker)');
   const warnings: string[] = [];
   const en = SCRIPT.META.lang === 'en';
   const LEXICON: Record<string, string> = { ...(en ? { 'CLAUDE.md': 'claude dot md', 'AGENTS.md': 'agents dot md', 'README.md': 'readme dot md' } : { 'CLAUDE.md': 'claude 点 md', 'AGENTS.md': 'agents 点 md', 'README.md': 'readme 点 md' }), ...(V.lexicon || {}) };
@@ -164,7 +164,7 @@ export async function narrate(dir: string, opts: NarrateOptions): Promise<Narrat
       const words = JSON.parse(fs.readFileSync(wj, 'utf8')) as WordTime[];
       const sp = spans(spoken, words, (m) => warnings.push(`${pg.id}：${m}`));
       const { segs, bad } = cut(wav, sp);
-      if (bad.length) throw new Error(`${pg.id} 切分会删掉有声音的部分：${bad.map(([a, b]) => `${a.toFixed(2)}–${b.toFixed(2)}s`).join(' ')}`);
+      if (bad.length) throw new Error(`${pg.id}: cutting the take into lines would drop audible sound at ${bad.map(([a, b]) => `${a.toFixed(2)}–${b.toFixed(2)}s`).join(' ')}`);
       // which word starts each cue (for per-character onsets)
       const firstWord: number[] = [];
       { let acc = 0, wi = 0, pos = 0; for (const s of spoken) { while (wi < words.length && pos < acc) { pos += norm(words[wi].word).length; wi++; } firstWord.push(wi); acc += norm(s).length; } }

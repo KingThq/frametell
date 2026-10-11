@@ -49,7 +49,7 @@ export class Project {
   }
   storyboardIssues(): StoryboardIssue[] {
     try { return lintStoryboard(this.storyboard(), { source: this.materialsText() }); }
-    catch (e) { return [{ level: 'red', msg: `storyboard.json 读不了：${(e as Error).message}` }]; }
+    catch (e) { return [{ level: 'red', msg: `storyboard.json cannot be read: ${(e as Error).message}` }]; }
   }
 
   /** Script check (engine/tools/script.mjs): page and cue counts, estimated length; errors point at the cue. */
@@ -110,21 +110,21 @@ export class Project {
 
   async timeline(): Promise<Timeline> {
     const r = await tool(this.dir, 'pages.mjs', ['--json']);
-    if (r.code) throw new Error(`时间轴计算失败：${r.err || r.out}`);
+    if (r.code) throw new Error(`timeline failed: ${r.err || r.out}`);
     return JSON.parse(r.out);
   }
 
   async lint(only?: string[], extra: string[] = []): Promise<LintIssue[]> {
     const r = await tool(this.dir, 'lint.mjs', ['--json', ...(only ? ['--only', only.join(',')] : []), ...extra]);
     const last = r.out.split('\n').pop() || '[]';
-    try { return JSON.parse(last); } catch { throw new Error(`lint 失败：${r.err || r.out}`.slice(0, 2000)); }
+    try { return JSON.parse(last); } catch { throw new Error(`lint failed: ${r.err || r.out}`.slice(0, 2000)); }
   }
 
   /** A contact sheet of the given absolute times → path of the jpg. */
   async snap(name: string, times: number[], only?: string[], tile = 480): Promise<string> {
     const r = await tool(this.dir, 'snap.mjs', [...(only ? ['--only', only.join(',')] : []), '--sheet', name, ...times.map((t) => t.toFixed(2))], { env: { SNAP_TILE: String(tile) } });
     const f = this.file(`out/snap/${name}.jpg`);
-    if (r.code || !fs.existsSync(f)) throw new Error(`截图失败：${r.err || r.out}`.slice(0, 2000));
+    if (r.code || !fs.existsSync(f)) throw new Error(`screenshot failed: ${r.err || r.out}`.slice(0, 2000));
     return f;
   }
 
@@ -137,10 +137,10 @@ export class Project {
       child.stdout.on('data', onData); child.stderr.on('data', onData);
       child.on('error', reject);
       child.on('close', (code) => {
-        if (code) return reject(new Error(`渲染失败（exit ${code}）：${tail.slice(-1500)}`));
+        if (code) return reject(new Error(`render failed (exit ${code}): ${tail.slice(-1500)}`));
         const out = fs.readdirSync(this.file('out')).filter((f) => f.endsWith('.mp4'));
         const withSubs = out.find((f) => /-(有字幕|with-subtitles)\.mp4$/.test(f)), noSubs = out.find((f) => /-(无字幕|no-subtitles)\.mp4$/.test(f));
-        if (!withSubs || !noSubs) return reject(new Error('渲染结束但没有找到成片'));
+        if (!withSubs || !noSubs) return reject(new Error('render finished but no film was found'));
         resolve({ withSubs: this.file('out/' + withSubs), noSubs: this.file('out/' + noSubs) });
       });
     });
@@ -159,7 +159,7 @@ export class Project {
       this.git(['config', 'user.name', 'Frametell']);
       this.git(['config', 'user.email', 'studio@frametell.local']);
     }
-    this.commitSync('项目创建');
+    this.commitSync('Project created');
   }
   /** Commit everything that changed; returns the commit id, or null when nothing changed. */
   async commit(message: string): Promise<string | null> {

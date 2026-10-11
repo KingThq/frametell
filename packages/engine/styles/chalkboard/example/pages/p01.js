@@ -1,4 +1,4 @@
-/* p01 开场：粉笔描出一个 3-4 的直角三角形，两条直角边写上 3 和 4，斜边旁写一个问号并圈住。 */
+/* p01 Opening: chalk traces a 3-4 right triangle, the two legs labelled 3 and 4, a question mark beside the hypotenuse, circled. */
 ENGINE.visual('p01', (P) => {
   P.title('斜边有多长？', { accent: 'yellow' });
   const t0 = P.c(0), t1 = P.c(1), t2 = P.c(2);

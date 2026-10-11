@@ -1,4 +1,4 @@
-/* p01 开场：一只手把硬币丢进玻璃罐，台历从第 1 年翻到第 30 年，罐子上跳出问号。 */
+/* p01 Opening: a hand drops a coin into a glass jar, the desk calendar flips from year 1 to year 30, a question mark pops up on the jar. */
 ENGINE.visual('p01', (P) => {
   P.title('三十年后有多少？', { accent: 'orange' });
   P.ground(780, { at: 0 });

@@ -49,10 +49,10 @@ export function customProvider(cfg: CustomProviderConfig) {
   });
 }
 
-/** Volcengine Ark (火山方舟): OpenAI-compatible; model ids are Ark model names or inference endpoint ids (ep-…). */
+/** Volcengine Ark: OpenAI-compatible; model ids are Ark model names or inference endpoint ids (ep-…). */
 export const VOLCENGINE_ARK: CustomProviderConfig = {
   id: 'volcengine-ark',
-  name: '火山方舟',
+  name: 'Volcengine Ark',
   protocol: 'openai',
   baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
   models: [],

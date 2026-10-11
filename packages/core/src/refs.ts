@@ -53,8 +53,8 @@ export function withRefs(text: string, refs: UserRef[]): string {
   const lines = refs.map((r) => {
     if (r.kind === 'page') return `<page id="${esc(r.page)}" file="pages/${esc(r.page)}.js">${esc(r.label)}</page>`;
     if (r.kind === 'line') return `<line page="${esc(r.page)}" at="${mmss(r.at)}">${esc(r.text)}</line>`;
-    if (r.kind === 'frame') return `<frame page="${esc(r.page)}" at="${mmss(r.at)}" image="${esc(r.path)}">成片在这一刻的画面${r.text ? `，正在念「${esc(r.text)}」` : ''}；用 read 打开图片看</frame>`;
-    return `<file path="${esc(r.path)}"${r.image ? ' image="true"' : ''}>${esc(r.label)}${r.image ? '；用 read 打开图片看' : ''}</file>`;
+    if (r.kind === 'frame') return `<frame page="${esc(r.page)}" at="${mmss(r.at)}" image="${esc(r.path)}">the film at this moment${r.text ? `, while the narration says “${esc(r.text)}”` : ''}; open the image with read</frame>`;
+    return `<file path="${esc(r.path)}"${r.image ? ' image="true"' : ''}>${esc(r.label)}${r.image ? '; open the image with read' : ''}</file>`;
   });
-  return `<references>\n用户指着下面这些内容说话（at 是在成片里的时间）：\n${lines.join('\n')}\n</references>\n\n${text || '请看看上面这些'}`;
+  return `<references>\nThe user is pointing at these (at = time in the film):\n${lines.join('\n')}\n</references>\n\n${text || 'Please look at the above.'}`;
 }

@@ -1,4 +1,4 @@
-/* 暖调叙事插画 · flat illustration kit: metaphor objects for knowledge explainers (snowball, jar of coins, tree, trail,
+/* Warm story illustration · flat illustration kit: metaphor objects for knowledge explainers (snowball, jar of coins, tree, trail,
  * hands, calendar, number tags). Flat fills, a soft shade and one highlight per object, no sketchy lines.
  * Every property that can change takes a number or a function of page-local time lt, so pages stay pure in t.
  * Entrances are a short ease-out rise (no bounce); objects never pop in from nothing mid-sentence without `at`. */

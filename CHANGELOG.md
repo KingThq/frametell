@@ -57,13 +57,13 @@ The first release of 画说 · Frametell: a local, open-source studio that turns
 - A conversation with the director beside the stage, with a live line saying what is being written and how far it has got.
 - A film view with a page lane, a canvas of every page with its narration, and a focus view for one page: key frames linked both ways with its narration lines and the player, a lightbox to read any frame or self-check sheet in detail.
 - Settings in one dialog: model providers with their marks, voices, general settings, the network proxy and a check of this computer (Chrome, ffmpeg, git).
-- Exports with and without burned-in subtitles. In the desktop app, 「在访达中显示」 shows the file in Finder; in a browser, its path can be copied.
+- Exports with and without burned-in subtitles. In the desktop app, Show in Finder reveals the file; in a browser, its path can be copied.
 
 #### Apps and API
 
 - A desktop app for macOS (Apple silicon), built with `pnpm package:desktop`. It contains the engine and a redistributable GPLv3 ffmpeg, and needs neither Node nor anything else installed except Chrome.
 - A command line: `frametell` opens the studio in your browser; `frametell run <material…> [--style] [--duration] [--model] [--lang]` makes a film straight through.
-- A Linux render image (`docker/render.Dockerfile`): draws a finished project to mp4 with no desktop, GPU or Mac — Debian's Chromium and ffmpeg, Noto CJK and emoji fonts, the engine with its own modules. `docker run … frametell-render /project --fps 30 --workers 4`. Tried on 番茄工作法 (54.5 s, warm-story): frames identical to the Mac export; 75 s on 4 cores, 123 s on 2.
+- A Linux render image (`docker/render.Dockerfile`): draws a finished project to mp4 with no desktop, GPU or Mac — Debian's Chromium and ffmpeg, Noto CJK and emoji fonts, the engine with its own modules. `docker run … frametell-render /project --fps 30 --workers 4`. Tried on the Pomodoro technique film (54.5 s, warm-story): frames identical to the Mac export; 75 s on 4 cores, 123 s on 2.
 - One core behind every client (`@frametell/core`), with an HTTP + SSE server in the CLI and IPC in the desktop app. A `Studio` can take its own data directory and settings store, and keeps its data in `~/.frametell` (or `FRAMETELL_HOME`) by default.
 - Open-source groundwork: MIT licence, CI on Linux, macOS and Windows, contributing and security guides, issue forms and a pull request checklist, READMEs and docs in English and Chinese.
 

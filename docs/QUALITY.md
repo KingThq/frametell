@@ -1,19 +1,19 @@
-# 质量体系
+# Quality system
 
-目标用户第一优先是**知识创作者**：讲投资、心理学、历史、科学、读书、技术的人。他们要的是一条讲得清楚、看着舒服、可以直接发布的视频。
+The first-priority users are **knowledge creators**: people who explain investing, psychology, history, science, books or technology. What they want is a video that explains clearly, is pleasant to watch and is ready to publish.
 
-质量不靠越写越长的提示词，靠四件套：**规范 + 标杆 + 门禁 + 评测**。
+Quality does not come from ever-longer prompts but from four parts: **standards + benchmarks + gates + evaluation**.
 
-- 规范告诉 Agent 怎么做；
-- 标杆让它看到做好是什么样；
-- 门禁用机器挡住已知的坏片；
-- 评测让每次改动都有数字可比，不靠感觉。
+- Standards tell the agent how to work;
+- benchmarks show it what good looks like;
+- gates use machines to stop known bad films;
+- evaluation gives every change numbers to compare, instead of a feeling.
 
-部分方法借鉴 [huashu-art-motion](https://github.com/alchaincyf/huashu-art-motion)（MIT）。它的阈值是用 15 秒艺术短片标定的，我们做 1–10 分钟知识讲解，**只学方法，数字全部用自己的片子重新标定**。
+Some of the methods are borrowed from [huashu-art-motion](https://github.com/alchaincyf/huashu-art-motion) (MIT). Its thresholds were calibrated on 15-second art shorts, while we make 1–10 minute explainers: **we take only the methods, and recalibrate every number on our own films**.
 
-## 1. 分镜：杠杆最大的一层
+## 1. Storyboard: the layer with the most leverage
 
-分镜错了，后面画得再好也是 PPT。分镜从「每页一段描述」改成「每页一串**拍点**」：
+If the storyboard is wrong, however well the pages are drawn the result is a slide deck. The storyboard moves from "one description per page" to "a string of **beats** per page":
 
 ```json
 {
@@ -21,86 +21,86 @@
   "palette": "warm-story/default",
   "cast": "none | hands | silhouette",
   "pages": [{
-    "id": "p03", "section": "复利：时间比本金重要",
-    "say": "这一页讲什么（2–3 句）",
+    "id": "p03", "section": "Compounding: time matters more than principal",
+    "say": "What this page is about (2–3 sentences)",
     "beats": [
-      { "at": "c0", "object": "一颗雪球", "action": "从坡顶滚下，越滚越大", "camera": "跟拍", "text": "" },
-      { "at": "c2:30年", "object": "雪球", "action": "撞上山脚的树停住", "camera": "砸入", "text": "30年 ×17" }
+      { "at": "c0", "object": "a snowball", "action": "rolls down from the top of the slope, growing as it goes", "camera": "tracking", "text": "" },
+      { "at": "c2:thirty", "object": "the snowball", "action": "hits the tree at the foot of the hill and stops", "camera": "slam in", "text": "30 years ×17" }
     ]
   }]
 }
 ```
 
-`at` 可以卡到句（`c2`），也可以卡到词（`c2:30年`，按配音的字级时间戳落点）。
+`at` can land on a sentence (`c2`) or on a word (`c2:thirty`, placed by the narration's per-character timestamps).
 
-**分镜 lint**（确定性，不花 token，不通过就让 Agent 自己改，最多 2 轮，用户看到的分镜已经过检）：
+**Storyboard lint** (deterministic, costs no tokens; when it fails the agent fixes it itself, at most 2 rounds, so the storyboard the user sees has already passed):
 
-| 规则 | 级别 |
+| Rule | Level |
 |---|---|
-| `object` 必须是具体的物：不能只是「标题、要点、卡片、背景、图标、文字」这类版面词 | 红 |
-| `action` 必须是真动作：不能只是「出现、显示、淡入、逐条列出」这类万能词 | 红 |
-| 屏上字每个元素 ≤ 8 字 | 红 |
-| 第一页和最后一页不能是文字主导；结尾落在主物的一个动作上，不收在居中金句卡 | 红 |
-| 文字主导的拍点 ≤ 30% | 红 |
-| 屏上出现的数字，必须能在素材或口播里找到（「百分之六十」= 60%） | 红 |
-| 每页每 ≤ 6 秒至少一个拍点（讲解片节奏，标定后再定） | 黄 |
-| 连续三个拍点镜头相同 | 黄 |
-| 角色：没有可用插画素材时不画脸，只出手、背影、剪影，或让物当主角 | 红 |
+| `object` must be a concrete thing, not a layout word such as "title, key points, card, background, icon, text" | Red |
+| `action` must be a real action, not a catch-all such as "appears, shows, fades in, lists one by one" | Red |
+| Each on-screen text element ≤ 8 characters | Red |
+| The first and last pages must not be text-led; the ending lands on an action of the main object, not on a centred quote card | Red |
+| Text-led beats ≤ 30% | Red |
+| Every number shown on screen must be findable in the material or the narration ("sixty percent" = 60%) | Red |
+| At least one beat every ≤ 6 seconds on each page (explainer pace; to be finalised after calibration) | Yellow |
+| Three consecutive beats with the same camera | Yellow |
+| Characters: with no usable illustration material, never draw faces; show only hands, backs or silhouettes, or let an object be the protagonist | Red |
 
-知识类叙事的默认结构：**钩子**（一个反常识的事实或问题）→ **直觉** → **机制** → **例子和数字** → **收束在一个动作上**。
+The default structure for a knowledge narrative: **hook** (a counter-intuitive fact or question) → **intuition** → **mechanism** → **example and numbers** → **close on an action**.
 
-## 2. 画面：组件优先，风格包兜底
+## 2. Pages: components first, style packs as the safety net
 
-**风格包**是一个目录，包含：
-- token（色板、字体、笔触、底纹）；
-- 组件皮肤；
-- 运动语法（镜头预设、转场、节奏）；
-- 一张**语法卡**，写清这个风格做什么、绝不做什么；
-- 一份**标杆项目**：一条约 2 分钟的示范片。它同时是 Agent 的范例，也是回归测试。
+A **style pack** is a folder containing:
+- tokens (palette, fonts, strokes, ground texture);
+- component skins;
+- a motion grammar (camera presets, transitions, pacing);
+- a **grammar card** that says what the style does and never does;
+- a **benchmark project**: a demonstration film of about 2 minutes. It is both the agent's example and a regression test.
 
-首批五套：安静书房、白板手绘、黑板、科技深色、**暖调叙事插画**（「投资第一课」那一类）。
+The first five: quiet study, whiteboard, chalkboard, dark technical and **warm narrative illustration** (the "investing 101" kind).
 
-**页面 lint**（编排器强制跑，结果直接交给 Agent）：
-- 已有：出画、贴边、占用字幕区、文字重叠、**小字（实际渲染 < 24px）**。
-- 新增：
-  - **空框**：框画出来了，字还没写；
-  - **文字主导面积**：文字区域占画面过大；
-  - **画面饱满度**：主体元素没撑开内容区；
-  - **推拉切字**：镜头运动期间加密采样；
-  - **确定性**：同一时刻渲两次，逐像素比对。
+**Page lint** (run by the orchestrator every time; the results go straight to the agent):
+- Already in place: off-canvas, touching the edge, sitting in the subtitle band, overlapping text, **small text (rendered < 24px)**.
+- New:
+  - **empty frame**: a box has been drawn but its text not yet written;
+  - **text-led area**: text takes up too much of the frame;
+  - **fullness**: the main elements don't fill the content area;
+  - **text cut during camera moves**: denser sampling while the camera moves;
+  - **determinism**: render the same moment twice and compare pixel by pixel.
 
-**镜头预设**（脉冲式：停住、快动、停住）：快推 0.28s、横移 0.30s、砸入 0.17s（1.55 → 0.94 → 1.0）、震镜每片 ≤ 2 次。默认不用匀速慢推。
+**Camera presets** (pulse-style: hold, move fast, hold): quick push 0.28s, pan 0.30s, slam in 0.17s (1.55 → 0.94 → 1.0), shake ≤ 2 times per film. No slow constant push by default.
 
-**词级卡点**：配音返回字级时间戳，数字从开始计数到落定，正好落在念到它的那一刻。
+**Word-level sync**: the narration returns per-character timestamps, so a number counts up and settles exactly as it is spoken.
 
-**截图自检**：每轮由编排器跑 lint 和拼图，Agent 拿到「问题清单 + 拼图」后只修具体问题；3 轮后仍有问题就标记为「需要关注」，不阻塞流程。
+**Screenshot self-check**: each round, the orchestrator runs lint and makes the contact sheet; given "the issue list + the contact sheet", the agent fixes only the specific problems. If problems remain after 3 rounds, the page is marked "needs attention" and the run is not blocked.
 
-## 3. 成片门禁
+## 3. Film gates
 
-只读 mp4，Node + ffmpeg 实现，用户不用装 Python。
+Reads only the mp4, implemented in Node + ffmpeg, so users don't need Python.
 
-- **门禁**（红灯会自动定位最差的页并修一轮，修完仍红就在质量报告里告诉用户，绝不悄悄放行）：
-  - 中段空画面（按边缘判，不按颜色判）；
-  - 快动帧占比（衡量 PPT 感，阈值待标定）。
-- **只报告、不拦**：文字主导时长、相邻页版式雷同、最长无事件间隔。静止类指标绝不当门禁，因为「停住、猛动、停住」的好片会被判反。
+- **Gates** (a red light automatically finds the worst page and fixes it once; if it is still red after that, the quality report tells the user, never letting it pass silently):
+  - blank frames mid-film (judged by edges, not by colour);
+  - share of fast-motion frames (a measure of slide-deck feel; threshold to be calibrated).
+- **Reported, never blocking**: text-led duration, similar layouts on adjacent pages, the longest gap without an event. Stillness metrics are never gates, because a good film that "holds, moves hard, holds" would be judged the wrong way round.
 
-只有能把「认可」和「否定」两组片子干净分开的单个指标，才能当门禁。
+Only a single metric that cleanly separates the "approved" and "rejected" groups of films may become a gate.
 
-## 4. 评测与经验回流
+## 4. Evaluation and feeding lessons back
 
-- **评测集**：6 份素材（投资、心理学、历史、科学、读书、技术）× 2 种风格。改提示词、引擎或风格包之后，先用便宜的模型跑一遍，再抽查 Opus。
-- **评分**：门禁结果 + 视觉评审（固定评分表）+ 定期由作者盲选。
-- **标定集**：作者表过态的片子（认可 / 否定），用来定门禁阈值；有新的表态就重新标定。
-- **经验库** `docs/quality/经验.md`：每条写成「做法 + 证据 + 为什么 + 何时用」，不只记结论。
-- **验收工具也要被验收**：每个检查项都故意制造一次失败，确认它真的会报红。
-- **迁移测试**：派只读文档的 Agent 去做文档里没有的题目，交回「帮上了什么、卡在哪」。
+- **Evaluation set**: 6 pieces of material (investing, psychology, history, science, books, technology) × 2 styles. After changing prompts, the engine or a style pack, run it first with a cheap model, then spot-check with Opus.
+- **Scoring**: gate results + a visual review (a fixed scoring sheet) + periodic blind picks by the author.
+- **Calibration set**: films the author has judged (approved / rejected), used to set gate thresholds; recalibrate whenever new judgements come in.
+- **Lessons** `docs/quality/lessons.md`: each entry is written as "practice + evidence + why + when to use it", not just a conclusion.
+- **The checking tools are checked too**: every check is made to fail on purpose once, to confirm it really goes red.
+- **Transfer tests**: send an agent that has read only the docs to do a topic the docs don't cover, and have it report "what helped and where it got stuck".
 
-## 5. 暖调叙事插画（「投资第一课」类）
+## 5. Warm narrative illustration (the "investing 101" kind)
 
-画面以温暖的扁平插画讲道理：一个比喻物贯穿全片（雪球、天平、储蓄罐、树苗、山路），动作慢而有分量，数字落在物上，不单独起字卡。
+The pictures explain through warm, flat illustrations: one metaphor object runs through the whole film (a snowball, a balance, a piggy bank, a sapling, a mountain road), actions are slow and weighty, and numbers land on the object instead of on separate text cards.
 
-插画来源分两层：
-- **默认：代码画的插画组件库。** 免费、稳定、可动画，包括雪球、天平、硬币堆、树、房子、曲线山、日历等常用比喻物。
-- **可选：生图模型出插画素材。** 走用户选的 provider，比如 Relay 的生图接口。风格提示词锁定，去掉背景，再由 Agent 排版和做动画。
+Illustrations come from two layers:
+- **Default: a library of illustration components drawn in code.** Free, stable and animatable, including common metaphor objects such as a snowball, a balance, a stack of coins, trees, houses, a curved hill and a calendar.
+- **Optional: illustration assets from an image model.** Through the provider the user chooses, for example Relay's image API. The style prompt is locked, the background removed, and the agent then lays them out and animates them.
 
-先实测样片，再定语法：拿几集原片逐帧量平均镜头时长、运动占比、色板，再写这套风格的语法卡。
+Measure sample films before writing the grammar: take a few original episodes and measure, frame by frame, the average shot length, share of motion and palette, then write this style's grammar card.

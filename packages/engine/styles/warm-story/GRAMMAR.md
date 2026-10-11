@@ -1,37 +1,37 @@
-# 暖调叙事插画 · 语法卡
+# Warm story illustration · grammar card
 
-参照：有知有行「投资第一课」一类的知识动画。下面的语法凭记忆写成，没有逐帧实测；拿到样片后要实测校准。
+Reference: knowledge animations in the vein of 有知有行's "investing first lesson". These rules were written from memory, not frame-by-frame measurement; calibrate them against real sample films.
 
-## 一句话
+## In one sentence
 
-一位耐心的朋友，用一个比喻物把道理慢慢讲明白。画面温暖、扁平、安静，动作不多但每一个都有分量，看完记住的是那个物。
+A patient friend explains an idea slowly through one metaphor object. The picture is warm, flat and quiet; there are few movements, but each one carries weight, and what viewers remember is the object.
 
-## 画面
+## Picture
 
-- **一个比喻物贯穿全片。** 用雪球、储蓄罐、天平、树苗、山路、沙漏、跷跷板这类物承载道理，开场出现，中间反复回来，结尾让它完成一个动作（雪球停在山脚、树结出果子、天平落稳）。
-- **扁平插画，几乎不抖。** 大面积纯色块、圆润的形状、少量描边，线条干净；不要素描感的乱线。
-- **暖色为主，一处重点色。** 米色底，墨棕线；赤陶红表示代价和风险，芥末黄表示钱和答案，鼠尾草绿表示成长，深青表示时间和长期。一屏最多三种颜色同时说话。
-- **大物、少字。** 主体物占画面一半以上；屏上字只是标签和数字，每个元素不超过 8 个字，正文字号不小于 36px。
-- **数字落在物上。** 金额写在储蓄罐上，年份写在路牌上，倍数写在雪球旁边；不单独起一张数字字卡。
-- **图表也是风景。** 增长曲线画成一条山路或一棵树的高度，时间轴画成一条小路或一排日历，比例画成切开的派或一叠硬币。
-- **人物不出脸。** 需要人时只画手（递钱、按按钮、翻书）、背影或剪影；不画 Q 版小人和长了脸的物。
+- **One metaphor object runs through the whole film.** Let an object such as a snowball, a piggy bank, a balance, a sapling, a mountain path, an hourglass or a seesaw carry the idea: it appears at the start, keeps coming back, and at the end completes an action (the snowball comes to rest at the foot of the hill, the tree bears fruit, the balance settles).
+- **Flat illustration, almost no wobble.** Large solid colour areas, rounded shapes, little outline, clean lines; no sketchy scribbles.
+- **Warm colours with one accent.** Beige ground and ink-brown lines; terracotta red for cost and risk, mustard yellow for money and answers, sage green for growth, deep teal for time and the long run. At most three colours speak at once on one screen.
+- **Big objects, few words.** The main object fills more than half the frame; on-screen text is only labels and numbers, each element at most 8 characters in Chinese (about 4 words in English), body text at least 36px.
+- **Numbers sit on objects.** The amount is written on the piggy bank, the year on a signpost, the multiple beside the snowball; never a separate number card.
+- **Charts are scenery too.** A growth curve is drawn as a mountain path or the height of a tree, a timeline as a little road or a row of calendars, a proportion as a cut pie or a stack of coins.
+- **No faces.** When a person is needed draw only hands (handing over money, pressing a button, turning a page), a back view or a silhouette; no chibi figures and no objects with faces.
 
-## 动作与镜头
+## Motion and camera
 
-- **慢而有分量。** 元素以 0.6–1.2 秒的缓出动作进入（滚入、长出、落下、翻开），不弹跳，不闪烁。
-- **一个场景讲一件事，镜头在世界里移动。** 换话题时镜头横移到同一个世界的下一处（沿着山路往前、从罐子摇到天平），少用硬切和整页淡出。
-- **停住、动一下、停住。** 讲到关键处用一次短促的推近（0.3 秒左右）落在物上，然后停住让观众看；不做整页匀速慢推。
-- **因果用动作表达。** 「每月存一点」就让硬币一枚一枚落进罐子；「复利」就让雪球滚过一段坡后明显变大；不要用箭头加文字框解释。
+- **Slow and weighty.** Elements enter with a 0.6–1.2 s ease-out (rolling in, growing, dropping, opening); no bounce, no flicker.
+- **One scene, one point; the camera moves through the world.** When the topic changes, pan to the next spot in the same world (on along the path, from the jar over to the balance); use few hard cuts and whole-page fades.
+- **Still, move, still.** At the key moment push in once, briefly (about 0.3 s), landing on the object, then hold so viewers can look; no slow uniform push across the whole page.
+- **Show cause and effect with action.** "Save a little every month": coins drop into the jar one by one. "Compounding": the snowball rolls down a stretch of slope and is visibly bigger. Do not explain with arrows and text boxes.
 
-## 节奏
+## Pacing
 
-- 开场 3 秒内出现比喻物，并提出一个具体的问题（「每月存 1000 元，30 年后有多少？」）。
-- 每页 10–20 秒，页内每 3–6 秒有一个看得见的变化。
-- 结尾落在比喻物的一个动作上，口播说一句朴素的话收住；不收在居中的金句卡上。
+- Within the first 3 seconds the metaphor object appears and a concrete question is asked ("Save 1,000 a month: how much after 30 years?").
+- 10–20 seconds per page, a visible change every 3–6 seconds.
+- End on an action of the metaphor object, with one plain sentence of narration to close; never on a centred quote card.
 
-## 绝不
+## Never
 
-- 霓虹、渐变发光、蓝紫色调、科技感网格。
-- 一屏密密麻麻的小字、表格、代码。
-- 「标题 + 三个卡片 + 箭头」的 PPT 版式。
-- 素描乱线、黑板质感、白板马克笔质感（那是别的风格）。
+- Neon, glowing gradients, blue-purple tones, tech grids.
+- A screen crammed with small text, tables or code.
+- The slide layout of "title + three cards + arrows".
+- Sketchy scribbles, chalkboard texture, whiteboard marker texture (those are other styles).

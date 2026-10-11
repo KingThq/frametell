@@ -10,5 +10,5 @@ test('the warm-story pack lists every component with its doc and carries a bench
 });
 
 test('a style without components or example yields only the header', () => {
-  assert.ok(pagePack('study', []).length < 200);
+  assert.ok(pagePack('study', []).length < 400);   // the English header alone is about 250 characters
 });

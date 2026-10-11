@@ -1,4 +1,4 @@
-/* 缓存标杆项目的共用图：浏览器、缓存节点、源站三个方框和一条虚线，以及按关键帧移动的请求块。 */
+/* Shared diagram of the caching benchmark film: three boxes (browser, cache node, origin) on a dashed line, and request blocks moved by keyframes. */
 (function () {
   const { clamp, lerp, ease, Builder } = PV;
   const B = Builder.prototype;

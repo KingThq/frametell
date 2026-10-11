@@ -1,36 +1,36 @@
-# 科技深色 · 语法卡
+# Tech dark · grammar card
 
-参照：工程师在暗色编辑器和架构图前讲一个系统怎么运转（技术大会分享、源码解读）。下面的语法凭经验写成，没有逐帧实测；拿到样片后要实测校准。
+Reference: an engineer explaining how a system works in front of a dark editor and architecture diagrams (a tech-conference talk, a source-code walkthrough). These rules come from experience, not frame-by-frame measurement; calibrate them against real sample films.
 
-## 一句话
+## In one sentence
 
-一位冷静的工程师，用干净的图把一个系统拆开讲：数据从哪来、经过哪几步、在哪里出错。画面克制、精确，像一张会动的架构图。
+A calm engineer takes a system apart with clean diagrams: where the data comes from, which steps it passes through, where it goes wrong. The picture is restrained and precise, like an architecture diagram that moves.
 
-## 画面
+## Picture
 
-- **石墨色底。** 近黑的暖灰底，中间略亮，配一层几乎看不见的 48px 网格；不要星空、光晕、渐变天空。
-- **色板是反过来的。** `ink` 是暖白，`paper` 是比底色高一档的面板色；所有 `*F` 填充都是很暗的色调，框只是「一块稍亮的面板」，**绝不出现发亮的浅色块**。
-- **一种强调色：青色（`blue`）。** 它标出主路径、当前选中的东西、答案。琥珀（`orange`）只表示警告和成本，珊瑚红（`red`）只表示错误，绿（`green`）只表示成功；没有对应含义时不用它们。一屏强调色只有一种。
-- **干净的线。** 几乎不抖、单笔、线宽 2.4；直角折线、对齐的方框、等距排列。填充是平的，没有铅笔排线。
-- **等宽字点题。** 函数名、命令、文件名、数值、端口、延迟用 JetBrains Mono（`` `代码` `` 标记或 `font: 'mono'`）；中文解释用正文字。代码用 `P.code`，一张卡不超过 8 行，用 `.hl()` 高亮正在讲的那一行。
-- **图是主体。** 方框 + 箭头的流程、时序、队列、调用栈、内存格子、token 块（`P.tokens`）；数字落在图上（延迟写在箭头旁，大小写在格子里），不单独起数字卡。每个元素不超过 8 个字，正文字号不小于 36px（代码不小于 26px）。
+- **A graphite ground.** A near-black warm grey, slightly lighter in the middle, with an almost invisible 48px grid; no starfields, halos or gradient skies.
+- **The palette is inverted.** `ink` is a warm white and `paper` is a panel one step above the ground; every `*F` fill is a very dark tone, so a box is just "a slightly lighter panel". **Never a glowing light block.**
+- **One accent: teal (`blue`).** It marks the main path, the selected thing, the answer. Amber (`orange`) means only warning and cost, coral red (`red`) only error, green (`green`) only success; without that meaning, do not use them. Only one accent colour per screen.
+- **Clean lines.** Almost no wobble, single stroke, line width 2.4; right-angle elbows, aligned boxes, even spacing. Fills are flat, with no pencil hatching.
+- **Monospace for the point.** Function names, commands, file names, values, ports and latencies are in JetBrains Mono (`` `code` `` markup or `font: 'mono'`); explanations in the body face. Code goes in `P.code`, at most 8 lines per card, with `.hl()` highlighting the line being discussed.
+- **The diagram is the subject.** Box-and-arrow flows, sequences, queues, call stacks, memory cells, token blocks (`P.tokens`); numbers sit on the diagram (latency beside the arrow, size inside the cell), never on a separate number card. Each element at most 8 characters in Chinese (about 4 words in English); body text at least 36px (code at least 26px).
 
-## 动作与镜头
+## Motion and camera
 
-- **快而准。** 框和线 0.3–0.6 秒描出，代码按行打出（`cps` 50–80），数值用计数器滚到位（卡在念到它的那一刻）。
-- **数据要真的流动。** 请求是一个沿箭头移动的小块，缓存命中是一格亮起，错误是一条路径变红；用 `liveRough` / `follow` / `tokens.move` 让东西沿路径走，不用箭头加文字解释。
-- **镜头像在读图。** 默认全景；讲到某个模块时快推（`P.push`，1.2–1.35×）停住，讲完横移到下一个模块（`P.pan`）。不震镜、不砸入，除非是在讲一次崩溃。
+- **Quick and exact.** Boxes and lines trace in 0.3–0.6 s, code types line by line (`cps` 50–80), values roll into place with a counter (landing the moment they are spoken).
+- **Data really flows.** A request is a small block moving along an arrow, a cache hit is a cell lighting up, an error is a path turning red; use `liveRough` / `follow` / `tokens.move` to move things along paths instead of explaining with arrows and text.
+- **The camera reads the diagram.** Wide shot by default; when a module is discussed, push in quickly (`P.push`, 1.2–1.35×) and hold, then pan to the next module (`P.pan`) when done. No shakes or slams unless the subject is a crash.
 
-## 节奏
+## Pacing
 
-- 开场 3 秒内出现这期的主角：一个请求、一行命令、一个报错，或者一个反常的数字。
-- 每页 10–18 秒，页内每 3–5 秒有一个看得见的状态变化（一格亮起、一步走完、一行高亮）。
-- 结尾让开场那个请求走完全程（或那个报错消失），落在一个状态变化上；不收在居中的金句卡上。
+- Within the first 3 seconds, show this film's protagonist: a request, a command, an error, or an odd number.
+- 10–18 seconds per page, a visible state change every 3–5 seconds (a cell lights up, a step completes, a line is highlighted).
+- End by letting the opening request complete its whole journey (or the opening error disappear), landing on a state change; never on a centred quote card.
 
-## 绝不
+## Never
 
-- 蓝紫霓虹、发光描边、渐变光晕、赛博朋克、矩阵雨、粒子特效。
-- 浅色大色块、白底卡片（在深色底上会像灯箱）。
-- 手绘抖动、铅笔排线、纸纹、粉笔质感（那是别的风格）。
-- 一屏多种强调色；把红色当装饰色用。
-- 大段代码截图、超过 8 行的代码卡、小于 26px 的代码字。
+- Blue-purple neon, glowing outlines, gradient halos, cyberpunk, matrix rain, particle effects.
+- Large light blocks or white cards (on a dark ground they look like lightboxes).
+- Hand-drawn wobble, pencil hatching, paper texture, chalk texture (those are other styles).
+- More than one accent colour per screen; red used as decoration.
+- Big screenshots of code, code cards over 8 lines, code text under 26px.

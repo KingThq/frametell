@@ -1,7 +1,7 @@
-/* p05 时间：一条越来越陡的山路，硬币在第 10 年停一下，然后冲上最后一段陡坡。 */
+/* p05 Time: a mountain path that keeps getting steeper; the coin pauses at year 10, then charges up the last steep stretch. */
 ENGINE.visual('p05', (P) => {
   P.title('增长都在后面', { accent: 'green' });
-  // the road follows the real balance: years 0→30 left to right, height ∝ money (18万 at year 10, 149万 at year 30)
+  // the road follows the real balance: years 0→30 left to right, height ∝ money (180,000 at year 10, 1.49 million at year 30)
   const bal = (y) => ((Math.pow(1 + 0.08 / 12, y * 12) - 1) / (0.08 / 12)) * 1000;
   const pt = (y) => [240 + (y / 30) * 1460, 820 - (bal(y) / bal(30)) * 560];
   const pts = []; for (let y = 0; y <= 30; y += 0.5) pts.push(pt(y).map((v) => +v.toFixed(1)));

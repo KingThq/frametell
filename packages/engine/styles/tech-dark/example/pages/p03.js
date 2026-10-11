@@ -1,4 +1,4 @@
-/* p03 命中：第二个请求块滑向缓存，副本格亮起、跳出绿色 HIT，请求块在缓存处折返；计时器只滚到 5 ms，旁边的 120 ms 被划掉。 */
+/* p03 Hit: a second request block slides to the cache, the copy cell lights up with a green HIT and the block turns back at the cache; the timer only rolls to 5 ms and the 120 ms beside it is struck out. */
 ENGINE.visual('p03', (P) => {
   P.title('第二次：5 ms', { accent: 'blue' });
   const { clamp } = PV, N = PV.NET;

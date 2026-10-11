@@ -1,4 +1,4 @@
-/* p04 定理：三角形边旁的 3、4、5 被擦掉换成 a、b、c，右边逐字写出 a² + b² = c² 并用粉笔框住。 */
+/* p04 The theorem: the 3, 4, 5 beside the triangle's sides are erased and replaced by a, b, c; on the right a² + b² = c² is written out and boxed in chalk. */
 ENGINE.visual('p04', (P) => {
   P.title('换成字母', { accent: 'yellow' });
   const t0 = P.c(0), t1 = P.c(1), t2 = P.c(2);
