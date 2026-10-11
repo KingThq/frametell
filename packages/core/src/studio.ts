@@ -112,7 +112,7 @@ export class Studio {
    */
   timeline(id: string): Timeline | null {
     const dir = projectDir(id);
-    const film = (() => { try { return fs.readdirSync(path.join(dir, 'out')).find((f) => f.endsWith('-无字幕.mp4')); } catch { return undefined; } })();
+    const film = (() => { try { return fs.readdirSync(path.join(dir, 'out')).find((f) => /-(无字幕|no-subtitles)\.mp4$/.test(f)); } catch { return undefined; } })();
     const stamp = ['script.js', 'voice.js', film ? `out/${film}` : ''].map((f) => { try { return f ? fs.statSync(path.join(dir, f)).mtimeMs : 0; } catch { return 0; } }).join('|');
     if (stamp.startsWith('0|')) return null;
     const hit = this.timelines.get(id);
@@ -135,7 +135,7 @@ export class Studio {
     if (!ts.length) return [];
     let st: { video?: string; exported?: boolean } = {};
     try { st = JSON.parse(fs.readFileSync(path.join(dir, '.studio', 'state.json'), 'utf8')); } catch {}
-    const cut = st.video && st.exported !== false ? st.video.replace('有字幕', '无字幕') : undefined;
+    const cut = st.video && st.exported !== false ? st.video.replace(/-有字幕\.mp4$/, '-无字幕.mp4').replace(/-with-subtitles\.mp4$/, '-no-subtitles.mp4') : undefined;
     return new Project(dir).stills(ts, cut && fs.existsSync(cut) ? cut : undefined);
   }
 

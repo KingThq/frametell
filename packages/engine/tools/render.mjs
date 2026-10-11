@@ -1,4 +1,4 @@
-// Parallel render → out/<name>-无字幕.mp4, then burn subtitles → out/<name>-有字幕.mp4. Run from a project dir:
+// Parallel render → out/<name>-无字幕.mp4, then burn subtitles → out/<name>-有字幕.mp4 (an English film: -no-subtitles / -with-subtitles). Run from a project dir:
 // node engine/tools/render.mjs [--portrait] [--hw] [--fps 60]
 //   --hw: hardware H.264 (Apple media engine) for chunks and the subtitle pass — frees the CPU for the browsers; slightly larger files [--workers 12] [--from 0] [--to <end>] [--name <file name>] [--skip-video] [--skip-subs]
 import { spawn, execFileSync } from 'child_process';
@@ -21,7 +21,7 @@ if (META.voice) {
 // --portrait: 1080×1920 from pages-portrait/, files get a 竖版 tag; children inherit PORTRAIT=1
 if (PORTRAIT) process.env.PORTRAIT = '1';
 if (has('hw')) process.env.HW = '1';
-const FPS = +arg('fps', 60), W = +arg('workers', 12), name = arg('name', META.name || 'video') + (PORTRAIT ? '-竖版' : '');
+const FPS = +arg('fps', 60), W = +arg('workers', 12), name = arg('name', META.name || 'video') + (PORTRAIT ? (META.lang === 'en' ? '-portrait' : '-竖版') : '');
 const from = +arg('from', 0), to = +arg('to', L.duration);
 const F0 = Math.round(from * FPS), F1 = Math.round(to * FPS);
 const chunkDir = path.join(OUT, PORTRAIT ? 'chunks-portrait' : 'chunks');
@@ -40,7 +40,8 @@ process.on('exit', unlock);
 process.on('SIGINT', () => process.exit(130));
 
 const run = (cmd, args) => new Promise((res, rej) => spawn(cmd, args, { stdio: 'inherit' }).on('close', (c) => (c ? rej(new Error(cmd + ' ' + c)) : res())));
-const nosub = path.join(OUT, `${name}-无字幕.mp4`), withsub = path.join(OUT, `${name}-有字幕.mp4`);
+const [NO, WITH] = META.lang === 'en' ? ['no-subtitles', 'with-subtitles'] : ['无字幕', '有字幕'];
+const nosub = path.join(OUT, `${name}-${NO}.mp4`), withsub = path.join(OUT, `${name}-${WITH}.mp4`);
 
 if (!has('skip-video')) {
   console.time('video');

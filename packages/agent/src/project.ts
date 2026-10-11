@@ -137,7 +137,7 @@ export class Project {
       child.on('close', (code) => {
         if (code) return reject(new Error(`渲染失败（exit ${code}）：${tail.slice(-1500)}`));
         const out = fs.readdirSync(this.file('out')).filter((f) => f.endsWith('.mp4'));
-        const withSubs = out.find((f) => f.includes('有字幕')), noSubs = out.find((f) => f.includes('无字幕'));
+        const withSubs = out.find((f) => /-(有字幕|with-subtitles)\.mp4$/.test(f)), noSubs = out.find((f) => /-(无字幕|no-subtitles)\.mp4$/.test(f));
         if (!withSubs || !noSubs) return reject(new Error('渲染结束但没有找到成片'));
         resolve({ withSubs: this.file('out/' + withSubs), noSubs: this.file('out/' + noSubs) });
       });
