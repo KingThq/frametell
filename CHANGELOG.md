@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The app no longer freezes while pages check themselves. Lint and snapshots ran in the same process as the panel and blocked it, so with several pages drawing at once every click waited seconds; four pages' checks now finish in half the time with the panel responsive throughout.
 - The director and page agents talk to you in plain words: their reports and progress notes no longer show file names, fields, commands or code, and pages are called 第 4 页 rather than p04.
 - Claude 4.6 and later (Opus 5.5, the default, among them) are asked to think adaptively; Opus 5.5 refused the token-budget form with 「requires adaptive thinking」 and the storyboard never started.
 
