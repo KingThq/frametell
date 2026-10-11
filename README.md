@@ -17,18 +17,20 @@ It's built for knowledge creators who explain history, science, technology, inve
 
 ## See it
 
-Two films Frametell made end to end: storyboard, narration, voice, every page and the render. Click a picture to watch (with sound).
+Two films Frametell made end to end in English: storyboard, narration, an ElevenLabs voice, every page and the render. Click a picture to watch (with sound).
 
 <table>
   <tr>
-    <td width="50%"><a href="docs/media/uncertainty.mp4"><img src="docs/media/uncertainty.jpg" alt="Frames from 测不准原理, a chalkboard-style film about Heisenberg's uncertainty principle"></a></td>
-    <td width="50%"><a href="docs/media/pomodoro.mp4"><img src="docs/media/pomodoro.jpg" alt="Frames from 番茄工作法, a warm illustrated film about the Pomodoro Technique"></a></td>
+    <td width="50%"><a href="docs/media/sky-blue.mp4"><img src="docs/media/sky-blue.jpg" alt="Frames from Why is the sky blue, a chalkboard-style film about Rayleigh scattering"></a></td>
+    <td width="50%"><a href="docs/media/compound-interest.mp4"><img src="docs/media/compound-interest.jpg" alt="Frames from Why starting early matters, a warm illustrated film about compound interest"></a></td>
   </tr>
   <tr>
-    <td><b>测不准原理</b> · Uncertainty principle, 67 s, <code>chalkboard</code>. Made from one sentence (「讲讲量子力学测不准原理」) with DeepSeek.</td>
-    <td><b>番茄工作法</b> · The Pomodoro Technique, 55 s, <code>warm-story</code>. Made from a one-page note with Gemini 3.7 Flash through Relay.</td>
+    <td><b>Why is the sky blue?</b> · 87 s, <code>chalkboard</code>. Made from one sentence (“Why is the sky blue, and why are sunsets red?”) with Gemini through Relay.</td>
+    <td><b>Why starting early matters</b> · 72 s, <code>warm-story</code>. Compound interest, from one sentence, with Gemini through Relay.</td>
   </tr>
 </table>
+
+Frametell makes Chinese films just as well; see the <a href="README.zh-CN.md">Chinese README</a> for two of them.
 
 ## Why Frametell
 
