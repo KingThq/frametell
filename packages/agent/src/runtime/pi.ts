@@ -5,12 +5,25 @@ import path from 'node:path';
 import { Agent, type AgentMessage } from '@earendil-works/pi-agent-core';
 import type { Api, Model, MutableModels } from '@earendil-works/pi-ai';
 import { fileTools } from '../tools/files.js';
-import { addUsage, emptyUsage, toolSummary, type AgentRuntime, type AgentSession, type SessionOptions, type StageInput, type TurnResult } from './types.js';
+import { addUsage, emptyUsage, toolSummary, type AgentRuntime, type AgentSession, type SessionOptions, type StageInput, type Thinking, type TurnResult } from './types.js';
 
 const mimeOf = (f: string) => (/\.png$/i.test(f) ? 'image/png' : /\.webp$/i.test(f) ? 'image/webp' : 'image/jpeg');
 const short = toolSummary;
 
-export function piRuntime(models: MutableModels, model: Model<Api>, opts: { thinking?: 'off' | 'low' | 'medium' | 'high' } = {}): AgentRuntime {
+const LEVELS: Thinking[] = ['off', 'low', 'medium', 'high'];
+
+export function piRuntime(models: MutableModels, model: Model<Api>, opts: { thinking?: Thinking } = {}): AgentRuntime {
+  const base = opts.thinking ?? 'medium';
+  // A turn may ask for less thinking than the session's model. Providers that take a reasoning level get it; gateways
+  // that sell each level as its own model id (…-low / …-medium / …-high) get that sibling model, never a higher one.
+  const tier = /^(.*)-(low|medium|high)$/.exec(model.id);
+  const levelled = (want?: Thinking): { model: Model<Api>; thinking: Thinking } => {
+    if (!want) return { model, thinking: base };
+    const own = tier ? (tier[2] as Thinking) : base;
+    const level = LEVELS[Math.min(LEVELS.indexOf(want), LEVELS.indexOf(own))];
+    const sibling = tier && level !== own ? models.getModel(model.provider as never, `${tier[1]}-${level === 'off' ? 'low' : level}` as never) as Model<Api> | undefined : undefined;
+    return { model: sibling ?? model, thinking: level };
+  };
   return {
     id: 'pi',
     model: { provider: model.provider, id: model.id },
@@ -66,6 +79,9 @@ export function piRuntime(models: MutableModels, model: Model<Api>, opts: { thin
         ref,
         async send(input: StageInput): Promise<TurnResult> {
           turns = 0; usage = emptyUsage(); lastText = ''; stop = 'done';
+          const l = levelled(input.thinking);
+          agent.state.model = l.model;
+          agent.state.thinkingLevel = l.thinking;
           const images = (input.images || []).map((f) => ({ type: 'image' as const, data: fs.readFileSync(f).toString('base64'), mimeType: mimeOf(f) }));
           let error: string | undefined;
           try { await agent.prompt(input.text, images); } catch (e) { error = (e as Error).message; stop = stop === 'done' ? 'error' : stop; }

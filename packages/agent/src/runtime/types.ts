@@ -19,7 +19,9 @@ export type RuntimeEvent =
   | { type: 'progress'; what: 'tool' | 'thinking' | 'text' | 'writing'; name?: string; path?: string; lines?: number; chars: number; tail?: string };
 
 /** A message the orchestrator sends into a session: text plus optional images (lint report + contact sheet). */
-export interface StageInput { text: string; images?: string[] }
+export type Thinking = 'off' | 'low' | 'medium' | 'high';
+/** thinking: how hard the model should think for this turn, at most the session's own level (a check needs less than a draft) */
+export interface StageInput { text: string; images?: string[]; thinking?: Thinking }
 
 export interface SessionOptions {
   /** stable id, also used for provider prompt caching */

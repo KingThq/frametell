@@ -6,7 +6,7 @@ import path from 'node:path';
 import { narrate, type TtsProvider } from '@frametell/voice';
 import { Project, type LintIssue, type PageTiming, type Storyboard } from './project.js';
 import { checkPrompt, langNote, pagePrompt, pageSystem, plannerSystem, reviewPrompt, scriptPrompt, storyboardFixPrompt, storyboardPrompt, type Brief } from './prompts.js';
-import { addUsage, emptyUsage, type AgentRuntime, type AgentSession, type TokenUsage, type TurnResult } from './runtime/types.js';
+import { addUsage, emptyUsage, type AgentRuntime, type AgentSession, type Thinking, type TokenUsage, type TurnResult } from './runtime/types.js';
 import type { PageStatus, Stage, StudioEvent } from './events.js';
 
 export interface Prices { input: number; output: number; cacheRead: number; cacheWrite: number; currency: 'CNY' | 'USD' }
@@ -72,6 +72,10 @@ ${code}
 \`\`\`
 用 edit 只改需要改的地方（可以多次 edit），**不要用 write 重写整个文件**；改完不用再读一遍文件，检查截图会告诉你效果。`;
 
+// A page is drafted at the model's full thinking level; its check rounds (look at the contact sheet, fix what is off) are
+// small edits and run at medium, which on a gateway's …-high model means its …-medium sibling: most of a check round's
+// time was the model thinking before a short answer.
+const CHECK_THINKING: Thinking = 'medium';
 const MAX = { pagesAtOnce: 10, storyboardFix: 2, planTurns: 30, pageTurns: 40, pageRounds: 3, revisionRounds: 2, reviewRounds: 2 };
 
 export class Director {
@@ -128,8 +132,8 @@ export class Director {
       if (event.type === 'turn') { this.countTurn(event.usage); if (name.startsWith('page-')) this.firstTurn?.(); }
     } }, resume);
   }
-  private async send(s: AgentSession, text: string, images?: string[]) {
-    const r = await s.send({ text, images });
+  private async send(s: AgentSession, text: string, images?: string[], thinking?: Thinking) {
+    const r = await s.send({ text, images, thinking });
     if (r.stopReason === 'aborted') throw new DOMException('aborted', 'AbortError');
     return r;
   }
@@ -298,7 +302,7 @@ export class Director {
         if (crash) {
           if (round > rounds) throw new Error(crash);
           this.setPage(id, { ...st, issues: [crash] });
-          r = await this.send(s, crashPrompt(id, crash) + this.unseen(`page-${id}`));
+          r = await this.send(s, crashPrompt(id, crash) + this.unseen(`page-${id}`), undefined, CHECK_THINKING);
           await this.commit(`${id}：修运行错误`);
           continue;
         }
@@ -306,7 +310,7 @@ export class Director {
         const times = this.sheetTimes(sb, t);
         const sheet = await this.project.snap(`${id}-r${round}`, times.map((x) => x.t), [id]);
         this.setPage(id, { ...st, issues: issues.map((i) => i.msg) }, { sheet });
-        r = await this.send(s, checkPrompt(round, issues, times) + this.unseen(`page-${id}`), [sheet]);
+        r = await this.send(s, checkPrompt(round, issues, times) + this.unseen(`page-${id}`), [sheet], CHECK_THINKING);
         await this.commit(`${id}：第 ${round} 轮修改`);
         const reply = r.text.trim();
         if (/^FLAGGED/i.test(reply)) { st.status = 'flagged'; st.issues = [reply.replace(/^FLAGGED:?\s*/i, '')]; break; }
