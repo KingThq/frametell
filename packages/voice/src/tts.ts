@@ -2,7 +2,8 @@
 // which narrate() uses to cut a page-long utterance back into cues and to place words on the timeline.
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+import { createRequire } from 'node:module';
 
 export interface WordTime { word: string; startTime: number; endTime: number }
 export interface SynthResult { audio: Buffer; words: WordTime[] }
@@ -103,7 +104,8 @@ export const VOLCENGINE_VOICES: Voice[] = [
  */
 export function bundledSample(id: string): string | undefined {
   if (!/^[\w.-]+$/.test(id)) return undefined;
-  const f = fileURLToPath(new URL(`../samples/${id}.mp3`, import.meta.url));
+  // found through the package itself, so it still resolves when the code is bundled (the desktop app)
+  const f = path.join(path.dirname(createRequire(import.meta.url).resolve('@frametell/voice/package.json')), 'samples', `${id}.mp3`);
   return fs.existsSync(f) ? f : undefined;
 }
 

@@ -2,12 +2,14 @@
 // user messages. Stable text first (system), changing text last (user), so provider prompt caches stay warm.
 import fs from 'node:fs';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 import { ENGINE_DIR } from '@frametell/engine/tools/project.mjs';
 import type { PageTiming, Storyboard, LintIssue } from './project.js';
 
 import { pagePack } from './pagepack.js';
 
-const DIR = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../prompts');
+// found through the package itself, so it still resolves when the code is bundled (the desktop app)
+const DIR = path.join(path.dirname(createRequire(import.meta.url).resolve('@frametell/agent/package.json')), 'prompts');
 const read = (f: string) => fs.readFileSync(path.join(DIR, f), 'utf8');
 const grammar = (style: string) => {
   const f = path.join(ENGINE_DIR, 'styles', style, 'GRAMMAR.md');
