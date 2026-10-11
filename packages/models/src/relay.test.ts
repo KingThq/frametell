@@ -18,3 +18,9 @@ test('image models are left out of the chat catalog', () => {
   assert.equal(toModel({ id: 'gpt-image-2', category: 'image' }, 'https://gw'), null);
   assert.equal(toModel({ id: 'gpt-image-2-4k' }, 'https://gw'), null);
 });
+
+test('Claude 4.6 and later are asked to think adaptively, older Claude with a budget, others as before', () => {
+  const adaptive = (id: string) => (toModel({ id, category: 'reasoning' }, 'https://gw')?.compat as { forceAdaptiveThinking?: boolean } | undefined)?.forceAdaptiveThinking === true;
+  for (const id of ['claude-opus-5-5', 'claude-opus-5', 'claude-sonnet-5', 'claude-fable-5-1', 'claude-opus-4-7', 'claude-sonnet-4-6']) assert.ok(adaptive(id), id);
+  for (const id of ['claude-haiku-4-5-20251001', 'claude-sonnet-4-5', 'claude-3-7-sonnet-20250219', 'gemini-3.7-flash-high', 'gpt-5.5']) assert.ok(!adaptive(id), id);
+});

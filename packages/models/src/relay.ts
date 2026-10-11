@@ -25,6 +25,12 @@ function limits(id: string): { contextWindow: number; maxTokens: number } {
   return { contextWindow: 272_000, maxTokens: 64_000 };
 }
 
+/** Claude 4.6 and later think adaptively (Opus 4.7 and the 5s accept nothing else); earlier ones take a token budget */
+function adaptiveThinking(id: string): boolean {
+  const v = /^claude-[a-z]+-(\d+)(?:-(\d{1,2}))?(?:-|$)/.exec(id);
+  return !!v && (+v[1] > 4 || (+v[1] === 4 && +(v[2] ?? 0) >= 6));
+}
+
 export function toModel(m: GatewayModel, baseUrl: string): Model<RelayApi> | null {
   if (m.category === 'image' || m.id.startsWith('gpt-image')) return null;   // chat and reasoning models only
   const gpt = m.id.startsWith('gpt-');
@@ -42,6 +48,7 @@ export function toModel(m: GatewayModel, baseUrl: string): Model<RelayApi> | nul
     // prices are ¥ per million tokens (Relay bills in RMB); the catalog marks the currency
     cost: { input: p.input_per_1m ?? 0, output: p.output_per_1m ?? 0, cacheRead: p.cached_per_1m ?? 0, cacheWrite: p.cache_write_per_1m ?? (p.input_per_1m ?? 0) * 1.25 },
     ...limits(m.id),
+    ...(adaptiveThinking(m.id) ? { compat: { forceAdaptiveThinking: true } } : {}),
   };
   return model;
 }

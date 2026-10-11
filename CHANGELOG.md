@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Claude 4.6 and later through Relay (Opus 5.5, the default, among them) are asked to think adaptively; Opus 5.5 refused the token-budget form with 「requires adaptive thinking」 and the storyboard never started.
+
 ### Added
 
 - A Linux render image (`docker/render.Dockerfile`): draws a finished project to mp4 with no desktop, GPU or Mac — Debian's Chromium and ffmpeg, Noto CJK and emoji fonts, the engine with its own modules. `docker run … frametell-render /project --fps 30 --workers 4`. Tried on 番茄工作法 (54.5 s, warm-story): frames identical to the Mac export; 75 s on 4 cores, 123 s on 2.
