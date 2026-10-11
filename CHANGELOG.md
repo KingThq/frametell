@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Conversation: a stage's steps (files read, checks run, the model's notes to itself) show only while it runs or when it failed; once it has its result — a storyboard to confirm, pages drawn, a plan made — only the result and what the director said remain.
 - Settings → model providers: a long model list can be searched, narrowed to one maker by the id's prefix (OpenRouter's 401 models: openai 97, qwen 51, google 33, …) and is shown 40 at a time; every provider links to its site beside its description, and its key page link stays visible after connecting.
 - **Settings is a centred dialog.** Sections on the left (model providers, voices, general, network proxy, this computer — one entry each, so a new kind of setting is one more entry); model providers and voices are a list with the open one beside it. Each provider shows its official mark, whether it is connected and which one is in use; its page has the key, an optional own base URL, and its models — the ones it lists and ids typed in by hand — any of which can be made the default. OpenAI- or Anthropic-compatible endpoints of your own can be added. On a phone the sections become tabs and a provider opens on its own page.
 - **No native selects on Home.** The model is chosen from a searchable list grouped by provider, with marks; an id the provider does not list can be typed and used. The voice is chosen from a list where every voice can be heard without choosing it.

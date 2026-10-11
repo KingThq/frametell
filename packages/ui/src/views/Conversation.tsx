@@ -249,7 +249,7 @@ function WorkChapter({ b, live }: { b: Extract<Block, { kind: 'work' }>; live: b
       </header>
       <div className="ml-2.5 mt-2.5 space-y-3 border-l border-line pb-1 pl-[22px]">
         {b.items.filter((i): i is Extract<FeedItem, { kind: 'say' }> => i.kind === 'say').map((it) => <Said key={it.key} text={it.text} />)}
-        <Process items={b.items} />
+        {live && <Process items={b.items} />}
       </div>
     </section>
   );
@@ -314,7 +314,9 @@ function Chapter({ b, run, project, onSelectPage, selected }: { b: Extract<Block
           if (it.kind === 'error') return <p key={it.key} className="flex items-start gap-1.5 text-[12.5px] leading-relaxed text-seal"><TriangleAlert size={13} className="mt-0.5 shrink-0" aria-hidden />{it.message}</p>;
           return null;
         })}
-        <Process items={b.items} />
+        {/* the steps are worth seeing while they happen, or when they went wrong; once the stage has its result
+            (a storyboard to confirm, pages drawn) they say nothing the result does not */}
+        {(st.status === 'running' || st.status === 'failed') && !approvals.length && <Process items={b.items} />}
       </div>
     </section>
   );
