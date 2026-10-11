@@ -26,7 +26,7 @@
   </tr>
   <tr>
     <td><b>测不准原理</b> · 67 秒，<code>chalkboard</code> 黑板风格。只给了一句话「讲讲量子力学测不准原理」，模型是 DeepSeek。</td>
-    <td><b>番茄工作法</b> · 55 秒，<code>warm-story</code> 暖调插画风格。素材是一页笔记，模型是 Gemini 3.7 Flash（经 Relay）。</td>
+    <td><b>番茄工作法</b> · 55 秒，<code>warm-story</code> 暖调插画风格。素材是一页笔记，模型是 Gemini 3.7 Flash。</td>
   </tr>
 </table>
 
@@ -35,7 +35,7 @@
 - **先拍板，再动手。** 分镜确认之前一页都不画。哪一页不对，指着它说改什么就行。
 - **过程看得见。** Agent 边做边说在干什么、为什么这么做，花了多少钱、用了多久，任何时候一眼可见。
 - **效果稳，省 token。** 不是从零生成视频，而是驱动一整套成熟的视频引擎：风格、组件、镜头运动、质量检查都是现成的。
-- **本地运行，任何模型。** 资料和密钥都留在你的电脑上。支持 [Relay](https://relay.example.com)（推荐）、Anthropic、OpenAI 等。
+- **本地运行，任何模型。** 资料和密钥都留在你的电脑上。支持 Anthropic、OpenAI、Google、DeepSeek、OpenRouter 等，也可以接任意 OpenAI / Anthropic 兼容接口。
 
 ## 怎么做出来的
 
@@ -55,7 +55,7 @@
 git clone https://github.com/sitor-ai/frametell.git && cd frametell
 pnpm install && pnpm build
 
-export RELAY_API_KEY=...          # 或 ANTHROPIC_API_KEY / OPENAI_API_KEY
+export ANTHROPIC_API_KEY=...         # 或 OPENAI_API_KEY、GEMINI_API_KEY …
 export VOLCENGINE_TTS_API_KEY=...    # 可选，配音用；也可以用 ELEVENLABS_API_KEY
 
 # 在浏览器里打开工作室

@@ -25,8 +25,8 @@ Two films Frametell made end to end in English: storyboard, narration, an Eleven
     <td width="50%"><a href="docs/media/compound-interest.mp4"><img src="docs/media/compound-interest.jpg" alt="Frames from Why starting early matters, a warm illustrated film about compound interest"></a></td>
   </tr>
   <tr>
-    <td><b>Why is the sky blue?</b> · 87 s, <code>chalkboard</code>. Made from one sentence (“Why is the sky blue, and why are sunsets red?”) with Gemini through Relay.</td>
-    <td><b>Why starting early matters</b> · 72 s, <code>warm-story</code>. Compound interest, from one sentence, with Gemini through Relay.</td>
+    <td><b>Why is the sky blue?</b> · 87 s, <code>chalkboard</code>. Made from one sentence (“Why is the sky blue, and why are sunsets red?”) with Gemini.</td>
+    <td><b>Why starting early matters</b> · 72 s, <code>warm-story</code>. Compound interest, from one sentence, with Gemini.</td>
   </tr>
 </table>
 
@@ -37,7 +37,7 @@ Frametell makes Chinese films just as well; see the <a href="README.zh-CN.md">Ch
 - **You approve the plan first.** Nothing gets drawn until you've signed off on the storyboard. If a page is wrong, point at it and say what to change.
 - **You can watch it work.** The agent says what it's doing and why, and the cost and time spent are on screen at every step.
 - **Stable results, fewer tokens.** The agent drives a mature video engine with styles, components, camera moves and quality checks. It doesn't generate video from scratch.
-- **Runs locally, with any model.** Your materials and API keys stay on your computer. It works with [Relay](https://relay.example.com) (recommended), Anthropic, OpenAI and other providers.
+- **Runs locally, with any model.** Your materials and API keys stay on your computer. It works with Anthropic, OpenAI, Google, DeepSeek, OpenRouter and other providers, or any OpenAI- or Anthropic-compatible endpoint.
 
 ## How it works
 
@@ -57,7 +57,7 @@ You need Node.js 22.19 or later, pnpm, and Chrome, Edge or Chromium installed. F
 git clone https://github.com/sitor-ai/frametell.git && cd frametell
 pnpm install && pnpm build
 
-export RELAY_API_KEY=...          # or ANTHROPIC_API_KEY / OPENAI_API_KEY
+export ANTHROPIC_API_KEY=...         # or OPENAI_API_KEY, GEMINI_API_KEY …
 export VOLCENGINE_TTS_API_KEY=...    # optional, or ELEVENLABS_API_KEY for voiceover
 
 # Open the studio in your browser

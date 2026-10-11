@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Claude 4.6 and later through Relay (Opus 5.5, the default, among them) are asked to think adaptively; Opus 5.5 refused the token-budget form with 「requires adaptive thinking」 and the storyboard never started.
+- Claude 4.6 and later (Opus 5.5, the default, among them) are asked to think adaptively; Opus 5.5 refused the token-budget form with 「requires adaptive thinking」 and the storyboard never started.
 
 ### Added
 
@@ -47,7 +47,7 @@ The first release of 画说 · Frametell: a local, open-source studio that turns
 
 #### Models and voices
 
-- Any model: Relay (recommended), Claude, OpenAI, Gemini, Grok, OpenRouter, DeepSeek, Kimi, Zhipu GLM, Qwen, MiniMax, SiliconFlow, Doubao, Hunyuan, Xiaomi MiMo and Ollama, each with its own base URL if you have one. Models a provider does not list can be typed in, and your own OpenAI- or Anthropic-compatible endpoints can be added. An optional HTTP proxy applies to every request.
+- Any model: Claude, OpenAI, Gemini, Grok, OpenRouter, DeepSeek, Kimi, Zhipu GLM, Qwen, MiniMax, SiliconFlow, Doubao, Hunyuan, Xiaomi MiMo and Ollama, each with its own base URL if you have one. Models a provider does not list can be typed in, and your own OpenAI- or Anthropic-compatible endpoints can be added. An optional HTTP proxy applies to every request.
 - Voices from Volcengine TTS (Chinese) and ElevenLabs (English and more). Every voice can be heard before you choose it, and the built-in Volcengine previews ship with Frametell, so listening costs nothing.
 - Keys stay on your computer, in a settings file only you can read, and the panel only ever sees them masked.
 
