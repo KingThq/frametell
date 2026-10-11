@@ -16,7 +16,6 @@ if (!process.env.FRAMETELL_HOME && !process.env.FRAMETELL_HOME && !fs.existsSync
   try { fs.renameSync(LEGACY_DIR, DATA_DIR); } catch {}
 }
 export const PROJECTS_DIR = path.join(DATA_DIR, 'projects');
-const FILE = path.join(DATA_DIR, 'config.json');
 
 
 export interface Config {
@@ -48,21 +47,39 @@ const DEFAULTS: Config = {
   defaults: { runtime: 'pi', style: 'warm-story', durationSec: 60, subtitles: true, concurrency: 10, voice: { provider: 'volcengine', id: 'zh_male_yuanboxiaoshu_uranus_bigtts', name: '渊博小叔' } },
 };
 
-export function loadConfig(): Config {
-  try {
-    const c = JSON.parse(fs.readFileSync(FILE, 'utf8')) as Partial<Config>;
-    const defaults = { ...DEFAULTS.defaults, ...(c.defaults || {}) };
-    if (defaults.concurrency === 3) defaults.concurrency = 10;   // the old default: pages now draw up to 10 at once
-    return { ...DEFAULTS, ...c, defaults, tts: { ...(c.tts || {}) }, keys: { ...(c.keys || {}) }, baseUrls: { ...(c.baseUrls || {}) }, models: { ...(c.models || {}) }, custom: c.custom || [] };
-  } catch { return structuredClone(DEFAULTS); }
+/** Where a Studio keeps its settings: config.json in its data directory, or whatever the host provides instead. */
+export interface ConfigStore {
+  load(): Config;
+  save(c: Config): void;
 }
 
-export function saveConfig(c: Config) {
-  fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
-  const tmp = FILE + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(c, null, 2), { mode: 0o600 });
-  fs.renameSync(tmp, FILE);
+/** Settings stored with the defaults filled in, as `load` returns them (also for a host's own store). */
+export function withDefaults(c: Partial<Config>): Config {
+  const defaults = { ...DEFAULTS.defaults, ...(c.defaults || {}) };
+  if (defaults.concurrency === 3) defaults.concurrency = 10;   // the old default: pages now draw up to 10 at once
+  return { ...DEFAULTS, ...c, defaults, tts: { ...(c.tts || {}) }, keys: { ...(c.keys || {}) }, baseUrls: { ...(c.baseUrls || {}) }, models: { ...(c.models || {}) }, custom: c.custom || [] };
 }
+
+/** <dir>/config.json, readable only by the user (0600) */
+export function configFile(dir: string): ConfigStore {
+  const file = path.join(dir, 'config.json');
+  return {
+    load() {
+      try { return withDefaults(JSON.parse(fs.readFileSync(file, 'utf8')) as Partial<Config>); } catch { return structuredClone(DEFAULTS); }
+    },
+    save(c) {
+      fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+      const tmp = file + '.tmp';
+      fs.writeFileSync(tmp, JSON.stringify(c, null, 2), { mode: 0o600 });
+      fs.renameSync(tmp, file);
+    },
+  };
+}
+
+/** this machine's settings, in the default data directory */
+const local = configFile(DATA_DIR);
+export const loadConfig = (): Config => local.load();
+export const saveConfig = (c: Config) => local.save(c);
 
 /** sk-flash-5e45…8487 */
 export const mask = (k?: string) => (!k ? '' : k.length <= 12 ? '••••' : `${k.slice(0, 8)}…${k.slice(-4)}`);

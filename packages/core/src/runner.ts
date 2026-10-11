@@ -8,54 +8,68 @@ import { createProject, linkProject } from '@frametell/engine/tools/project.mjs'
 import { createCatalog, RELAY_BASE_URL } from '@frametell/models';
 import { elevenLabsTts, volcengineTts } from '@frametell/voice';
 import { Director, piRuntime, type AgentRuntime, type StudioEvent, type Storyboard, type UserRef } from '@frametell/agent';
-import { PROJECTS_DIR, loadConfig } from './config.js';
+import type { Config, ConfigStore } from './config.js';
 import { prepareMaterials } from './materials.js';
 import { applyProxy } from './net.js';
 import { withRefs } from './refs.js';
 import type { LoggedEvent, ProjectMeta, ProjectSummary, RunStatus } from './types.js';
-import { locale, tr } from './i18n.js';
+import { resolveLocale, tr } from './i18n.js';
 
 export type Logged = LoggedEvent;
 
-const dirOf = (id: string) => path.join(PROJECTS_DIR, id);
-const lockFile = (id: string) => path.join(dirOf(id), '.studio', 'run.lock');
+const studioFile = (dir: string, name: string) => path.join(dir, '.studio', name);
 const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch (e) { return (e as NodeJS.ErrnoException).code === 'EPERM'; } };
 /** the pid of another live process running this project (the CLI server and the desktop app can share a data dir) */
-function heldElsewhere(id: string): number | undefined {
-  try { const pid = +fs.readFileSync(lockFile(id), 'utf8'); return pid && pid !== process.pid && alive(pid) ? pid : undefined; } catch { return undefined; }
+function heldElsewhere(dir: string): number | undefined {
+  try { const pid = +fs.readFileSync(studioFile(dir, 'run.lock'), 'utf8'); return pid && pid !== process.pid && alive(pid) ? pid : undefined; } catch { return undefined; }
 }
-const metaFile = (id: string) => path.join(dirOf(id), '.studio', 'project.json');
+const readMetaAt = (dir: string): ProjectMeta => JSON.parse(fs.readFileSync(studioFile(dir, 'project.json'), 'utf8'));
+function writeMeta(dir: string, m: ProjectMeta) { m.updatedAt = new Date().toISOString(); fs.writeFileSync(studioFile(dir, 'project.json'), JSON.stringify(m, null, 2)); }
 
-export function listProjects(): ProjectSummary[] {
-  if (!fs.existsSync(PROJECTS_DIR)) return [];
-  return fs.readdirSync(PROJECTS_DIR)
-    .filter((id) => fs.existsSync(metaFile(id)))
-    .map((id) => ({ ...readMeta(id), ...runner(id).summary() }))
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-}
-export function readMeta(id: string): ProjectMeta { return JSON.parse(fs.readFileSync(metaFile(id), 'utf8')); }
-function writeMeta(m: ProjectMeta) { m.updatedAt = new Date().toISOString(); fs.writeFileSync(metaFile(m.id), JSON.stringify(m, null, 2)); }
+/** The projects under one directory and the settings their runs use: one per Studio, so several can share a process. */
+export class Projects {
+  private runners = new Map<string, Runner>();
+  constructor(readonly root: string, readonly config: ConfigStore) {}
 
-export function newProject(input: Omit<ProjectMeta, 'id' | 'createdAt' | 'updatedAt' | 'materials'>, files: { name: string; data: Buffer }[]): ProjectMeta {
-  const id = `${new Date().toISOString().slice(0, 10)}-${crypto.randomBytes(6).toString('hex')}`;
-  const dir = dirOf(id);
-  createProject(dir, { title: input.title, style: input.style });
-  fs.mkdirSync(path.join(dir, 'materials'), { recursive: true });
-  fs.mkdirSync(path.join(dir, '.studio'), { recursive: true });
-  const materials: string[] = [];
-  for (const f of files) {
-    const name = path.basename(f.name).replace(/[\\/:*?"<>|]/g, '_');
-    fs.writeFileSync(path.join(dir, 'materials', name), f.data);
-    materials.push(name);
+  dir(id: string) { return path.join(this.root, id); }
+
+  list(): ProjectSummary[] {
+    if (!fs.existsSync(this.root)) return [];
+    return fs.readdirSync(this.root)
+      .filter((id) => fs.existsSync(studioFile(this.dir(id), 'project.json')))
+      .map((id) => ({ ...this.read(id), ...this.runner(id).summary() }))
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
-  const now = new Date().toISOString();
-  const meta: ProjectMeta = { ...input, id, createdAt: now, updatedAt: now, materials };
-  fs.writeFileSync(metaFile(id), JSON.stringify(meta, null, 2));
-  return meta;
+
+  read(id: string): ProjectMeta { return readMetaAt(this.dir(id)); }
+
+  create(input: Omit<ProjectMeta, 'id' | 'createdAt' | 'updatedAt' | 'materials'>, files: { name: string; data: Buffer }[]): ProjectMeta {
+    const id = `${new Date().toISOString().slice(0, 10)}-${crypto.randomBytes(6).toString('hex')}`;
+    const dir = this.dir(id);
+    createProject(dir, { title: input.title, style: input.style });
+    fs.mkdirSync(path.join(dir, 'materials'), { recursive: true });
+    fs.mkdirSync(path.join(dir, '.studio'), { recursive: true });
+    const materials: string[] = [];
+    for (const f of files) {
+      const name = path.basename(f.name).replace(/[\\/:*?"<>|]/g, '_');
+      fs.writeFileSync(path.join(dir, 'materials', name), f.data);
+      materials.push(name);
+    }
+    const now = new Date().toISOString();
+    const meta: ProjectMeta = { ...input, id, createdAt: now, updatedAt: now, materials };
+    fs.writeFileSync(studioFile(dir, 'project.json'), JSON.stringify(meta, null, 2));
+    return meta;
+  }
+
+  runner(id: string): Runner {
+    if (!fs.existsSync(studioFile(this.dir(id), 'project.json'))) throw new Error(tr('项目不存在', 'Project not found'));
+    let r = this.runners.get(id);
+    if (!r) { r = new Runner(id, this.dir(id), this.config); this.runners.set(id, r); }
+    return r;
+  }
 }
 
-async function buildRuntime(meta: ProjectMeta): Promise<{ runtime: AgentRuntime; prices: { input: number; output: number; cacheRead: number; cacheWrite: number; currency: 'CNY' | 'USD' } }> {
-  const cfg = loadConfig();
+async function buildRuntime(meta: ProjectMeta, cfg: Config): Promise<{ runtime: AgentRuntime; prices: { input: number; output: number; cacheRead: number; cacheWrite: number; currency: 'CNY' | 'USD' } }> {
   applyProxy(cfg.proxy);
   // the user's own base URL per provider and the model ids they typed in are applied by the catalog
   const catalog = await createCatalog({ keys: Object.entries(cfg.keys).map(([providerId, apiKey]) => ({ providerId, apiKey })), custom: cfg.custom, baseUrls: cfg.baseUrls, models: cfg.models });
@@ -89,8 +103,8 @@ class Runner {
   status: RunStatus = 'idle';
   private log: string;
 
-  constructor(readonly id: string) {
-    this.log = path.join(dirOf(id), '.studio', 'events.jsonl');
+  constructor(readonly id: string, private dir: string, private config: ConfigStore) {
+    this.log = studioFile(dir, 'events.jsonl');
     if (fs.existsSync(this.log)) {
       const lines = fs.readFileSync(this.log, 'utf8').trim().split('\n').filter(Boolean);
       this.seq = lines.length;
@@ -100,26 +114,26 @@ class Runner {
       // (the last export began and never ended: any render line may come after its start)
       const renders = lines.map((l) => JSON.parse(l) as Logged).filter((e) => e.type === 'stage' && e.stage === 'render');
       const cut = renders.at(-1)?.type === 'stage' && (renders.at(-1) as Extract<Logged, { type: 'stage' }>).status === 'start';
-      if (this.status === 'done' && cut && !heldElsewhere(this.id)) {
+      if (this.status === 'done' && cut && !heldElsewhere(this.dir)) {
         this.emit({ type: 'stage', stage: 'render', status: 'failed', detail: tr('导出被打断了，可以重新导出', 'The export was interrupted. You can export again.') });
       }
       // a run that was in progress when its process went away (app closed, crash): say so in the log, so every client
       // shows it as paused with a way to continue, instead of a stage that never ends
-      if (this.status === 'stopped' && last && last.type !== 'paused' && !heldElsewhere(this.id)) {
+      if (this.status === 'stopped' && last && last.type !== 'paused' && !heldElsewhere(this.dir)) {
         this.emit({ type: 'paused', reason: 'interrupted', stage: this.stateStage() });
       }
     }
   }
 
   private stateStage(): string | undefined {
-    try { return JSON.parse(fs.readFileSync(path.join(dirOf(this.id), '.studio', 'state.json'), 'utf8')).stage; } catch { return undefined; }
+    try { return JSON.parse(fs.readFileSync(studioFile(this.dir, 'state.json'), 'utf8')).stage; } catch { return undefined; }
   }
 
   summary() {
-    const st = path.join(dirOf(this.id), '.studio', 'state.json');
+    const st = studioFile(this.dir, 'state.json');
     const s = fs.existsSync(st) ? JSON.parse(fs.readFileSync(st, 'utf8')) : {};
-    const status: RunStatus = this.status !== 'running' && heldElsewhere(this.id) ? 'running' : this.status;
-    return { status, stage: s.stage as string | undefined, video: s.video ? path.relative(dirOf(this.id), s.video) : undefined, stale: s.video ? s.exported === false : undefined };
+    const status: RunStatus = this.status !== 'running' && heldElsewhere(this.dir) ? 'running' : this.status;
+    return { status, stage: s.stage as string | undefined, video: s.video ? path.relative(this.dir, s.video) : undefined, stale: s.video ? s.exported === false : undefined };
   }
 
   private emit = (e: StudioEvent) => {
@@ -151,7 +165,7 @@ class Runner {
     const live = (e: Logged) => { if (e.seq > last) { last = e.seq; fn(e); } };
     this.subs.add(live);
     // a run in another process (the CLI server or another window) appends to the same log: follow the file
-    const follow = () => { if (this.status !== 'running' && heldElsewhere(this.id)) replay(); };
+    const follow = () => { if (this.status !== 'running' && heldElsewhere(this.dir)) replay(); };
     fs.watchFile(this.log, { interval: 700 }, follow);
     return () => { this.subs.delete(live); fs.unwatchFile(this.log, follow); };
   }
@@ -178,13 +192,14 @@ class Runner {
   /** build the director and run `task` with it: one run at a time, across processes; the outcome is always logged */
   private async launch(task: (d: Director) => Promise<unknown>, o: { exporting?: boolean } = {}) {
     if (this.status === 'running') return;
-    const other = heldElsewhere(this.id);
+    const other = heldElsewhere(this.dir);
     if (other) { this.emit({ type: 'error', message: tr(`这个项目正在另一个画说窗口里制作（进程 ${other}），请在那里继续`, `This project is being made in another Frametell window (process ${other}). Continue there.`) }); return; }
-    fs.writeFileSync(lockFile(this.id), String(process.pid));
-    const release = () => { try { if (+fs.readFileSync(lockFile(this.id), 'utf8') === process.pid) fs.rmSync(lockFile(this.id)); } catch {} };
-    const meta = readMeta(this.id);
-    const cfg = loadConfig();
-    const dir = dirOf(this.id);
+    const lock = studioFile(this.dir, 'run.lock');
+    fs.writeFileSync(lock, String(process.pid));
+    const release = () => { try { if (+fs.readFileSync(lock, 'utf8') === process.pid) fs.rmSync(lock); } catch {} };
+    const meta = readMetaAt(this.dir);
+    const cfg = this.config.load();
+    const dir = this.dir;
     linkProject(dir);
     this.abort = new AbortController();
     this.status = 'running';
@@ -194,13 +209,13 @@ class Runner {
       // reported but does not stop the run
       const { files } = await prepareMaterials(path.join(dir, 'materials'));
       for (const f of files) if (f.kind === 'document' && !f.parsedTo) this.emit({ type: 'error', message: tr(`资料 ${f.name} 读不了：${f.warning}`, `Couldn't read ${f.name}: ${f.warning}`) });
-      const { runtime, prices } = await buildRuntime(meta);
+      const { runtime, prices } = await buildRuntime(meta, cfg);
       const ttsKey = meta.voice?.provider === 'elevenlabs' ? cfg.tts.elevenlabs : cfg.tts.volcengine;
       const tts = meta.voice && ttsKey ? (meta.voice.provider === 'elevenlabs' ? elevenLabsTts(ttsKey) : volcengineTts(ttsKey)) : undefined;
       const voice = meta.voice && tts ? { speaker: meta.voice.id, rate: 0, instruction: '像跟朋友分享一个实用的发现，语气轻松、真诚、自然，有轻重缓急' } : undefined;
       director = new Director({
         dir, runtime, style: meta.style, prices, tts, voice, concurrency: cfg.defaults.concurrency,
-        brief: { durationSec: meta.durationSec, topic: meta.topic, notes: meta.notes, lang: meta.lang ?? 'zh', replyLang: locale() },
+        brief: { durationSec: meta.durationSec, topic: meta.topic, notes: meta.notes, lang: meta.lang ?? 'zh', replyLang: resolveLocale(cfg.locale) },
         emit: this.emit, signal: this.abort.signal,
       });
     } catch (e) {
@@ -215,7 +230,7 @@ class Runner {
     for (const n of this.parked.splice(0)) director.message(n);
     const next = () => { const w = this.afterExport.splice(0); if (w.length) void this.revise(w.join('\n')); };
     task(director).finally(() => { release(); this.director = undefined; this.exporting = false; })
-      .then(() => { this.status = 'done'; writeMeta(readMeta(this.id)); if (o.exporting) next(); })
+      .then(() => { this.status = 'done'; writeMeta(this.dir, readMetaAt(this.dir)); if (o.exporting) next(); })
       .catch((e: Error) => {
         const stage = this.stateStage();
         // a failed or cancelled export leaves a finished film: say what happened to the export, nothing is paused
@@ -267,12 +282,3 @@ class Runner {
     return true;
   }
 }
-
-const runners = new Map<string, Runner>();
-export function runner(id: string): Runner {
-  if (!fs.existsSync(metaFile(id))) throw new Error(tr('项目不存在', 'Project not found'));
-  let r = runners.get(id);
-  if (!r) { r = new Runner(id); runners.set(id, r); }
-  return r;
-}
-export const projectDir = dirOf;

@@ -6,28 +6,48 @@ import { createCatalog, PROVIDERS, type ProviderSpec } from '@frametell/models';
 import { bundledSample, elevenLabsTts, listElevenLabsVoices, volcengineTts, VOLCENGINE_VOICES } from '@frametell/voice';
 import { Project, STYLES, type Timeline } from '@frametell/agent';
 import { linkProject } from '@frametell/engine/tools/project.mjs';
-import { DATA_DIR, PROJECTS_DIR, loadConfig, patchConfig, publicConfig, saveConfig } from './config.js';
-import { listProjects, newProject, projectDir, readMeta, runner } from './runner.js';
+import { DATA_DIR, configFile, patchConfig, publicConfig, type ConfigStore } from './config.js';
+import { Projects } from './runner.js';
 import { checkEnv } from './env.js';
 import { applyProxy } from './net.js';
 import { attach, cleanRefs } from './refs.js';
 import type { UserRef, EnvCheck, LoggedEvent, ModelInfo, NewProjectInput, ProjectMeta, ProjectSummary, PublicSettings, SettingsPatch, StyleInfo, Voice } from './types.js';
-import { locale, tr } from './i18n.js';
+import { resolveLocale, tr } from './i18n.js';
 
 export interface MaterialFile { name: string; data: Uint8Array }
 
+export interface StudioOptions {
+  /** where projects (<dataDir>/projects) and voice samples live; by default ~/.frametell, or FRAMETELL_HOME */
+  dataDir?: string;
+  /**
+   * where settings come from; by default <dataDir>/config.json. A host serving several people from one process gives
+   * each Studio its own. The proxy setting is the exception: it applies to the whole process.
+   */
+  config?: ConfigStore;
+}
+
 export class Studio {
-  constructor() {
-    applyProxy(loadConfig().proxy);
+  readonly dataDir: string;
+  private config: ConfigStore;
+  private store: Projects;
+
+  constructor(o: StudioOptions = {}) {
+    this.dataDir = o.dataDir ?? DATA_DIR;
+    this.config = o.config ?? configFile(this.dataDir);
+    this.store = new Projects(path.join(this.dataDir, 'projects'), this.config);
+    applyProxy(this.config.load().proxy);
     // every project reaches the engine through links; point them at this install (it may have moved, or been renamed)
-    try { for (const id of fs.readdirSync(PROJECTS_DIR)) { try { linkProject(path.join(PROJECTS_DIR, id)); } catch {} } } catch {}
+    try { for (const id of fs.readdirSync(this.store.root)) { try { linkProject(this.store.dir(id)); } catch {} } } catch {}
   }
 
+  /** the directory holding this Studio's projects */
+  get projectsDir() { return this.store.root; }
+
   // ── settings and environment ──
-  settings(): PublicSettings { return publicConfig(loadConfig()); }
+  settings(): PublicSettings { return publicConfig(this.config.load()); }
   updateSettings(patch: SettingsPatch): PublicSettings {
-    const next = patchConfig(loadConfig(), patch);
-    saveConfig(next);
+    const next = patchConfig(this.config.load(), patch);
+    this.config.save(next);
     applyProxy(next.proxy);
     return publicConfig(next);
   }
@@ -38,13 +58,13 @@ export class Studio {
   providers(): ProviderSpec[] { return PROVIDERS; }
 
   async models(): Promise<{ models: ModelInfo[]; default?: ModelInfo }> {
-    const cfg = loadConfig();
+    const cfg = this.config.load();
     const catalog = await createCatalog({ keys: Object.entries(cfg.keys).map(([providerId, apiKey]) => ({ providerId, apiKey })), custom: cfg.custom, baseUrls: cfg.baseUrls, models: cfg.models });
     return { models: await catalog.available(), default: await catalog.defaultModel() };
   }
 
   async voices(): Promise<{ voices: Voice[]; configured: { volcengine: boolean; elevenlabs: boolean } }> {
-    const cfg = loadConfig();
+    const cfg = this.config.load();
     // the built-in voices are listed without a key: their samples ship with Studio, so they can be heard before connecting
     const voices: Voice[] = [...VOLCENGINE_VOICES];
     if (cfg.tts.elevenlabs) { try { voices.push(...(await listElevenLabsVoices(cfg.tts.elevenlabs))); } catch {} }
@@ -60,10 +80,10 @@ export class Studio {
     if (!/^[\w.-]+$/.test(id)) throw new Error(tr('音色 id 不合法', 'Invalid voice id'));
     const shipped = provider === 'volcengine' ? bundledSample(id) : undefined;
     if (shipped) return shipped;
-    const dir = path.join(DATA_DIR, 'voice-previews');
+    const dir = path.join(this.dataDir, 'voice-previews');
     const file = path.join(dir, `${provider}-${id}.mp3`);
     if (fs.existsSync(file)) return file;
-    const cfg = loadConfig();
+    const cfg = this.config.load();
     const key = provider === 'elevenlabs' ? cfg.tts.elevenlabs : cfg.tts.volcengine;
     if (!key) throw new Error(tr('先在设置里连接配音服务', 'Connect a voice service in Settings first'));
     const tts = provider === 'elevenlabs' ? elevenLabsTts(key) : volcengineTts(key);
@@ -75,12 +95,12 @@ export class Studio {
   }
 
   // ── projects ──
-  projects(): ProjectSummary[] { return listProjects(); }
-  project(id: string): ProjectSummary { return { ...readMeta(id), ...runner(id).summary() }; }
+  projects(): ProjectSummary[] { return this.store.list(); }
+  project(id: string): ProjectSummary { return { ...this.store.read(id), ...this.store.runner(id).summary() }; }
 
   /** create a project from materials and start it right away (it pauses at the storyboard for approval) */
   createProject(input: NewProjectInput, files: MaterialFile[]): ProjectMeta {
-    const d = loadConfig().defaults;
+    const cfg = this.config.load(), d = cfg.defaults;
     const model = input.model || d.model;
     if (!model) throw new Error(tr('请先在设置里配置模型', 'Set up a model in Settings first'));
     const said = input.notes?.trim();
@@ -96,13 +116,13 @@ export class Studio {
       if (e.length > 40) e = e.slice(0, 40).replace(/\s+\S*$/, '');
       return e ? e[0].toUpperCase() + e.slice(1) : undefined;
     };
-    const meta = newProject({
+    const meta = this.store.create({
       title: input.title?.trim() || fromText(topic) || fromText(said) || files[0]?.name.replace(/\.[^.]+$/, '') || tr('未命名视频', 'Untitled video'),
       style: input.style || d.style, durationSec: input.durationSec || d.durationSec, model,
       runtime: input.runtime || d.runtime, voice: input.voice ?? d.voice, subtitles: input.subtitles ?? d.subtitles,
-      lang: input.lang ?? locale(), topic, notes: topic ? undefined : input.notes,
+      lang: input.lang ?? resolveLocale(cfg.locale), topic, notes: topic ? undefined : input.notes,
     }, files.map((f) => ({ name: f.name, data: Buffer.from(f.data) })));
-    void runner(meta.id).start();
+    void this.store.runner(meta.id).start();
     return meta;
   }
 
@@ -111,7 +131,7 @@ export class Studio {
    * exists. Cached on the two files' mtimes, since computing it loads the engine.
    */
   timeline(id: string): Timeline | null {
-    const dir = projectDir(id);
+    const dir = this.store.dir(id);
     const film = (() => { try { return fs.readdirSync(path.join(dir, 'out')).find((f) => /-(无字幕|no-subtitles)\.mp4$/.test(f)); } catch { return undefined; } })();
     const stamp = ['script.js', 'voice.js', film ? `out/${film}` : ''].map((f) => { try { return f ? fs.statSync(path.join(dir, f)).mtimeMs : 0; } catch { return 0; } }).join('|');
     if (stamp.startsWith('0|')) return null;
@@ -130,7 +150,7 @@ export class Studio {
 
   /** full-resolution frames of the film at `times` (project-relative): from the mp4 when it is current, else live */
   async frames(id: string, times: number[]): Promise<string[]> {
-    const dir = projectDir(id);
+    const dir = this.store.dir(id);
     const ts = times.filter((t) => Number.isFinite(t) && t >= 0).slice(0, 40);
     if (!ts.length) return [];
     let st: { video?: string; exported?: boolean } = {};
@@ -139,23 +159,23 @@ export class Studio {
     return new Project(dir).stills(ts, cut && fs.existsSync(cut) ? cut : undefined);
   }
 
-  start(id: string) { return runner(id).start(); }
+  start(id: string) { return this.store.runner(id).start(); }
   /** render the finished film to mp4; false when something is running or the film isn't finished */
-  export(id: string) { return runner(id).export(); }
-  approve(id: string, feedback?: string) { return runner(id).approve(feedback); }
-  stop(id: string) { runner(id).stop(); }
+  export(id: string) { return this.store.runner(id).export(); }
+  approve(id: string, feedback?: string) { return this.store.runner(id).approve(feedback); }
+  stop(id: string) { this.store.runner(id).stop(); }
   /** talk to the director: storyboard feedback, a note mid-run, or a change to the finished film */
-  say(id: string, text: string, refs?: unknown) { return runner(id).say(text, cleanRefs(refs)); }
+  say(id: string, text: string, refs?: unknown) { return this.store.runner(id).say(text, cleanRefs(refs)); }
   /** save a file the user attached to a message; returns the reference to send with it */
-  attach(id: string, name: string, data: Uint8Array): Promise<UserRef> { readMeta(id); return attach(projectDir(id), name, data); }
+  attach(id: string, name: string, data: Uint8Array): Promise<UserRef> { this.store.read(id); return attach(this.store.dir(id), name, data); }
 
   /** replay events after `since`, then stream live ones; returns the unsubscribe function */
-  subscribe(id: string, since: number, fn: (e: LoggedEvent) => void): () => void { return runner(id).subscribe(fn, since); }
+  subscribe(id: string, since: number, fn: (e: LoggedEvent) => void): () => void { return this.store.runner(id).subscribe(fn, since); }
 
   /** absolute path of a file inside a project (preview player, snapshots, audio, video), or null */
   projectFile(id: string, rel: string): string | null {
     if (!/^[\w-]+$/.test(id)) return null;
-    const root = projectDir(id);
+    const root = this.store.dir(id);
     const abs = path.resolve(root, rel || 'index.html');
     const r = path.relative(root, abs);
     if (r.startsWith('..') || path.isAbsolute(r)) return null;
