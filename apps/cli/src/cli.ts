@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // frametell run <material…> [--style warm-story] [--duration 60] [--model relay/gemini-3.7-flash-high]
-//                     [--runtime pi|claude|codex] [--voice zh_male_yuanboxiaoshu_uranus_bigtts] [--title …] [--out dir]
+//                     [--voice zh_male_yuanboxiaoshu_uranus_bigtts] [--title …] [--out dir]
 // Headless end-to-end run: storyboard (auto-approved) → script → narration → pages → review → render.
 // Keys come from the environment: RELAY_API_KEY (recommended), ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY,
 // OPENROUTER_API_KEY, AI_GATEWAY_API_KEY, VOLCENGINE_ARK_API_KEY …; narration: VOLCENGINE_TTS_API_KEY or ELEVENLABS_API_KEY.
@@ -8,9 +8,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createProject } from '@frametell/engine/tools/project.mjs';
-import { createCatalog, RELAY_BASE_URL, type ProviderKey } from '@frametell/models';
+import { createCatalog, type ProviderKey } from '@frametell/models';
 import { elevenLabsTts, volcengineTts } from '@frametell/voice';
-import { Director, piRuntime, claudeRuntime, codexRuntime, type AgentRuntime, type StudioEvent } from '@frametell/agent';
+import { Director, piRuntime, type AgentRuntime, type StudioEvent } from '@frametell/agent';
 import { tr } from '@frametell/core';
 
 const ENV_KEYS: Record<string, string> = {
@@ -33,11 +33,8 @@ async function run(argv: string[]) {
   const [prov, ...rest] = (o.model || '').split('/');
   const info = o.model ? catalog.info(catalog.get(prov, rest.join('/'))!) : await catalog.defaultModel();
   if (!info) throw new Error(tr('没有可用的模型：请设置 RELAY_API_KEY（推荐）或其他 provider 的 key', 'No model available: set RELAY_API_KEY (recommended) or another provider\'s key'));
-  const runtimeId = o.runtime || 'pi';
-  let runtime: AgentRuntime;
-  if (runtimeId === 'claude') runtime = claudeRuntime({ apiKey: process.env.ANTHROPIC_API_KEY || process.env.RELAY_API_KEY || '', baseUrl: process.env.ANTHROPIC_API_KEY ? undefined : RELAY_BASE_URL, model: info.id });
-  else if (runtimeId === 'codex') runtime = codexRuntime({ apiKey: process.env.OPENAI_API_KEY || process.env.RELAY_API_KEY || '', baseUrl: process.env.OPENAI_API_KEY ? undefined : RELAY_BASE_URL + '/v1', model: info.id });
-  else runtime = piRuntime(catalog.models, catalog.get(info.provider, info.id)!);
+  // Pi only: the Claude Agent SDK and Codex runtimes are parked (code kept in packages/agent; see core/runner.ts)
+  const runtime: AgentRuntime = piRuntime(catalog.models, catalog.get(info.provider, info.id)!);
 
   const tts = process.env.VOLCENGINE_TTS_API_KEY ? volcengineTts(process.env.VOLCENGINE_TTS_API_KEY) : process.env.ELEVENLABS_API_KEY ? elevenLabsTts(process.env.ELEVENLABS_API_KEY) : undefined;
   const voice = tts ? { speaker: o.voice || (tts.id === 'volcengine' ? 'zh_male_yuanboxiaoshu_uranus_bigtts' : 'JBFqnCBsd6RMkjVDRZzb'), rate: 0, instruction: '像跟朋友分享一个实用的发现，语气轻松、真诚、自然，有轻重缓急' } : undefined;

@@ -1,5 +1,5 @@
-// Where requests go. A user can point Anthropic or OpenAI at their own relay (any compatible base URL), and send all
-// outbound traffic through an HTTP proxy. The proxy covers this process (global fetch: Pi, voices, model lists) and the
+// Where requests go: all outbound traffic through the user's HTTP proxy, when they set one (their own base URL per
+// provider is the model catalog's). The proxy covers this process (global fetch: Pi, voices, model lists) and the
 // agent CLIs it spawns (Claude Code and Codex read HTTPS_PROXY); local addresses never go through it.
 import { Agent, Dispatcher, ProxyAgent, setGlobalDispatcher } from 'undici';
 
@@ -26,14 +26,6 @@ export function applyProxy(proxy?: string) {
   for (const k of ['HTTPS_PROXY', 'HTTP_PROXY', 'https_proxy', 'http_proxy']) { if (p) process.env[k] = p; else delete process.env[k]; }
   if (p) { process.env.NO_PROXY = process.env.no_proxy = LOCAL; } else { delete process.env.NO_PROXY; delete process.env.no_proxy; }
   setGlobalDispatcher(p ? new Split(new ProxyAgent(p), new Agent()) : new Agent());
-}
-
-/** a relay's base URL in the shape each runtime expects: Anthropic without /v1, OpenAI with it */
-export function normalizeBaseUrl(provider: 'anthropic' | 'openai', url?: string): string | undefined {
-  const u = url?.trim().replace(/\/+$/, '');
-  if (!u) return undefined;
-  if (provider === 'anthropic') return u.replace(/\/v1$/, '');
-  return new URL(u).pathname === '/' ? `${u}/v1` : u;
 }
 
 /** "http://user:secret@host:7890" → "http://user:••••@host:7890" */

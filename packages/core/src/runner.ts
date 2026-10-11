@@ -7,10 +7,10 @@ import crypto from 'node:crypto';
 import { createProject, linkProject } from '@frametell/engine/tools/project.mjs';
 import { createCatalog, RELAY_BASE_URL } from '@frametell/models';
 import { elevenLabsTts, volcengineTts } from '@frametell/voice';
-import { Director, piRuntime, claudeRuntime, codexRuntime, type AgentRuntime, type StudioEvent, type Storyboard, type UserRef } from '@frametell/agent';
+import { Director, piRuntime, type AgentRuntime, type StudioEvent, type Storyboard, type UserRef } from '@frametell/agent';
 import { PROJECTS_DIR, loadConfig } from './config.js';
 import { prepareMaterials } from './materials.js';
-import { applyProxy, normalizeBaseUrl } from './net.js';
+import { applyProxy } from './net.js';
 import { withRefs } from './refs.js';
 import type { LoggedEvent, ProjectMeta, ProjectSummary, RunStatus } from './types.js';
 import { tr } from './i18n.js';
@@ -57,24 +57,19 @@ export function newProject(input: Omit<ProjectMeta, 'id' | 'createdAt' | 'update
 async function buildRuntime(meta: ProjectMeta): Promise<{ runtime: AgentRuntime; prices: { input: number; output: number; cacheRead: number; cacheWrite: number; currency: 'CNY' | 'USD' } }> {
   const cfg = loadConfig();
   applyProxy(cfg.proxy);
-  const catalog = await createCatalog({ keys: Object.entries(cfg.keys).map(([providerId, apiKey]) => ({ providerId, apiKey })), custom: cfg.custom });
+  // the user's own base URL per provider and the model ids they typed in are applied by the catalog
+  const catalog = await createCatalog({ keys: Object.entries(cfg.keys).map(([providerId, apiKey]) => ({ providerId, apiKey })), custom: cfg.custom, baseUrls: cfg.baseUrls, models: cfg.models });
   const [provider, ...rest] = meta.model.split('/');
   const id = rest.join('/');
-  let model = catalog.get(provider, id);
+  const model = catalog.get(provider, id);
   if (!model) throw new Error(tr(`模型 ${meta.model} 不可用：检查设置里的 key`, `Model ${meta.model} is not available: check its key in Settings`));
   const info = catalog.info(model);
   const prices = { ...info.cost, currency: info.currency };
-  // the user's own relay for Anthropic / OpenAI replaces the official endpoint for every runtime
-  const relay = provider === 'anthropic' || provider === 'openai' ? normalizeBaseUrl(provider, cfg.baseUrls[provider]) : undefined;
-  if (relay) model = { ...model, baseUrl: relay };
-  if (meta.runtime === 'claude-agent-sdk') {
-    const key = provider === 'relay' ? cfg.keys.relay : cfg.keys.anthropic;
-    return { runtime: claudeRuntime({ apiKey: key || '', baseUrl: provider === 'relay' ? RELAY_BASE_URL : relay, model: id }), prices };
-  }
-  if (meta.runtime === 'codex') {
-    const key = provider === 'relay' ? cfg.keys.relay : cfg.keys.openai;
-    return { runtime: codexRuntime({ apiKey: key || '', baseUrl: provider === 'relay' ? RELAY_BASE_URL + '/v1' : relay, model: id }), prices };
-  }
+  // Every project runs on Pi, which works with any provider. The Claude Agent SDK and Codex runtimes are parked: their
+  // code stays in packages/agent (claudeRuntime, codexRuntime) but Studio does not offer them — two more agent loops to
+  // keep in step was not worth it yet. To bring one back, branch on meta.runtime here, e.g.:
+  //   if (meta.runtime === 'claude-agent-sdk') return { runtime: claudeRuntime({ apiKey, baseUrl, model: id }), prices };
+  //   if (meta.runtime === 'codex') return { runtime: codexRuntime({ apiKey, baseUrl, model: id }), prices };
   return { runtime: piRuntime(catalog.models, model), prices };
 }
 

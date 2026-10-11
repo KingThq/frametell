@@ -1,7 +1,7 @@
 // Types shared by the core and every client (the panel in a browser, the Electron renderer). Type-only: importing it
 // never pulls Node code into a client bundle.
 import type { StudioEvent, Storyboard } from '@frametell/agent';
-import type { ModelInfo } from '@frametell/models';
+import type { CustomProviderConfig, ModelInfo } from '@frametell/models';
 
 export type { StudioEvent, Storyboard, ModelInfo };
 export type { Timeline, PageTiming, UserRef } from '@frametell/agent';
@@ -48,9 +48,11 @@ export interface NewProjectInput {
 /** settings as clients see them: keys are masked hints, never the secrets */
 export interface PublicSettings {
   keys: Record<string, string>;
-  custom: unknown[];
+  custom: CustomProviderConfig[];
   /** the user's relay per provider (not secret) */
   baseUrls: Record<string, string>;
+  /** model ids the user typed in, per provider */
+  models: Record<string, string[]>;
   /** the proxy, password masked; '' when none */
   proxy: string;
   tts: { volcengine: string; elevenlabs: string };
@@ -61,6 +63,10 @@ export interface SettingsPatch {
   keys?: Record<string, string>;
   /** '' removes a relay */
   baseUrls?: Record<string, string>;
+  /** the full list of typed-in model ids for each provider given (an empty list removes them) */
+  models?: Record<string, string[]>;
+  /** the user's own OpenAI- or Anthropic-compatible endpoints, the whole list */
+  custom?: CustomProviderConfig[];
   /** '' removes the proxy */
   proxy?: string;
   tts?: { volcengine?: string; elevenlabs?: string };

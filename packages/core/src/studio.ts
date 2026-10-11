@@ -31,7 +31,7 @@ export class Studio {
 
   async models(): Promise<{ models: ModelInfo[]; default?: ModelInfo }> {
     const cfg = loadConfig();
-    const catalog = await createCatalog({ keys: Object.entries(cfg.keys).map(([providerId, apiKey]) => ({ providerId, apiKey })), custom: cfg.custom });
+    const catalog = await createCatalog({ keys: Object.entries(cfg.keys).map(([providerId, apiKey]) => ({ providerId, apiKey })), custom: cfg.custom, baseUrls: cfg.baseUrls, models: cfg.models });
     return { models: await catalog.available(), default: await catalog.defaultModel() };
   }
 

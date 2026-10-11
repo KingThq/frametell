@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Every project runs on the Studio Agent (Pi), which works with any provider. The Claude Agent SDK and Codex runtimes are parked: their code stays in `packages/agent`, but Studio no longer offers them. The user's own base URL and hand-added model ids now apply to every provider, through the model catalog.
 - A change to the picture of the page(s) it names goes straight to those pages, without a planning step; anything that may touch the narration, or names no page, is still planned first. Every revision ends with where its time went (「这次改了 27 秒：画和自检 24 秒 · 全片检查 3 秒」). On the sample film: a one-page picture change in 27 s.
 - An existing page can no longer be rewritten whole: the write tool (and the Claude Agent runtime's Write, through its hook) refuses to overwrite a page of 40+ lines and points the agent to edit; new pages and other files are written as before.
 - Pages are fixed with targeted edits: a revised page's agent is handed the current code, and every check round (and the film review) asks for edits instead of rewriting the file. On the sample film a one-page change had spent 5½ of its 7 minutes on three whole-file rewrites of ~10k tokens each.

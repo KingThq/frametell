@@ -20,6 +20,8 @@ export interface Config {
   custom: CustomProviderConfig[];
   /** the user's own relay for a provider (anthropic, openai): an Anthropic- / OpenAI-compatible base URL */
   baseUrls: Record<string, string>;
+  /** model ids the user typed in per provider, on top of what the provider lists */
+  models: Record<string, string[]>;
   /** HTTP proxy for every outbound request, e.g. http://127.0.0.1:7890 */
   proxy?: string;
   tts: { volcengine?: string; elevenlabs?: string };
@@ -37,14 +39,14 @@ export interface Config {
 }
 
 const DEFAULTS: Config = {
-  keys: {}, custom: [], baseUrls: {}, tts: {},
+  keys: {}, custom: [], baseUrls: {}, models: {}, tts: {},
   defaults: { runtime: 'pi', style: 'warm-story', durationSec: 60, subtitles: true, concurrency: 3, voice: { provider: 'volcengine', id: 'zh_male_yuanboxiaoshu_uranus_bigtts', name: '渊博小叔' } },
 };
 
 export function loadConfig(): Config {
   try {
     const c = JSON.parse(fs.readFileSync(FILE, 'utf8')) as Partial<Config>;
-    return { ...DEFAULTS, ...c, defaults: { ...DEFAULTS.defaults, ...(c.defaults || {}) }, tts: { ...(c.tts || {}) }, keys: { ...(c.keys || {}) }, baseUrls: { ...(c.baseUrls || {}) }, custom: c.custom || [] };
+    return { ...DEFAULTS, ...c, defaults: { ...DEFAULTS.defaults, ...(c.defaults || {}) }, tts: { ...(c.tts || {}) }, keys: { ...(c.keys || {}) }, baseUrls: { ...(c.baseUrls || {}) }, models: { ...(c.models || {}) }, custom: c.custom || [] };
   } catch { return structuredClone(DEFAULTS); }
 }
 
@@ -64,6 +66,7 @@ export function publicConfig(c: Config): PublicSettings {
     keys: Object.fromEntries(Object.entries(c.keys).filter(([, v]) => v).map(([k, v]) => [k, mask(v)])),
     custom: c.custom,
     baseUrls: c.baseUrls,
+    models: c.models,
     proxy: maskProxy(c.proxy),
     tts: { volcengine: mask(c.tts.volcengine), elevenlabs: mask(c.tts.elevenlabs) },
     locale: c.locale || 'auto',
@@ -77,6 +80,10 @@ export function patchConfig(c: Config, patch: SettingsPatch & { custom?: CustomP
   for (const [k, v] of Object.entries(patch.keys || {})) { if (v) next.keys[k] = v.trim(); else delete next.keys[k]; }
   for (const [k, v] of Object.entries(patch.tts || {}) as [keyof Config['tts'], string][]) { if (v) next.tts[k] = v.trim(); else delete next.tts[k]; }
   for (const [k, v] of Object.entries(patch.baseUrls || {})) { if (v.trim()) next.baseUrls[k] = v.trim().replace(/\/+$/, ''); else delete next.baseUrls[k]; }
+  for (const [k, ids] of Object.entries(patch.models || {})) {
+    const clean = [...new Set((ids || []).map((x) => x.trim()).filter((x) => /^[\w./:@-]{1,120}$/.test(x)))];
+    if (clean.length) next.models[k] = clean; else delete next.models[k];
+  }
   if (patch.proxy !== undefined) {
     const p = patch.proxy.trim();
     if (p && !/^https?:\/\/[^/\s]+\/?$/.test(p)) throw new Error(tr('代理地址要写成 http://主机:端口，例如 http://127.0.0.1:7890', 'Write the proxy as http://host:port, e.g. http://127.0.0.1:7890'));

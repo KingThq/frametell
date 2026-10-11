@@ -1,14 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { maskProxy, normalizeBaseUrl } from './net.js';
-
-test('relay base URLs take the shape each runtime expects', () => {
-  assert.equal(normalizeBaseUrl('anthropic', 'https://relay.example.com/v1/'), 'https://relay.example.com');
-  assert.equal(normalizeBaseUrl('anthropic', 'https://relay.example.com'), 'https://relay.example.com');
-  assert.equal(normalizeBaseUrl('openai', 'https://relay.example.com'), 'https://relay.example.com/v1');
-  assert.equal(normalizeBaseUrl('openai', 'https://relay.example.com/openai/v1/'), 'https://relay.example.com/openai/v1');
-  assert.equal(normalizeBaseUrl('openai', '  '), undefined);
-});
+import { maskProxy } from './net.js';
 
 test('the proxy password never reaches the panel', () => {
   assert.equal(maskProxy('http://me:secret@127.0.0.1:7890'), 'http://me:••••@127.0.0.1:7890');
