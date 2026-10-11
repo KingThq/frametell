@@ -3,14 +3,15 @@
   const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
   const lerp = (a, b, k) => a + (b - a) * k;
   const smooth = (a, b, x) => { const k = clamp((x - a) / (b - a)); return k * k * (3 - 2 * k); };
-  const ease = {
+  // the easings by name (ease.out, ease.inOut, …); ease itself is callable too, as ease.inOut — pages reach for both
+  const ease = Object.assign((x) => ease.inOut(x), {
     out: (x) => 1 - Math.pow(1 - x, 3),
     inOut: (x) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2),
     expo: (x) => (x >= 1 ? 1 : 1 - Math.pow(2, -10 * x)),
     back: (x) => { const c1 = 1.5, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); },
     draw: (x) => { const k = clamp(x); return k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2; },
     lin: (x) => x,
-  };
+  });
 
   const C = {
     ink: '#2B2520', soft: '#5E554C', muted: '#9C9186', faint: '#CFC6B8',
