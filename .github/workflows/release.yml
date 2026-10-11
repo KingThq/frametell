@@ -2,6 +2,7 @@ name: Release
 
 # Pushing a tag like v0.1.2 builds the macOS app, signs it with the Developer ID, has Apple notarize it, and opens a
 # draft release with the dmg and the version's changelog section. Publish the draft by hand once it looks right.
+# Run by hand (Actions → Release → Run workflow), it does all of that but the release: the dmg is kept as an artifact.
 #
 # Repository secrets it needs:
 #   MAC_CERT_P12         the "Developer ID Application" certificate with its private key, exported as .p12, base64
@@ -13,6 +14,7 @@ name: Release
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -34,6 +36,7 @@ jobs:
           cache: pnpm
 
       - name: Check the tag matches the version
+        if: github.ref_type == 'tag'
         run: |
           v=$(node -p "require('./apps/desktop/package.json').version")
           [ "v$v" = "$GITHUB_REF_NAME" ] || { echo "tag $GITHUB_REF_NAME, but apps/desktop is $v"; exit 1; }
@@ -76,7 +79,16 @@ jobs:
           spctl -a -vv apps/desktop/release/mac-arm64/Frametell.app
           xcrun stapler validate "$dmg"
 
+      - name: Keep the dmg
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: frametell-dmg
+          path: apps/desktop/release/Frametell-*-arm64.dmg*
+          retention-days: 7
+
       - name: Draft the release
+        if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
