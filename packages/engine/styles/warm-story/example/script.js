@@ -7,7 +7,7 @@
     gap: 0.8,
     // calm pace for this style: hold a beat longer after a sentence, and a little more before a page turns
     pace: { maxHold: 1.0, gap: 0.8 },
-    extras: ['../../../lib/warm.js'],
+    extras: ['engine/lib/warm.js'],
   };
   const PAGES = [
     { id: 'p01', section: '开场', title: '三十年后有多少？', cues: [
