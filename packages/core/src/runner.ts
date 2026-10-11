@@ -179,7 +179,7 @@ class Runner {
   private async launch(task: (d: Director) => Promise<unknown>, o: { exporting?: boolean } = {}) {
     if (this.status === 'running') return;
     const other = heldElsewhere(this.id);
-    if (other) { this.emit({ type: 'error', message: tr(`这个项目正在另一个画说窗口里制作（进程 ${other}），请在那里继续`, `This project is being made in another Showtell window (process ${other}). Continue there.`) }); return; }
+    if (other) { this.emit({ type: 'error', message: tr(`这个项目正在另一个画说窗口里制作（进程 ${other}），请在那里继续`, `This project is being made in another Frametell window (process ${other}). Continue there.`) }); return; }
     fs.writeFileSync(lockFile(this.id), String(process.pid));
     const release = () => { try { if (+fs.readFileSync(lockFile(this.id), 'utf8') === process.pid) fs.rmSync(lockFile(this.id)); } catch {} };
     const meta = readMeta(this.id);

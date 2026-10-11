@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/banner-en-dark.png">
-    <img alt="画说 Showtell: turn what you know into an explainer video" src="docs/brand/readme/banner-en-light.png" width="100%">
+    <img alt="画说 Frametell: turn what you know into an explainer video" src="docs/brand/readme/banner-en-light.png" width="100%">
   </picture>
 </p>
 
@@ -9,13 +9,13 @@
   <b>English</b> · <a href="README.zh-CN.md">简体中文</a>
 </p>
 
-**Showtell** (画说, *huà shuō*) turns your documents, PDFs, slides and images into an explainer video with pages that move. A director agent first drafts a storyboard for you to sign off on. Then it writes the narration, voices it, draws each page and checks its own work. You get a 1080p video, with subtitles and publishing notes.
+**Frametell** (画说, *huà shuō*) turns your documents, PDFs, slides and images into an explainer video with pages that move. A director agent first drafts a storyboard for you to sign off on. Then it writes the narration, voices it, draws each page and checks its own work. You get a 1080p video, with subtitles and publishing notes.
 
 It's built for knowledge creators who explain history, science, technology, investing, psychology or books, and who'd rather tell the story than learn video editing.
 
 > **Status:** in active development. See the [roadmap](docs/ROADMAP.md) and [architecture](docs/ARCHITECTURE.md).
 
-## Why Showtell
+## Why Frametell
 
 - **You approve the plan first.** Nothing gets drawn until you've signed off on the storyboard. If a page is wrong, point at it and say what to change.
 - **You can watch it work.** The agent says what it's doing and why, and the cost and time spent are on screen at every step.
@@ -52,4 +52,4 @@ node apps/cli/dist/cli.js run notes.pdf --style warm-story --duration 60
 
 ## License
 
-[MIT](LICENSE) · Made by **Sitor**
+[MIT](LICENSE) · Made by **Sitor Team**

@@ -1,6 +1,6 @@
 import { useT } from '../i18n';
 
-/** The 画说 · Showtell mark: 「」 corners — Chinese quotation marks and a viewfinder at once — around a recording dot.
+/** The 画说 · Frametell mark: 「」 corners — Chinese quotation marks and a viewfinder at once — around a recording dot.
  *  Below 24px the small cut is used: heavier corners, a larger dot. */
 export function Crest({ size = 24, className = '' }: { size?: number; className?: string }) {
   const small = size <= 24;
@@ -23,7 +23,7 @@ export function Crest({ size = 24, className = '' }: { size?: number; className?
   );
 }
 
-/** mark + name in the interface language: 画说 in Chinese, SHOWTELL otherwise */
+/** mark + name in the interface language: 画说 in Chinese, FRAMETELL otherwise */
 export function Wordmark({ compact = false }: { compact?: boolean }) {
   const { locale } = useT();
   return (
@@ -31,7 +31,7 @@ export function Wordmark({ compact = false }: { compact?: boolean }) {
       <Crest size={20} />
       {!compact && (locale === 'zh'
         ? <span className="font-display text-[17px] font-bold leading-none tracking-[0.06em] text-ink">画说</span>
-        : <span className="text-[13px] font-semibold leading-none tracking-[0.24em] text-ink">SHOWTELL</span>)}
+        : <span className="text-[13px] font-semibold leading-none tracking-[0.24em] text-ink">FRAMETELL</span>)}
     </span>
   );
 }

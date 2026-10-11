@@ -73,7 +73,7 @@ async function serveCmd(argv: string[]) {
   const { o } = args(argv);
   const { startServer } = await import('./server.js');
   const { url } = startServer(+(o.port || process.env.PORT || 5317));
-  console.log(tr(`\n  画说已启动\n  ${url}\n`, `\n  Showtell is running\n  ${url}\n`));
+  console.log(tr(`\n  画说已启动\n  ${url}\n`, `\n  Frametell is running\n  ${url}\n`));
   if (!('no-open' in o) && !process.env.NO_OPEN) {
     const { spawn } = await import('node:child_process');
     const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'cmd' : 'xdg-open';

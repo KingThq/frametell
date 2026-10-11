@@ -1,8 +1,8 @@
 import type zh from '../zh/common';
 
 const en: typeof zh = {
-  product: 'Showtell',
-  home: 'Showtell home',
+  product: 'Frametell',
+  home: 'Frametell home',
   toLight: 'Switch to light',
   toDark: 'Switch to dark',
   light: 'Light',

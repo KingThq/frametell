@@ -1,7 +1,7 @@
 import type zh from '../zh/workbench';
 
 const en: typeof zh = {
-  brand: 'Showtell',
+  brand: 'Frametell',
   spentTitle: 'Spent on this project',
   costDetails: 'Cost details',
   costHeading: 'Spent on this video',

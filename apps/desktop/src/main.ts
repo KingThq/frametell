@@ -9,7 +9,7 @@ import { PROJECTS_DIR, Studio, type LoggedEvent } from '@frametell/core';
 
 const require = createRequire(import.meta.url);
 const UI_DIR = path.join(path.dirname(require.resolve('@frametell/ui/package.json')), 'dist');
-app.setName('Showtell');
+app.setName('Frametell');
 const studio = new Studio();
 
 // studio://app/…            the panel
@@ -45,7 +45,7 @@ ipcMain.handle('studio:unsubscribe', (_e, subId: string) => { subs.get(subId)?.(
 function createWindow() {
   const win = new BrowserWindow({
     width: 1440, height: 900, minWidth: 1024, minHeight: 680,
-    title: 'Showtell', backgroundColor: '#0C0A09',
+    title: 'Frametell', backgroundColor: '#0C0A09',
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     trafficLightPosition: { x: 16, y: 18 },
     webPreferences: { preload: path.join(app.getAppPath(), 'src', 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true },
