@@ -12,10 +12,15 @@ const require = createRequire(path.join(ENGINE_DIR, 'package.json'));
 
 /** The node_modules directory that contains the engine's browser dependencies (npm hoists them, pnpm keeps them local). */
 export function engineModulesDir() {
-  // pnpm (and a plain install of the engine) keeps a node_modules next to the package with every dependency linked in
+  const whole = (dir) => fs.existsSync(path.join(dir, 'roughjs')) && fs.existsSync(path.join(dir, 'lxgw-wenkai-webfont'));
+  // a workspace or a plain install of the engine keeps a node_modules next to the package with every dependency in it
   const own = path.join(ENGINE_DIR, 'node_modules');
-  if (fs.existsSync(path.join(own, 'roughjs')) && fs.existsSync(path.join(own, 'lxgw-wenkai-webfont'))) return own;
-  // npm hoists dependencies: the directory that holds roughjs holds the others too (resolve keeps the link path)
+  if (whole(own)) return own;
+  // installed as a dependency (node_modules/@frametell/engine): its dependencies sit beside it, whether npm hoisted them
+  // there or pnpm's store linked them in (.pnpm/@frametell+engine…/node_modules)
+  const beside = path.resolve(ENGINE_DIR, '../..');
+  if (whole(beside)) return beside;
+  // last resort: where roughjs resolves to. Under pnpm that is roughjs's own store folder, without the fonts
   return path.dirname(path.dirname(require.resolve('roughjs/package.json')));
 }
 
