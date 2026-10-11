@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, X, ZoomIn, ZoomOut } from 'lucide-react';
+import { useT } from '../i18n';
 
 // A frame at full size, to read every detail: click zooms in where you point, drag pans, the wheel zooms, ←/→ steps
 // through the set, Esc closes. Used for the film's frames and the director's self-check sheet.
@@ -11,6 +12,7 @@ const MAX = 4;
 export function Lightbox({ items, index, onIndex, onClose, actions }: {
   items: LightItem[]; index: number; onIndex: (i: number) => void; onClose: () => void; actions?: (item: LightItem, i: number) => React.ReactNode;
 }) {
+  const { t } = useT();
   const ref = useRef<HTMLDialogElement>(null);
   const stage = useRef<HTMLDivElement>(null);
   const [z, setZ] = useState({ s: 1, x: 0, y: 0 });
@@ -49,11 +51,11 @@ export function Lightbox({ items, index, onIndex, onClose, actions }: {
           </div>
           <span className="ml-auto flex shrink-0 items-center gap-1.5">
             {item && actions?.(item, index)}
-            <button className="fs-lb-btn" onClick={() => zoomAt(z.s / 1.5)} disabled={z.s <= 1} aria-label="缩小"><ZoomOut size={16} /></button>
+            <button className="fs-lb-btn" onClick={() => zoomAt(z.s / 1.5)} disabled={z.s <= 1} aria-label={t('stage.lightbox.zoomOut')}><ZoomOut size={16} /></button>
             <span className="w-11 text-center text-[12px] tabular text-white/70">{Math.round(z.s * 100)}%</span>
-            <button className="fs-lb-btn" onClick={() => zoomAt(z.s * 1.5)} disabled={z.s >= MAX} aria-label="放大"><ZoomIn size={16} /></button>
+            <button className="fs-lb-btn" onClick={() => zoomAt(z.s * 1.5)} disabled={z.s >= MAX} aria-label={t('stage.lightbox.zoomIn')}><ZoomIn size={16} /></button>
             {items.length > 1 && <span className="ml-2 w-12 text-center text-[12px] tabular text-white/70">{index + 1} / {items.length}</span>}
-            <button className="fs-lb-btn ml-1" onClick={() => ref.current?.close()} aria-label="关闭"><X size={17} /></button>
+            <button className="fs-lb-btn ml-1" onClick={() => ref.current?.close()} aria-label={t('stage.lightbox.close')}><X size={17} /></button>
           </span>
         </header>
         <div ref={stage} className={`relative min-h-0 flex-1 touch-none select-none overflow-hidden ${z.s > 1 ? 'cursor-grab active:cursor-grabbing' : 'cursor-zoom-in'}`}
@@ -71,10 +73,10 @@ export function Lightbox({ items, index, onIndex, onClose, actions }: {
           {item?.src && <img key={item.src} src={item.src} alt={item.title} draggable={false}
             className="absolute inset-0 m-auto max-h-full max-w-full object-contain px-4 pb-4 transition-transform duration-150 ease-out will-change-transform"
             style={{ transform: `translate(${z.x}px, ${z.y}px) scale(${z.s})` }} />}
-          {index > 0 && <button className="fs-lb-btn absolute left-4 top-1/2 h-11 w-11 -translate-y-1/2" onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()} onClick={() => go(-1)} aria-label="上一张"><ChevronLeft size={20} /></button>}
-          {index < items.length - 1 && <button className="fs-lb-btn absolute right-4 top-1/2 h-11 w-11 -translate-y-1/2" onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()} onClick={() => go(1)} aria-label="下一张"><ChevronRight size={20} /></button>}
+          {index > 0 && <button className="fs-lb-btn absolute left-4 top-1/2 h-11 w-11 -translate-y-1/2" onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()} onClick={() => go(-1)} aria-label={t('stage.lightbox.prev')}><ChevronLeft size={20} /></button>}
+          {index < items.length - 1 && <button className="fs-lb-btn absolute right-4 top-1/2 h-11 w-11 -translate-y-1/2" onPointerDown={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()} onClick={() => go(1)} aria-label={t('stage.lightbox.next')}><ChevronRight size={20} /></button>}
         </div>
-        <p className="pb-3 text-center text-[11.5px] text-white/45">点击放大 · 拖动查看 · 滚轮缩放 · ←/→ 切换 · Esc 关闭</p>
+        <p className="pb-3 text-center text-[11.5px] text-white/45">{t('stage.lightbox.hint')}</p>
       </div>
     </dialog>
   );

@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { UserRef } from '@frametell/agent';
 import { kindOf, prepareMaterials } from './materials.js';
+import { tr } from './i18n.js';
 
 const MAX_BYTES = 20 << 20;
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
@@ -15,9 +16,9 @@ const safe = (p: string) => !path.isAbsolute(p) && !p.split(/[\\/]/).includes('.
  * director reads that); images and text files are used as they are. Returns the reference to send with the message.
  */
 export async function attach(dir: string, name: string, data: Uint8Array): Promise<UserRef> {
-  if (data.byteLength > MAX_BYTES) throw new Error(`「${name}」超过 20MB，换个小一点的文件`);
+  if (data.byteLength > MAX_BYTES) throw new Error(tr(`「${name}」超过 20MB，换个小一点的文件`, `“${name}” is over 20 MB. Try a smaller file.`));
   const kind = kindOf(name);
-  if (!kind) throw new Error(`「${name}」的格式还不支持：可以附图片、Markdown / 文本、PDF、Word、PPT、EPUB`);
+  if (!kind) throw new Error(tr(`「${name}」的格式还不支持：可以附图片、Markdown / 文本、PDF、Word、PPT、EPUB`, `“${name}” isn't a supported format. Attach images, Markdown / text, PDF, Word, PowerPoint or EPUB.`));
   const refs = path.join(dir, 'refs');
   fs.mkdirSync(refs, { recursive: true });
   const stamp = new Date().toISOString().slice(0, 19).replace(/[-:T]/g, '');
@@ -26,7 +27,7 @@ export async function attach(dir: string, name: string, data: Uint8Array): Promi
   let rel = `refs/${file}`;
   if (kind === 'document') {
     const parsed = (await prepareMaterials(refs)).files.find((f) => f.name === file);
-    if (!parsed?.parsedTo) throw new Error(`「${name}」没能读出文字${parsed?.warning ? `：${parsed.warning}` : ''}`);
+    if (!parsed?.parsedTo) throw new Error(tr(`「${name}」没能读出文字${parsed?.warning ? `：${parsed.warning}` : ''}`, `Couldn't read any text from “${name}”${parsed?.warning ? `: ${parsed.warning}` : ''}`));
     rel = `refs/${parsed.parsedTo}`;
   }
   return { kind: 'file', label: name, path: rel, image: kind === 'image' };

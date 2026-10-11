@@ -11,6 +11,7 @@ import { checkEnv } from './env.js';
 import { applyProxy } from './net.js';
 import { attach, cleanRefs } from './refs.js';
 import type { UserRef, EnvCheck, LoggedEvent, ModelInfo, NewProjectInput, ProjectMeta, ProjectSummary, PublicSettings, SettingsPatch, StyleInfo, Voice } from './types.js';
+import { tr } from './i18n.js';
 
 export interface MaterialFile { name: string; data: Uint8Array }
 
@@ -47,7 +48,7 @@ export class Studio {
    * mp3 path; ElevenLabs voices also carry a hosted previewUrl.
    */
   async voicePreview(provider: 'volcengine' | 'elevenlabs', id: string): Promise<string> {
-    if (!/^[\w.-]+$/.test(id)) throw new Error('音色 id 不合法');
+    if (!/^[\w.-]+$/.test(id)) throw new Error(tr('音色 id 不合法', 'Invalid voice id'));
     const shipped = provider === 'volcengine' ? bundledSample(id) : undefined;
     if (shipped) return shipped;
     const dir = path.join(DATA_DIR, 'voice-previews');
@@ -55,7 +56,7 @@ export class Studio {
     if (fs.existsSync(file)) return file;
     const cfg = loadConfig();
     const key = provider === 'elevenlabs' ? cfg.tts.elevenlabs : cfg.tts.volcengine;
-    if (!key) throw new Error('先在设置里连接配音服务');
+    if (!key) throw new Error(tr('先在设置里连接配音服务', 'Connect a voice service in Settings first'));
     const tts = provider === 'elevenlabs' ? elevenLabsTts(key) : volcengineTts(key);
     const text = provider === 'elevenlabs' ? 'Hi, I will narrate your video, one clear idea at a time.' : '你好，我来给你的视频配音。我们一句一句，把道理讲清楚。';
     const { audio } = await tts.synth(text, { voice: id, instruction: '像跟朋友分享一个实用的发现，语气轻松、真诚、自然' });
@@ -72,14 +73,14 @@ export class Studio {
   createProject(input: NewProjectInput, files: MaterialFile[]): ProjectMeta {
     const d = loadConfig().defaults;
     const model = input.model || d.model;
-    if (!model) throw new Error('请先在设置里配置模型');
+    if (!model) throw new Error(tr('请先在设置里配置模型', 'Set up a model in Settings first'));
     const said = input.notes?.trim();
-    if (!files.length && !said && !input.topic) throw new Error('说一句想讲什么，或者附上资料');
+    if (!files.length && !said && !input.topic) throw new Error(tr('说一句想讲什么，或者附上资料', 'Say what the video is about, or attach some material'));
     // without materials, the sentence the user wrote is the topic; it also names the project
     const topic = input.topic || (files.length ? undefined : said);
     const fromText = (t?: string) => t?.replace(/^(讲讲|讲一讲|介绍一下|介绍|聊聊|说说|帮我做一条|做一条)/, '').replace(/[。！？!?，,].*$/, '').trim().slice(0, 24) || undefined;
     const meta = newProject({
-      title: input.title?.trim() || fromText(topic) || fromText(said) || files[0]?.name.replace(/\.[^.]+$/, '') || '未命名视频',
+      title: input.title?.trim() || fromText(topic) || fromText(said) || files[0]?.name.replace(/\.[^.]+$/, '') || tr('未命名视频', 'Untitled video'),
       style: input.style || d.style, durationSec: input.durationSec || d.durationSec, model,
       runtime: input.runtime || d.runtime, voice: input.voice ?? d.voice, subtitles: input.subtitles ?? d.subtitles,
       topic, notes: topic ? undefined : input.notes,

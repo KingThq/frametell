@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { client, type LoggedEvent, type ProjectView } from './client';
 import { emptyRun, reduce, type RunView } from './run';
+import { useT } from '../i18n';
 
 /** fetch once (and on demand); keeps the last good value while reloading */
 export function useLoad<T>(fn: () => Promise<T>, deps: unknown[] = []) {
@@ -16,7 +17,9 @@ export function useLoad<T>(fn: () => Promise<T>, deps: unknown[] = []) {
 
 /** a project's live run: replays the event log, then follows it */
 export function useRun(project?: ProjectView) {
-  const [run, dispatch] = useReducer((v: RunView, batch: LoggedEvent[]) => batch.reduce(reduce, v), undefined, emptyRun);
+  // some of the run's text is worded as events arrive, so a language change replays the log from the start
+  const { locale } = useT();
+  const [run, dispatch] = useReducer((v: RunView, batch: LoggedEvent[] | 'reset') => (batch === 'reset' ? emptyRun() : batch.reduce(reduce, v)), undefined, emptyRun);
   const [conn, setConn] = useState<'open' | 'reconnecting'>('open');
   const buf = useRef<LoggedEvent[]>([]);
   useEffect(() => {
@@ -24,9 +27,11 @@ export function useRun(project?: ProjectView) {
     let raf = 0;
     // batch bursts (a replay can be thousands of events) into one render per frame
     const flush = () => { raf = 0; const b = buf.current; buf.current = []; if (b.length) dispatch(b); };
+    buf.current = [];
+    dispatch('reset');
     const off = client.subscribe(project.id, 0, (e) => { buf.current.push(e); if (!raf) raf = requestAnimationFrame(flush); }, setConn);
     return () => { off(); cancelAnimationFrame(raf); };
-  }, [project?.id]);
+  }, [project?.id, locale]);
   return { run, conn };
 }
 

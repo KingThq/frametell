@@ -6,6 +6,9 @@ import type { ModelInfo } from '@frametell/models';
 export type { StudioEvent, Storyboard, ModelInfo };
 export type { Timeline, PageTiming, UserRef } from '@frametell/agent';
 export type RuntimeId = 'pi' | 'claude-agent-sdk' | 'codex';
+/** interface language; 'auto' follows the system */
+export type Locale = 'zh' | 'en';
+export type LocalePref = 'auto' | Locale;
 export type RunStatus = 'idle' | 'running' | 'awaiting_approval' | 'done' | 'failed' | 'stopped';
 export interface VoiceChoice { provider: 'volcengine' | 'elevenlabs'; id: string; name?: string }
 export interface Voice { provider: 'volcengine' | 'elevenlabs'; id: string; name: string; gender?: 'female' | 'male'; lang?: string; previewUrl?: string }
@@ -51,6 +54,7 @@ export interface PublicSettings {
   /** the proxy, password masked; '' when none */
   proxy: string;
   tts: { volcengine: string; elevenlabs: string };
+  locale: LocalePref;
   defaults: { model?: string; runtime: RuntimeId; style: string; durationSec: number; voice?: VoiceChoice; subtitles: boolean; concurrency: number };
 }
 export interface SettingsPatch {
@@ -60,6 +64,7 @@ export interface SettingsPatch {
   /** '' removes the proxy */
   proxy?: string;
   tts?: { volcengine?: string; elevenlabs?: string };
+  locale?: LocalePref;
   defaults?: Partial<PublicSettings['defaults']>;
 }
 

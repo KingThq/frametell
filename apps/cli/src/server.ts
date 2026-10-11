@@ -10,7 +10,7 @@ import { Hono, type Context } from 'hono';
 import { serve } from '@hono/node-server';
 import { streamSSE } from 'hono/streaming';
 import { getCookie } from 'hono/cookie';
-import { DATA_DIR, Studio, type LoggedEvent, type NewProjectInput } from '@frametell/core';
+import { DATA_DIR, Studio, tr, type LoggedEvent, type NewProjectInput } from '@frametell/core';
 
 const UI_DIR = path.join(path.dirname(createRequire(import.meta.url).resolve('@frametell/ui/package.json')), 'dist');
 const TYPES: Record<string, string> = {
@@ -46,12 +46,12 @@ export function createServer(studio = new Studio(), opts: { token?: string } = {
   app.use('*', async (c, next) => {
     const q = c.req.query('token');
     const ok = q === token || getCookie(c, 'fs_token') === token || c.req.header('x-studio-token') === token;
-    if (c.req.path.startsWith('/api') && !ok) return c.json({ error: '需要从 frametell 打开的链接访问' }, 401);
+    if (c.req.path.startsWith('/api') && !ok) return c.json({ error: tr('需要从 frametell 打开的链接访问', 'Open the studio from the link frametell printed') }, 401);
     await next();
     // handlers may return a raw Response (files, streams): attach the cookie to whatever went out
     if (q === token) c.res.headers.append('Set-Cookie', `fs_token=${token}; Path=/; HttpOnly; SameSite=Strict`);
   });
-  app.onError((e, c) => c.json({ error: e.message }, /不存在/.test(e.message) ? 404 : 400));
+  app.onError((e, c) => c.json({ error: e.message }, /不存在|not found/.test(e.message) ? 404 : 400));
 
   app.get('/api/settings', (c) => c.json(studio.settings()));
   app.put('/api/settings', async (c) => c.json(studio.updateSettings(await c.req.json())));
@@ -86,7 +86,7 @@ export function createServer(studio = new Studio(), opts: { token?: string } = {
   });
   app.post('/api/projects/:id/attach', async (c) => {
     const f = (await c.req.formData()).get('file');
-    if (!(f instanceof File)) throw new Error('没有收到文件');
+    if (!(f instanceof File)) throw new Error(tr('没有收到文件', 'No file received'));
     return c.json(await studio.attach(c.req.param('id'), f.name, new Uint8Array(await f.arrayBuffer())));
   });
 
@@ -120,7 +120,7 @@ export function createServer(studio = new Studio(), opts: { token?: string } = {
     const rel = decodeURIComponent(c.req.path.slice(1));
     const pick = (r: string) => { const abs = path.resolve(UI_DIR, r); return abs.startsWith(UI_DIR) && fs.existsSync(abs) && fs.statSync(abs).isFile() ? abs : null; };
     const f = pick(rel) || pick('index.html');
-    return f ? sendFile(c, f) : c.text('面板还没有构建：pnpm --filter @frametell/ui build', 503);
+    return f ? sendFile(c, f) : c.text(tr('面板还没有构建：pnpm --filter @frametell/ui build', 'The panel is not built yet: pnpm --filter @frametell/ui build'), 503);
   });
 
   return { app, token };

@@ -1,36 +1,37 @@
-import { useId } from 'react';
+import { useT } from '../i18n';
 
-/** The Relay crest (家纹): a disc split by a lightning cut — ink half for your tools, caramel half for the models. */
-const LEFT = 'M0 0H20.9L13.4 15.2L18.8 16.9L10.9 32H0Z';
-const RIGHT = 'M20.9 0H32V32H10.9L18.8 16.9L13.4 15.2Z';
-const CUT = 'M20.6 1.5L13.4 15.2L18.8 16.9L11.2 30.5';
-
-export function Crest({ size = 26, className = '' }: { size?: number; className?: string }) {
-  const uid = useId().replace(/:/g, '');
+/** The 画说 · Showtell mark: 「」 corners — Chinese quotation marks and a viewfinder at once — around a recording dot.
+ *  Below 24px the small cut is used: heavier corners, a larger dot. */
+export function Crest({ size = 24, className = '' }: { size?: number; className?: string }) {
+  const small = size <= 24;
   return (
-    <svg width={size} height={size} viewBox="2.5 2.5 27 27" fill="none" className={`shrink-0 ${className}`} aria-hidden>
-      <defs>
-        <mask id={`cut-${uid}`} maskUnits="userSpaceOnUse" x="-5" y="-5" width="42" height="42">
-          <circle cx="16" cy="16" r="13.5" fill="#fff" />
-          <path d={CUT} stroke="#000" strokeWidth="1.55" strokeLinejoin="miter" />
-        </mask>
-      </defs>
-      <g mask={`url(#cut-${uid})`}>
-        <path d={LEFT} style={{ fill: 'rgb(var(--fs-ink))' }} />
-        <path d={RIGHT} fill="#D4A574" />
-      </g>
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" className={`shrink-0 ${className}`} aria-hidden>
+      {small ? (
+        <>
+          <path d="M6 6H32V15H15V32H6Z" style={{ fill: 'rgb(var(--fs-ink))' }} />
+          <path d="M58 58H32V49H49V32H58Z" style={{ fill: 'rgb(var(--fs-ink))' }} />
+          <circle cx="32" cy="32" r="9" style={{ fill: 'rgb(var(--fs-accent))' }} />
+        </>
+      ) : (
+        <>
+          <path d="M8 8H31V14.5H14.5V31H8Z" style={{ fill: 'rgb(var(--fs-ink))' }} />
+          <path d="M56 56H33V49.5H49.5V33H56Z" style={{ fill: 'rgb(var(--fs-ink))' }} />
+          <circle cx="32" cy="32" r="7.5" style={{ fill: 'rgb(var(--fs-accent))' }} />
+        </>
+      )}
     </svg>
   );
 }
 
+/** mark + name in the interface language: 画说 in Chinese, SHOWTELL otherwise */
 export function Wordmark({ compact = false }: { compact?: boolean }) {
+  const { locale } = useT();
   return (
-    <span className="inline-flex items-center gap-2.5">
-      <Crest size={24} />
-      <span className="flex items-baseline gap-1.5 leading-none">
-        {!compact && <span className="text-[14px] font-semibold tracking-[-0.01em] text-ink">Relay</span>}
-        <span className="font-display text-[17px] italic tracking-[-0.02em] text-accent-ink">Studio</span>
-      </span>
+    <span className="inline-flex items-center gap-2">
+      <Crest size={20} />
+      {!compact && (locale === 'zh'
+        ? <span className="font-display text-[17px] font-bold leading-none tracking-[0.06em] text-ink">画说</span>
+        : <span className="text-[13px] font-semibold leading-none tracking-[0.24em] text-ink">SHOWTELL</span>)}
     </span>
   );
 }

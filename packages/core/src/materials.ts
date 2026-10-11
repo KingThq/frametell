@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import JSZip from 'jszip';
 import mammoth from 'mammoth';
+import { tr } from './i18n.js';
 
 export type MaterialKind = 'text' | 'image' | 'document';
 export interface PreparedMaterial { name: string; kind: MaterialKind; parsedTo?: string; pages?: number; chars: number; warning?: string }
@@ -67,11 +68,11 @@ export async function prepareMaterials(dir: string): Promise<{ files: PreparedMa
       const r = ext === 'pdf' ? await parsePdf(buf) : ext === 'docx' ? await parseDocx(buf, sink) : ext === 'pptx' ? await parsePptx(buf, sink) : await parseEpub(buf);
       const body = tidy(r.markdown);
       fs.writeFileSync(outPath, header(name, r.pages) + `# ${base}\n\n` + body + '\n');
-      const warning = r.warning ?? (body.trim() ? undefined : '没有提取到文字');
+      const warning = r.warning ?? (body.trim() ? undefined : tr('没有提取到文字', 'no text found'));
       files.push({ name, kind: 'document', parsedTo: out, pages: r.pages, chars: body.length, warning });
     } catch (e) {
       outputs.delete(out);
-      files.push({ name, kind: 'document', chars: 0, warning: `解析失败：${(e as Error).message}` });
+      files.push({ name, kind: 'document', chars: 0, warning: tr(`解析失败：${(e as Error).message}`, `couldn't parse: ${(e as Error).message}`) });
     }
   }
 
@@ -182,7 +183,7 @@ async function parsePdf(buf: Buffer): Promise<Parsed> {
       flush();
     });
     const warning = chars / Math.max(totalPages, 1) < SPARSE_CHARS_PER_PAGE
-      ? `几乎没有可提取的文字（${chars} 字 / ${totalPages} 页），可能是扫描件；需要 OCR 后再用` : undefined;
+      ? tr(`几乎没有可提取的文字（${chars} 字 / ${totalPages} 页），可能是扫描件；需要 OCR 后再用`, `almost no extractable text (${chars} characters / ${totalPages} pages); it may be a scan and needs OCR first`) : undefined;
     return { markdown: out.join('\n\n'), pages: totalPages, warning };
   } finally {
     await (pdf as unknown as { destroy?: () => Promise<void> }).destroy?.();
@@ -339,7 +340,7 @@ async function parseEpub(buf: Buffer): Promise<Parsed> {
   const container = (await zip.file('META-INF/container.xml')?.async('string')) ?? '';
   const opfPath = attr(/<rootfile\b[^>]*>/.exec(container)?.[0] ?? '', 'full-path');
   const opf = opfPath ? await zip.file(opfPath)?.async('string') : undefined;
-  if (!opfPath || !opf) throw new Error('不是有效的 EPUB（缺少 OPF）');
+  if (!opfPath || !opf) throw new Error(tr('不是有效的 EPUB（缺少 OPF）', 'not a valid EPUB (no OPF)'));
   const manifest = new Map<string, string>();
   for (const m of opf.matchAll(/<item\b[^>]*>/g)) {
     const id = attr(m[0], 'id'), href = attr(m[0], 'href');

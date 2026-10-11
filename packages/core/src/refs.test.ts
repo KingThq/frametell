@@ -34,5 +34,5 @@ test('attached files land in refs/, and unsupported ones are refused', async () 
   const r = await attach(dir, '截图 1.png', new Uint8Array([137, 80, 78, 71]));
   assert.equal(r.kind, 'file');
   assert.ok(r.kind === 'file' && r.image && /^refs\/\d{14}-截图_1\.png$/.test(r.path) && fs.existsSync(path.join(dir, r.path)));
-  await assert.rejects(attach(dir, 'x.exe', new Uint8Array([1])), /格式还不支持/);
+  await assert.rejects(attach(dir, 'x.exe', new Uint8Array([1])), /格式还不支持|isn't a supported format/);
 });

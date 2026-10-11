@@ -154,7 +154,7 @@ test('idempotent, never touches originals or a user-written x.md, reports failur
   assert.ok(a.files.some((f) => f.name === 'notes.md' && f.kind === 'text'));
   const broken = a.files.find((f) => f.name === 'broken.pdf')!;
   assert.equal(broken.parsedTo, undefined);
-  assert.match(broken.warning ?? '', /解析失败/);
+  assert.match(broken.warning ?? '', /解析失败|couldn't parse/);
   assert.ok(fs.existsSync(path.join(dir, 'broken.pdf')) && fs.existsSync(path.join(dir, 'deck.pptx')));
 
   const before = fs.statSync(path.join(dir, 'deck.md')).mtimeMs;

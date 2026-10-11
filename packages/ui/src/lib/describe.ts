@@ -1,7 +1,16 @@
 // Tool calls in plain words. The runtimes report a tool name and a (possibly truncated) JSON summary of its arguments;
 // a knowledge creator should read「读资料《番茄工作法》」, not {"path":"materials/番茄工作法.md"}.
-const pageNo = (id: string) => { const n = /p0*(\d+)/.exec(id); return n ? `第 ${n[1]} 页` : id; };
+import { t, type MessageKey } from '../i18n';
+import type zhRun from '../i18n/zh/run';
+
+const pageNo = (id: string) => { const n = /p0*(\d+)/.exec(id); return n ? t('run.page', { n: n[1] }) : id; };
+const pageN = (id: string) => /p0*(\d+)/.exec(id)?.[1] ?? id;
 const base = (p: string) => p.split('/').pop()!.replace(/\.(md|markdown|txt)$/i, '');
+
+/** what a tool call does, before it is put in words: one of the actions in i18n/<locale>/run.ts tool.* */
+export type Act = { id: keyof typeof zhRun.tool; vars?: Record<string, string> };
+/** acts on a page's code or an unnamed file: inside a page session these are all "drawing the page" */
+export const PAGE_ACTS: Act['id'][] = ['readFile', 'writeFile', 'editFile', 'readPage', 'drawPage', 'editPage'];
 
 function arg(summary: string, key: string): string | undefined {
   try { const v = JSON.parse(summary)[key]; if (typeof v === 'string') return v; } catch {}
@@ -9,31 +18,34 @@ function arg(summary: string, key: string): string | undefined {
   return m ? m[1].replace(/\\"/g, '"').replace(/…$/, '') : undefined;
 }
 
-function aboutPath(p: string, verb: '读' | '写' | '改'): string {
-  if (!p) return verb === '读' ? '读文件' : verb === '写' ? '写文件' : '修改文件';
-  if (p.startsWith('materials/')) return verb === '读' ? `读资料《${base(p)}》` : `整理资料《${base(p)}》`;
-  if (/(^|\/)storyboard\.json$/.test(p)) return verb === '读' ? '看分镜' : verb === '写' ? '写分镜' : '修改分镜';
-  if (/(^|\/)script\.js$/.test(p)) return verb === '读' ? '看口播稿' : verb === '写' ? '写口播稿' : '修改口播稿';
-  if (p === 'pages/p.js') return verb === '读' ? '看画面' : '修改画面';
+type Verb = 'read' | 'write' | 'edit';
+const by = (verb: Verb, read: Act['id'], write: Act['id'], edit: Act['id']): Act['id'] => (verb === 'read' ? read : verb === 'write' ? write : edit);
+
+function aboutPath(p: string, verb: Verb): Act {
+  if (!p) return { id: by(verb, 'readFile', 'writeFile', 'editFile') };
+  if (p.startsWith('materials/')) return { id: verb === 'read' ? 'readMaterial' : 'tidyMaterial', vars: { name: base(p) } };
+  if (/(^|\/)storyboard\.json$/.test(p)) return { id: by(verb, 'readStoryboard', 'writeStoryboard', 'editStoryboard') };
+  if (/(^|\/)script\.js$/.test(p)) return { id: by(verb, 'readScript', 'writeScript', 'editScript') };
+  if (p === 'pages/p.js') return { id: verb === 'read' ? 'readPictures' : 'editPictures' };
   const page = /pages\/(p\d+)\.js$/.exec(p);
-  if (page) return verb === '读' ? `看${pageNo(page[1])}的画面` : verb === '写' ? `画${pageNo(page[1])}` : `修改${pageNo(page[1])}`;
-  if (/out\/snap\//.test(p)) return '看检查截图';
-  if (/revision\.json$/.test(p)) return '写修改计划';
-  if (/^engine\//.test(p)) return '查阅画面说明';
-  if (/voice\.js$/.test(p)) return '看配音时间';
-  return `${verb === '读' ? '读' : verb === '写' ? '写' : '修改'} ${p.split('/').pop()}`;
+  if (page) return { id: by(verb, 'readPage', 'drawPage', 'editPage'), vars: { n: pageN(page[1]) } };
+  if (/out\/snap\//.test(p)) return { id: 'readSnaps' };
+  if (/revision\.json$/.test(p)) return { id: 'writePlan' };
+  if (/^engine\//.test(p)) return { id: 'readEngine' };
+  if (/voice\.js$/.test(p)) return { id: 'readVoice' };
+  return { id: by(verb, 'readOther', 'writeOther', 'editOther'), vars: { file: p.split('/').pop()! } };
 }
 
-function aboutCommand(c: string): string {
-  if (/storyboard-lint/.test(c)) return '检查分镜';
-  if (/script\.mjs/.test(c)) return '估算口播时长';
-  if (/lint\.mjs/.test(c)) return '检查版面';
-  if (/snap\.mjs/.test(c)) return '截图看效果';
-  if (/use-extra/.test(c)) return '加载画面组件';
-  if (/logos\.mjs/.test(c)) return '准备品牌标志';
-  if (/pages\.mjs|times\.mjs/.test(c)) return '看时间轴';
-  if (/^\s*(ls|find|grep|rg|cat|sed|head|tail|wc)\b/.test(c)) return '查找文件';
-  return '运行一条命令';
+function aboutCommand(c: string): Act['id'] {
+  if (/storyboard-lint/.test(c)) return 'checkStoryboard';
+  if (/script\.mjs/.test(c)) return 'timeScript';
+  if (/lint\.mjs/.test(c)) return 'checkLayout';
+  if (/snap\.mjs/.test(c)) return 'snapshot';
+  if (/use-extra/.test(c)) return 'loadComponents';
+  if (/logos\.mjs/.test(c)) return 'prepareLogos';
+  if (/pages\.mjs|times\.mjs/.test(c)) return 'readTimeline';
+  if (/^\s*(ls|find|grep|rg|cat|sed|head|tail|wc)\b/.test(c)) return 'findFiles';
+  return 'runCommand';
 }
 
 /** an edit whose path was cut off (older logs put the replaced text first): tell the file from the text it changes */
@@ -46,15 +58,24 @@ function guessPath(summary: string): string {
   return '';
 }
 
-/** a short sentence for one tool call */
-export function describeTool(name: string, summary: string): string {
+/** what one tool call does; undefined for a tool we have no words for */
+export function toolAct(name: string, summary: string): Act | undefined {
   const n = name.toLowerCase();
-  if (n === 'read') return aboutPath(arg(summary, 'path') || arg(summary, 'file_path') || '', '读');
-  if (n === 'write') return aboutPath(arg(summary, 'path') || arg(summary, 'file_path') || '', '写');
-  if (n === 'edit') return aboutPath(arg(summary, 'path') || arg(summary, 'file_path') || guessPath(summary), '改');
-  if (n === 'bash') return aboutCommand(arg(summary, 'command') || summary);
-  if (n === 'glob' || n === 'grep') return '查找文件';
-  return name;
+  if (n === 'read') return aboutPath(arg(summary, 'path') || arg(summary, 'file_path') || '', 'read');
+  if (n === 'write') return aboutPath(arg(summary, 'path') || arg(summary, 'file_path') || '', 'write');
+  if (n === 'edit') return aboutPath(arg(summary, 'path') || arg(summary, 'file_path') || guessPath(summary), 'edit');
+  if (n === 'bash') return { id: aboutCommand(arg(summary, 'command') || summary) };
+  if (n === 'glob' || n === 'grep') return { id: 'findFiles' };
+  return undefined;
+}
+
+/** an act in words. step: a finished step in the process list; start: the live line as it starts; doing: while it is being written */
+export const actText = (a: Act, form: 'step' | 'start' | 'doing' = 'step') => t(`run.tool.${a.id}.${form}` as MessageKey, a.vars);
+
+/** a short sentence for one tool call */
+export function describeTool(name: string, summary: string, form: 'step' | 'start' | 'doing' = 'step'): string {
+  const a = toolAct(name, summary);
+  return a ? actText(a, form) : name;
 }
 
 /** collapse runs of the same description: 「读资料《A》、写分镜、检查分镜 2 次」 */
@@ -71,4 +92,4 @@ export function summarizeTools(calls: { name: string; summary: string }[]): { te
 export const pageName = pageNo;
 
 /** one step with its repeats, in words: 「修改口播稿 2 次」 */
-export const stepText = (s: { text: string; count: number }) => (s.count > 1 ? `${s.text} ${s.count} 次` : s.text);
+export const stepText = (s: { text: string; count: number }) => (s.count > 1 ? t('run.repeat', { text: s.text, n: s.count }) : s.text);

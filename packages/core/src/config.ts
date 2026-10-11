@@ -6,7 +6,8 @@ import os from 'node:os';
 import path from 'node:path';
 import type { CustomProviderConfig } from '@frametell/models';
 import { maskProxy } from './net.js';
-import type { PublicSettings, RuntimeId, SettingsPatch, VoiceChoice } from './types.js';
+import type { LocalePref, PublicSettings, RuntimeId, SettingsPatch, VoiceChoice } from './types.js';
+import { tr } from './i18n.js';
 
 export const DATA_DIR = process.env.FRAMETELL_HOME || path.join(os.homedir(), '.frametell');
 export const PROJECTS_DIR = path.join(DATA_DIR, 'projects');
@@ -22,6 +23,8 @@ export interface Config {
   /** HTTP proxy for every outbound request, e.g. http://127.0.0.1:7890 */
   proxy?: string;
   tts: { volcengine?: string; elevenlabs?: string };
+  /** interface language; absent = follow the system */
+  locale?: LocalePref;
   defaults: {
     model?: string;          // "provider/model-id"
     runtime: RuntimeId;
@@ -63,6 +66,7 @@ export function publicConfig(c: Config): PublicSettings {
     baseUrls: c.baseUrls,
     proxy: maskProxy(c.proxy),
     tts: { volcengine: mask(c.tts.volcengine), elevenlabs: mask(c.tts.elevenlabs) },
+    locale: c.locale || 'auto',
     defaults: c.defaults,
   };
 }
@@ -75,12 +79,13 @@ export function patchConfig(c: Config, patch: SettingsPatch & { custom?: CustomP
   for (const [k, v] of Object.entries(patch.baseUrls || {})) { if (v.trim()) next.baseUrls[k] = v.trim().replace(/\/+$/, ''); else delete next.baseUrls[k]; }
   if (patch.proxy !== undefined) {
     const p = patch.proxy.trim();
-    if (p && !/^https?:\/\/[^/\s]+\/?$/.test(p)) throw new Error('代理地址要写成 http://主机:端口，例如 http://127.0.0.1:7890');
+    if (p && !/^https?:\/\/[^/\s]+\/?$/.test(p)) throw new Error(tr('代理地址要写成 http://主机:端口，例如 http://127.0.0.1:7890', 'Write the proxy as http://host:port, e.g. http://127.0.0.1:7890'));
     // the panel only ever sees the password masked: an edit that kept the mask keeps the saved password
     const keep = (u: string) => { try { const n = new URL(u); if (n.password === encodeURIComponent('••••') && c.proxy) { n.password = new URL(c.proxy).password; return n.toString(); } } catch {} return u; };
     if (p) next.proxy = keep(p).replace(/\/$/, ''); else delete next.proxy;
   }
-  for (const [k, v] of Object.entries(patch.baseUrls || {})) if (v.trim() && !/^https?:\/\//.test(v.trim())) throw new Error(`${k} 的请求地址要以 http:// 或 https:// 开头`);
+  for (const [k, v] of Object.entries(patch.baseUrls || {})) if (v.trim() && !/^https?:\/\//.test(v.trim())) throw new Error(tr(`${k} 的请求地址要以 http:// 或 https:// 开头`, `The ${k} address must start with http:// or https://`));
+  if (patch.locale) { if (patch.locale === 'auto') delete next.locale; else next.locale = patch.locale; }
   if (patch.custom) next.custom = patch.custom;
   if (patch.defaults) next.defaults = { ...next.defaults, ...patch.defaults };
   return next;

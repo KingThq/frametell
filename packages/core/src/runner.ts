@@ -13,6 +13,7 @@ import { prepareMaterials } from './materials.js';
 import { applyProxy, normalizeBaseUrl } from './net.js';
 import { withRefs } from './refs.js';
 import type { LoggedEvent, ProjectMeta, ProjectSummary, RunStatus } from './types.js';
+import { tr } from './i18n.js';
 
 export type Logged = LoggedEvent;
 
@@ -60,7 +61,7 @@ async function buildRuntime(meta: ProjectMeta): Promise<{ runtime: AgentRuntime;
   const [provider, ...rest] = meta.model.split('/');
   const id = rest.join('/');
   let model = catalog.get(provider, id);
-  if (!model) throw new Error(`模型 ${meta.model} 不可用：检查设置里的 key`);
+  if (!model) throw new Error(tr(`模型 ${meta.model} 不可用：检查设置里的 key`, `Model ${meta.model} is not available: check its key in Settings`));
   const info = catalog.info(model);
   const prices = { ...info.cost, currency: info.currency };
   // the user's own relay for Anthropic / OpenAI replaces the official endpoint for every runtime
@@ -102,7 +103,7 @@ class Runner {
       this.status = last?.type === 'approval' ? 'awaiting_approval' : this.stateStage() === 'done' ? 'done' : lines.length ? 'stopped' : 'idle';
       // an export cut short by the app closing: the film is still there to preview, the export can simply run again
       if (this.status === 'done' && last?.type === 'stage' && last.stage === 'render' && last.status === 'start' && !heldElsewhere(this.id)) {
-        this.emit({ type: 'stage', stage: 'render', status: 'failed', detail: '导出被打断了，可以重新导出' });
+        this.emit({ type: 'stage', stage: 'render', status: 'failed', detail: tr('导出被打断了，可以重新导出', 'The export was interrupted. You can export again.') });
       }
       // a run that was in progress when its process went away (app closed, crash): say so in the log, so every client
       // shows it as paused with a way to continue, instead of a stage that never ends
@@ -180,7 +181,7 @@ class Runner {
   private async launch(task: (d: Director) => Promise<unknown>, o: { exporting?: boolean } = {}) {
     if (this.status === 'running') return;
     const other = heldElsewhere(this.id);
-    if (other) { this.emit({ type: 'error', message: `这个项目正在另一个 Frametell 窗口里制作（进程 ${other}），请在那里继续` }); return; }
+    if (other) { this.emit({ type: 'error', message: tr(`这个项目正在另一个画说窗口里制作（进程 ${other}），请在那里继续`, `This project is being made in another Showtell window (process ${other}). Continue there.`) }); return; }
     fs.writeFileSync(lockFile(this.id), String(process.pid));
     const release = () => { try { if (+fs.readFileSync(lockFile(this.id), 'utf8') === process.pid) fs.rmSync(lockFile(this.id)); } catch {} };
     const meta = readMeta(this.id);
@@ -194,7 +195,7 @@ class Runner {
       // PDF/Word/PPT/EPUB → Markdown the director can read (skipped when already done); a file that cannot be read is
       // reported but does not stop the run
       const { files } = await prepareMaterials(path.join(dir, 'materials'));
-      for (const f of files) if (f.kind === 'document' && !f.parsedTo) this.emit({ type: 'error', message: `资料 ${f.name} 读不了：${f.warning}` });
+      for (const f of files) if (f.kind === 'document' && !f.parsedTo) this.emit({ type: 'error', message: tr(`资料 ${f.name} 读不了：${f.warning}`, `Couldn't read ${f.name}: ${f.warning}`) });
       const { runtime, prices } = await buildRuntime(meta);
       const ttsKey = meta.voice?.provider === 'elevenlabs' ? cfg.tts.elevenlabs : cfg.tts.volcengine;
       const tts = meta.voice && ttsKey ? (meta.voice.provider === 'elevenlabs' ? elevenLabsTts(ttsKey) : volcengineTts(ttsKey)) : undefined;
@@ -224,7 +225,7 @@ class Runner {
           const aborted = e.name === 'AbortError' || !!this.abort?.signal.aborted;
           this.status = 'done';
           if (!aborted) this.emit({ type: 'error', message: e.message });
-          this.emit({ type: 'stage', stage: 'render', status: 'failed', detail: aborted ? '已取消导出' : `导出失败：${e.message}` });
+          this.emit({ type: 'stage', stage: 'render', status: 'failed', detail: aborted ? tr('已取消导出', 'Export canceled') : tr(`导出失败：${e.message}`, `Export failed: ${e.message}`) });
           next();
           return;
         }
@@ -254,24 +255,24 @@ class Runner {
     if (this.gate || this.status === 'awaiting_approval') return this.approve(text);
     if (this.status === 'running' && this.exporting) {
       this.afterExport.push(text);
-      this.emit({ type: 'note', text: '记下了，导出完就接着改' });
+      this.emit({ type: 'note', text: tr('记下了，导出完就接着改', 'Noted. I’ll make the change once the export finishes.') });
       return true;
     }
     if (this.status === 'running' && this.director) {
       this.director.message(text);
-      this.emit({ type: 'note', text: '收到，接下来的步骤会照这个来' });
+      this.emit({ type: 'note', text: tr('收到，接下来的步骤会照这个来', 'Got it. The next steps will follow this.') });
       return true;
     }
     if (this.status === 'done' || this.stateStage() === 'done') { void this.revise(text); return true; }
     this.parked.push(text);
-    this.emit({ type: 'note', text: '记下了，继续制作时会照这个来' });
+    this.emit({ type: 'note', text: tr('记下了，继续制作时会照这个来', 'Noted. I’ll follow this when work resumes.') });
     return true;
   }
 }
 
 const runners = new Map<string, Runner>();
 export function runner(id: string): Runner {
-  if (!fs.existsSync(metaFile(id))) throw new Error('项目不存在');
+  if (!fs.existsSync(metaFile(id))) throw new Error(tr('项目不存在', 'Project not found'));
   let r = runners.get(id);
   if (!r) { r = new Runner(id); runners.set(id, r); }
   return r;

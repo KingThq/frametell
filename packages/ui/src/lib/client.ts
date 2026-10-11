@@ -1,5 +1,6 @@
 // StudioClient: everything the panel can ask of the core. In a browser it speaks HTTP + SSE to the local server; inside
 // the desktop app the preload script exposes the same methods as `window.studioBridge` over IPC.
+import { t } from '../i18n';
 import type {
   EnvCheck, LoggedEvent, ModelInfo, NewProjectInput, PageTiming, ProjectSummary, PublicSettings, SettingsPatch, StyleInfo, Timeline, UserRef, Voice,
 } from '@frametell/core/types';
@@ -46,7 +47,7 @@ async function call<T>(method: string, url: string, body?: unknown): Promise<T> 
   else if (body !== undefined) { init.body = JSON.stringify(body); (init.headers as Record<string, string>)['content-type'] = 'application/json'; }
   const res = await fetch(url, init);
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new HttpError((data as { error?: string }).error || `请求失败（${res.status}）`, res.status);
+  if (!res.ok) throw new HttpError((data as { error?: string }).error || t('common.requestFailed', { status: res.status }), res.status);
   return data as T;
 }
 

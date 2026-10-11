@@ -1,7 +1,8 @@
 // Folds the event stream into what the workbench shows. The director (storyboard, script, review) speaks in the
 // conversation; page sessions run in parallel, so each page is summarized in one row instead of interleaving.
 import type { LoggedEvent, UserRef } from './client';
-import { describeTool, pageName } from './describe';
+import { t } from '../i18n';
+import { actText, PAGE_ACTS, pageName, toolAct } from './describe';
 
 type Ev<T extends LoggedEvent['type']> = Extract<LoggedEvent, { type: T }>;
 export type Stage = Ev<'stage'>['stage'];
@@ -70,8 +71,10 @@ export interface RunView {
   /** set from a change request on a finished film until the redraw starts: the director is deciding which pages to redo */
   revising?: number;
   /** what the director (or a page agent) is doing right now, in plain words, and since when */
-  /** `updated`: the latest streamed progress (a long silence after thinking means the answer is being written) */
-  activity?: { text: string; at: number; detail?: string; updated?: number };
+  /** `updated`: the latest streamed progress (a long silence after thinking means the answer is being written);
+   *  `page`: the page session doing it; `thinking` / `writing`: thinking, or writing an answer that shows only when whole;
+   *  `base`: the text without its line count, so a growing count keeps the same start time */
+  activity?: { text: string; at: number; detail?: string; updated?: number; page?: string; thinking?: boolean; writing?: boolean; base?: string };
   /** when the run (or its latest continuation) started, for elapsed time */
   startedAt?: number;
   /** the last moment anything happened (for "working…" indicators) */
@@ -79,7 +82,8 @@ export interface RunView {
 }
 
 export const STAGES: Stage[] = ['storyboard', 'script', 'narrate', 'pages', 'review', 'render'];
-export const STAGE_NAME: Record<Stage, string> = { storyboard: '分镜', script: '口播', narrate: '配音', pages: '画面', review: '全片检查', render: '渲染' };
+/** stage names in the interface language, read when used: STAGE_NAME[stage] */
+export const STAGE_NAME = new Proxy({} as Record<Stage, string>, { get: (_, k) => t(`run.stage.${String(k) as Stage}`) });
 
 export const emptyRun = (): RunView => ({
   seq: 0, feed: [], pages: {}, pageOrder: [], awaitingApproval: false,
@@ -120,31 +124,37 @@ export function reduce(v: RunView, e: LoggedEvent): RunView {
     }
     case 'agent': {
       const ev = e.event;
-      const who = isPage(e.session) ? `${pageName(e.session.slice(5))} · ` : '';
+      const page = isPage(e.session) ? e.session.slice(5) : undefined;
+      const who = (doing: string) => (page ? t('run.now.who', { page: pageName(page), doing }) : doing);
       if (ev.type === 'progress') {
         // a response still being written: say what, how far it has got, and show the line it is on
-        const doing = ev.what === 'thinking' ? '在想'
-          : ev.what === 'writing' ? (who ? '在写画面' : '在写')
-          : ev.what === 'text' ? '在写回复'
-          : `${(() => { const d = describeTool(ev.name ?? '', JSON.stringify({ path: ev.path ?? '' })); return who && /第 \d+ 页|文件$/.test(d) ? (ev.name === 'edit' ? '在改画面' : '在写画面') : d.replace(/^(读|写|修改|画)/, '在$1'); })()}${ev.lines ? ` · 已写 ${ev.lines} 行` : ''}`;
-        const text = who + doing;
-        const base = (x?: string) => x?.replace(/ · 已写 \d+ 行$/, '');
-        r.activity = { text, at: base(r.activity?.text) === base(text) ? r.activity!.at : at, detail: ev.what === 'tool' ? ev.tail : undefined, updated: at };
-        if (isPage(e.session) && ev.what === 'tool' && ev.lines) {
-          const id = e.session.slice(5);
-          if (r.pages[id]) r.pages = { ...r.pages, [id]: { ...r.pages[id], progress: `已写 ${ev.lines} 行` } };
+        const act = ev.what === 'tool' ? toolAct(ev.name ?? '', JSON.stringify({ path: ev.path ?? '' })) : undefined;
+        const doing = ev.what === 'thinking' ? t('run.now.thinking')
+          : ev.what === 'writing' ? t(page ? 'run.now.writingPicture' : 'run.now.writing')
+          : ev.what === 'text' ? t('run.now.writingReply')
+          : page && act && PAGE_ACTS.includes(act.id) ? t(ev.name === 'edit' ? 'run.now.editingPicture' : 'run.now.writingPicture')
+          : act ? actText(act, 'doing') : ev.name ?? '';
+        const base = who(doing);
+        const text = ev.what === 'tool' && ev.lines ? who(t('run.now.withLines', { doing, n: ev.lines })) : base;
+        r.activity = {
+          text, base, page, at: r.activity?.base === base ? r.activity!.at : at, detail: ev.what === 'tool' ? ev.tail : undefined, updated: at,
+          thinking: ev.what === 'thinking', writing: ev.what === 'writing' || (!!page && ev.what === 'tool' && !ev.lines && ev.name !== 'edit' && !!act && PAGE_ACTS.includes(act.id)),
+        };
+        if (page && ev.what === 'tool' && ev.lines) {
+          if (r.pages[page]) r.pages = { ...r.pages, [page]: { ...r.pages[page], progress: t('run.now.lines', { n: ev.lines }) } };
         }
         return r;
       }
       if (ev.type === 'tool_start') {
-        const said = describeTool(ev.name, ev.summary);
+        const act = toolAct(ev.name, ev.summary);
         // inside a page session, writing code is drawing the page whatever the path summary kept
-        r.activity = { text: who + (who && /^(写|修改)文件$|^(画|修改)第/.test(said) ? (said.startsWith('修改') ? '在改画面' : '在画画面') : said), at };
+        const drawing = page && act && PAGE_ACTS.includes(act.id) && act.id !== 'readFile' && act.id !== 'readPage';
+        r.activity = { text: who(drawing ? t(act!.id === 'editFile' || act!.id === 'editPage' ? 'run.now.editingPicture' : 'run.now.drawingPicture') : act ? actText(act, 'start') : ev.name), at, page };
       }
-      else if (ev.type === 'thinking') r.activity = { text: who + '在想', at };
-      else if (ev.type === 'text' && !who) r.activity = { text: '在写', at };
-      if (isPage(e.session)) {
-        const id = e.session.slice(5);
+      else if (ev.type === 'thinking') r.activity = { text: who(t('run.now.thinking')), at, page, thinking: true };
+      else if (ev.type === 'text' && !page) r.activity = { text: t('run.now.writing'), at, writing: true };
+      if (page) {
+        const id = page;
         const p = r.pages[id] ? { ...r.pages[id] } : newPage(id, r);
         if (ev.type === 'text' && !/^(DONE|FLAGGED)\b/i.test(ev.text.trim())) p.lastText = ev.text;   // keep the description, not the check-loop reply
         if (ev.type === 'tool_start') { p.tools += 1; p.progress = undefined; }
@@ -172,7 +182,7 @@ export function reduce(v: RunView, e: LoggedEvent): RunView {
     }
     case 'storyboard_check': {
       const reds = e.issues.filter((i) => i.level === 'red').length;
-      push({ kind: 'check', key, round: e.round, reds, yellows: e.issues.length - reds, messages: e.issues.map((i) => `${i.page ?? '全片'}：${i.msg}`), at });
+      push({ kind: 'check', key, round: e.round, reds, yellows: e.issues.length - reds, messages: e.issues.map((i) => t('run.issue', { where: i.page ?? t('run.wholeFilm'), msg: i.msg })), at });
       return r;
     }
     case 'approval':
@@ -187,7 +197,7 @@ export function reduce(v: RunView, e: LoggedEvent): RunView {
       if (e.status === 'drawing' && !p.startedAt) p.startedAt = at;
       if (['ok', 'flagged', 'failed'].includes(e.status)) p.endedAt = at;
       // the check round: first the pictures are taken, then the page agent looks at them
-      if (e.status === 'checking') r.activity = { text: `${pageName(e.id)} · ${e.sheet ? '在看自检截图' : '在截图自检'}${p.round > 1 ? `（第 ${p.round} 遍）` : ''}`, at };
+      if (e.status === 'checking') r.activity = { text: t('run.now.checking', { page: pageName(e.id), snaps: !!e.sheet, round: p.round }), at, page: e.id };
       p.progress = undefined;
       r.pages = { ...r.pages, [e.id]: p };
       if (!r.pageOrder.includes(e.id)) r.pageOrder = [...r.pageOrder, e.id].sort();
@@ -247,7 +257,7 @@ function newPage(id: string, r: RunView): PageView {
 export const relPath = (abs: string, projectId: string) => { const i = abs.indexOf(projectId + '/'); return i >= 0 ? abs.slice(i + projectId.length + 1) : abs.split('/').slice(-2).join('/'); };
 
 export const money = (c?: { amount: number; currency: 'CNY' | 'USD' }, currency: 'CNY' | 'USD' = 'CNY') => { const cur = c?.currency ?? currency, a = c?.amount ?? 0; return `${cur === 'CNY' ? '¥' : '$'}${a < 10 ? a.toFixed(2) : a.toFixed(1)}`; };
-export const clock = (ms: number) => { const s = Math.max(0, Math.round(ms / 1000)); return s < 60 ? `${s} 秒` : `${Math.floor(s / 60)} 分 ${String(s % 60).padStart(2, '0')} 秒`; };
+export const clock = (ms: number) => { const s = Math.max(0, Math.round(ms / 1000)); return s < 60 ? t('run.sec', { s }) : t('run.minSec', { m: Math.floor(s / 60), s: String(s % 60).padStart(2, '0') }); };
 
 /** something is being made right now (a stage, or the director planning a change to the finished film) */
 export const isWorking = (r: RunView) => (!!r.current && !r.awaitingApproval) || !!r.revising || !!r.exporting;

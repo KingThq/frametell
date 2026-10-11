@@ -1,7 +1,13 @@
 // Style names and swatches for the panel (the ids match packages/engine/styles/<id>).
-export const STYLE_NAME: Record<string, string> = {
-  'warm-story': '暖调叙事插画', study: '安静书房', whiteboard: '白板手绘', chalkboard: '黑板', 'tech-dark': '科技深色',
-};
+import { t, type MessageKey } from '../i18n';
+
+const KNOWN = ['warm-story', 'study', 'whiteboard', 'chalkboard', 'tech-dark'];
+/** a style's name in the interface language; undefined for a style the panel doesn't know */
+export const styleName = (id: string): string | undefined => (KNOWN.includes(id) ? t(`common.styles.${id}` as MessageKey) : undefined);
+/** a built-in style's one-line summary in the interface language; undefined for others */
+export const styleSummary = (id: string): string | undefined => (KNOWN.includes(id) ? t(`common.styleSummaries.${id}` as MessageKey) : undefined);
+/** STYLE_NAME[id], read at use time so it follows the language */
+export const STYLE_NAME: Record<string, string | undefined> = new Proxy({}, { get: (_, id) => (typeof id === 'string' ? styleName(id) : undefined) });
 export const STYLE_SWATCH: Record<string, string[]> = {
   'warm-story': ['#F4E7D3', '#C8603C', '#E0A23B', '#7E9F7A'],
   study: ['#F4EEE2', '#2B2520', '#3D6D93', '#C0782E'],

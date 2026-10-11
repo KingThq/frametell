@@ -11,6 +11,7 @@ import { createProject } from '@frametell/engine/tools/project.mjs';
 import { createCatalog, RELAY_BASE_URL, type ProviderKey } from '@frametell/models';
 import { elevenLabsTts, volcengineTts } from '@frametell/voice';
 import { Director, piRuntime, claudeRuntime, codexRuntime, type AgentRuntime, type StudioEvent } from '@frametell/agent';
+import { tr } from '@frametell/core';
 
 const ENV_KEYS: Record<string, string> = {
   relay: 'RELAY_API_KEY', anthropic: 'ANTHROPIC_API_KEY', openai: 'OPENAI_API_KEY', google: 'GEMINI_API_KEY',
@@ -26,12 +27,12 @@ const sec = (t0: number) => ((Date.now() - t0) / 1000).toFixed(0).padStart(4) + 
 
 async function run(argv: string[]) {
   const { o, pos } = args(argv);
-  if (!pos.length) { console.error('用法：frametell run <资料文件…> [--style warm-story] [--duration 60] [--model relay/gemini-3.7-flash-high]'); process.exit(1); }
+  if (!pos.length) { console.error(tr('用法：frametell run <资料文件…> [--style warm-story] [--duration 60] [--model relay/gemini-3.7-flash-high]', 'Usage: frametell run <material…> [--style warm-story] [--duration 60] [--model relay/gemini-3.7-flash-high]')); process.exit(1); }
   const keys: ProviderKey[] = Object.entries(ENV_KEYS).filter(([, env]) => process.env[env]).map(([providerId, env]) => ({ providerId, apiKey: process.env[env]! }));
   const catalog = await createCatalog({ keys });
   const [prov, ...rest] = (o.model || '').split('/');
   const info = o.model ? catalog.info(catalog.get(prov, rest.join('/'))!) : await catalog.defaultModel();
-  if (!info) throw new Error('没有可用的模型：请设置 RELAY_API_KEY（推荐）或其他 provider 的 key');
+  if (!info) throw new Error(tr('没有可用的模型：请设置 RELAY_API_KEY（推荐）或其他 provider 的 key', 'No model available: set RELAY_API_KEY (recommended) or another provider\'s key'));
   const runtimeId = o.runtime || 'pi';
   let runtime: AgentRuntime;
   if (runtimeId === 'claude') runtime = claudeRuntime({ apiKey: process.env.ANTHROPIC_API_KEY || process.env.RELAY_API_KEY || '', baseUrl: process.env.ANTHROPIC_API_KEY ? undefined : RELAY_BASE_URL, model: info.id });
@@ -49,33 +50,33 @@ async function run(argv: string[]) {
     fs.mkdirSync(path.join(dir, 'materials'), { recursive: true });
     for (const f of pos) fs.copyFileSync(f, path.join(dir, 'materials', path.basename(f)));
   }
-  console.log(`项目 ${dir}\n模型 ${info.providerName} / ${info.name}（${runtime.id}）· 风格 ${style} · 配音 ${tts ? tts.id : '无'}`);
+  console.log(tr(`项目 ${dir}\n模型 ${info.providerName} / ${info.name}（${runtime.id}）· 风格 ${style} · 配音 ${tts ? tts.id : '无'}`, `Project ${dir}\nModel ${info.providerName} / ${info.name} (${runtime.id}) · style ${style} · voice ${tts ? tts.id : 'none'}`));
 
   const t0 = Date.now(), stageAt: Record<string, number> = {};
   const emit = (e: StudioEvent) => {
     if (e.type === 'stage') {
       if (e.status === 'start') stageAt[e.stage] = Date.now();
       console.log(`[${sec(t0)}] ${e.status === 'start' ? '▶' : e.status === 'done' ? '✓' : e.status === 'skipped' ? '·' : '✗'} ${e.stage}${e.status !== 'start' && stageAt[e.stage] ? ` ${sec(stageAt[e.stage]).trim()}` : ''}${e.detail ? '  ' + e.detail : ''}`);
-    } else if (e.type === 'storyboard_check') console.log(`[${sec(t0)}]   分镜检查第 ${e.round} 轮：${e.issues.filter((i) => i.level === 'red').length} 红 ${e.issues.filter((i) => i.level !== 'red').length} 黄`);
-    else if (e.type === 'page') console.log(`[${sec(t0)}]   ${e.id} ${e.status}${e.round ? ` 第${e.round}轮` : ''}${e.issues?.length ? ` · ${e.issues.length} 个问题` : ''}`);
+    } else if (e.type === 'storyboard_check') { const red = e.issues.filter((i) => i.level === 'red').length, yellow = e.issues.length - red; console.log(`[${sec(t0)}]   ` + tr(`分镜检查第 ${e.round} 轮：${red} 红 ${yellow} 黄`, `Storyboard check, round ${e.round}: ${red} red, ${yellow} yellow`)); }
+    else if (e.type === 'page') console.log(`[${sec(t0)}]   ${e.id} ${e.status}${e.round ? tr(` 第${e.round}轮`, ` round ${e.round}`) : ''}${e.issues?.length ? tr(` · ${e.issues.length} 个问题`, ` · ${e.issues.length} issue${e.issues.length > 1 ? 's' : ''}`) : ''}`);
     else if (e.type === 'agent' && e.event.type === 'tool_start') console.log(`[${sec(t0)}]     ${e.session} 🔧 ${e.event.name} ${e.event.summary.slice(0, 90)}`);
     else if (e.type === 'agent' && e.event.type === 'text') console.log(`[${sec(t0)}]     ${e.session} 💬 ${e.event.text.replace(/\s+/g, ' ').slice(0, 140)}`);
-    else if (e.type === 'gate') console.log(`[${sec(t0)}]   成片门禁：${e.red ? '红灯 ' + JSON.stringify(e.blank) : '通过'}`);
+    else if (e.type === 'gate') console.log(`[${sec(t0)}]   ` + tr(`成片门禁：${e.red ? '红灯 ' + JSON.stringify(e.blank) : '通过'}`, `Final check: ${e.red ? 'failed ' + JSON.stringify(e.blank) : 'passed'}`));
     else if (e.type === 'error') console.log(`[${sec(t0)}] ✗ ${e.message}`);
   };
   const director = new Director({ dir, runtime, style, brief: { durationSec: +(o.duration || 60), topic: o.topic }, tts, voice, prices: { ...info.cost, currency: info.currency }, concurrency: +(o.concurrency || 3), emit });
   await director.run();
   const out = await director.render();   // the CLI's run ends with the mp4
   const u = director.usage, c = director.cost();
-  console.log(`\n完成 ${sec(t0).trim()} · 成片 ${out.withSubs}`);
-  console.log(`token：输入 ${u.input} · 缓存读 ${u.cacheRead} · 缓存写 ${u.cacheWrite} · 输出 ${u.output} · 约 ${c.currency === 'CNY' ? '¥' : '$'}${c.amount.toFixed(2)}`);
+  console.log(tr(`\n完成 ${sec(t0).trim()} · 成片 ${out.withSubs}`, `\nDone in ${sec(t0).trim()} · ${out.withSubs}`));
+  { const cost = `${c.currency === 'CNY' ? '¥' : '$'}${c.amount.toFixed(2)}`; console.log(tr(`token：输入 ${u.input} · 缓存读 ${u.cacheRead} · 缓存写 ${u.cacheWrite} · 输出 ${u.output} · 约 ${cost}`, `tokens: input ${u.input} · cache read ${u.cacheRead} · cache write ${u.cacheWrite} · output ${u.output} · about ${cost}`)); }
 }
 
 async function serveCmd(argv: string[]) {
   const { o } = args(argv);
   const { startServer } = await import('./server.js');
   const { url } = startServer(+(o.port || process.env.PORT || 5317));
-  console.log(`\n  Frametell 已启动\n  ${url}\n`);
+  console.log(tr(`\n  画说已启动\n  ${url}\n`, `\n  Showtell is running\n  ${url}\n`));
   if (!('no-open' in o) && !process.env.NO_OPEN) {
     const { spawn } = await import('node:child_process');
     const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'cmd' : 'xdg-open';
@@ -87,4 +88,4 @@ async function serveCmd(argv: string[]) {
 const [cmd, ...rest] = process.argv.slice(2);
 if (cmd === 'run') run(rest).catch((e) => { console.error(e instanceof Error ? e.message : e); process.exit(1); });
 else if (!cmd || cmd === 'serve' || cmd.startsWith('--')) serveCmd(cmd?.startsWith('--') ? [cmd, ...rest] : rest);
-else console.log('用法：frametell            启动面板\n      frametell run <资料…>  无界面跑完整条流程');
+else console.log(tr('用法：frametell            启动面板\n      frametell run <资料…>  无界面跑完整条流程', 'Usage: frametell              open the studio\n       frametell run <material…>  make a whole video without the panel'));
