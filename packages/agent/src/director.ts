@@ -106,7 +106,7 @@ export class Director {
   }
   /** commits are serialized: page sessions run in parallel but share one git index */
   private commit(message: string) {
-    this.commits = this.commits.then(() => { const id = this.project.commit(message); if (id) this.emit({ type: 'commit', id, message }); });
+    this.commits = this.commits.then(async () => { const id = await this.project.commit(message); if (id) this.emit({ type: 'commit', id, message }); });
     return this.commits;
   }
   cost(u: TokenUsage = this.state.usage) {
@@ -179,7 +179,7 @@ export class Director {
     this.state.planner = s.ref; this.save();
     // the planner rewrites script.js: put the server-owned fields back (a lost META.voice once rendered a silent film)
     this.serverMeta();
-    const check = this.project.scriptCheck();
+    const check = await this.project.scriptCheck();
     if (check.code) this.fail('script', `口播脚本有错：${check.err || check.out} ${r.error ?? ''}`);
     await this.commit('口播');
     await s.close();
@@ -234,7 +234,7 @@ export class Director {
     this.emit({ type: 'stage', stage: 'pages', status: 'start' });
     this.state.stage = 'pages'; this.save();
     const sb = this.project.storyboard();
-    const tl = this.project.timeline();
+    const tl = await this.project.timeline();
     const todo = tl.pages.filter((p) => (!only || only.includes(p.id)) && !['ok', 'flagged'].includes(this.state.pages[p.id]?.status ?? ''));
     for (const p of todo) this.setPage(p.id, { status: 'queued', rounds: 0, issues: [] });
     const queue = [...todo];
@@ -292,7 +292,7 @@ export class Director {
         // a page whose code throws cannot be checked; that is the first thing to fix, so it goes back to its agent
         // (one more round than usual is allowed for it) instead of failing the page
         let crash: string | undefined;
-        try { issues = this.project.lint([id]); } catch (e) { crash = crashText((e as Error).message, id); }
+        try { issues = await this.project.lint([id]); } catch (e) { crash = crashText((e as Error).message, id); }
         if (crash) {
           if (round > rounds) throw new Error(crash);
           this.setPage(id, { ...st, issues: [crash] });
@@ -302,7 +302,7 @@ export class Director {
         }
         if (round > rounds) break;
         const times = this.sheetTimes(sb, t);
-        const sheet = this.project.snap(`${id}-r${round}`, times.map((x) => x.t), [id]);
+        const sheet = await this.project.snap(`${id}-r${round}`, times.map((x) => x.t), [id]);
         this.setPage(id, { ...st, issues: issues.map((i) => i.msg) }, { sheet });
         r = await this.send(s, checkPrompt(round, issues, times) + this.unseen(`page-${id}`), [sheet]);
         await this.commit(`${id}：第 ${round} 轮修改`);
@@ -312,7 +312,7 @@ export class Director {
         if (r.stopReason === 'max_turns') break;
       }
       if (st.status !== 'ok' && st.status !== 'flagged') {
-        try { issues = this.project.lint([id]); } catch (e) { throw new Error(crashText((e as Error).message, id)); }
+        try { issues = await this.project.lint([id]); } catch (e) { throw new Error(crashText((e as Error).message, id)); }
         // still throwing, or calling what the engine does not have: the page is not drawn, whatever else it shows
         const broken = issues.filter((i) => /^(runtime error|unknown API|wrong API use)/.test(i.msg));
         if (broken.length) throw new Error(broken.map((i) => i.msg).join('\n'));
@@ -322,7 +322,7 @@ export class Director {
       await s.close();
       // one settled frame as the film-strip thumbnail (the check sheets are 4-up and read as noise at tile size)
       let thumb: string | undefined;
-      try { thumb = this.project.snap(`${id}-thumb`, [Math.max(t.start + 0.5, t.end - 0.4)], [id], 480); } catch {}
+      try { thumb = await this.project.snap(`${id}-thumb`, [Math.max(t.start + 0.5, t.end - 0.4)], [id], 480); } catch {}
       this.setPage(id, st, { thumb });
     } catch (e) {
       if ((e as Error).name === 'AbortError') throw e;
@@ -334,17 +334,17 @@ export class Director {
   async review() {
     this.emit({ type: 'stage', stage: 'review', status: 'start' });
     this.state.stage = 'review'; this.save();
-    const issues = this.project.lint(undefined, ['--determinism']);
+    const issues = await this.project.lint(undefined, ['--determinism']);
     const flagged = Object.entries(this.state.pages).filter(([, s]) => s.status === 'flagged').map(([id, s]) => `${id}（${s.issues.join('，')}）`);
     if (!issues.length && !flagged.length) {
       this.emit({ type: 'stage', stage: 'review', status: 'skipped', detail: '全片 lint 通过，各页自检通过' });
       return this.ready();
     }
-    const tl = this.project.timeline();
-    const sheet = this.project.snap('review', tl.pages.flatMap((p) => [(p.start + p.end) / 2, p.end - 0.35]), undefined, 400);
+    const tl = await this.project.timeline();
+    const sheet = await this.project.snap('review', tl.pages.flatMap((p) => [(p.start + p.end) / 2, p.end - 0.35]), undefined, 400);
     const s = await this.session('review', pageSystem(this.o.style, STYLE_EXTRAS[this.o.style] ?? []), MAX.pageTurns);
     for (let round = 1; round <= MAX.reviewRounds; round++) {
-      const r = await this.send(s, reviewPrompt(round === 1 ? issues : this.project.lint(), flagged) + (this.o.brief.replyLang === 'en' ? '\n给用户的话用英文写。' : ''), [sheet]);
+      const r = await this.send(s, reviewPrompt(round === 1 ? issues : await this.project.lint(), flagged) + (this.o.brief.replyLang === 'en' ? '\n给用户的话用英文写。' : ''), [sheet]);
       await this.commit(`全片检查：第 ${round} 轮`);
       if (/^DONE\b/i.test(r.text.trim())) break;
     }
@@ -354,10 +354,10 @@ export class Director {
   }
 
   /** drawn and checked: the live preview is the film. Rendering an mp4 waits for an export */
-  private ready() {
+  private async ready() {
     this.beforeReady?.(); this.beforeReady = undefined;
     this.state.stage = 'done'; this.save();
-    this.emit({ type: 'ready', duration: this.project.timeline().duration });
+    this.emit({ type: 'ready', duration: (await this.project.timeline()).duration });
   }
 
   // ── ⑥ render (export) ────────────────────────────────────────────────────────────────────────
@@ -454,7 +454,7 @@ ${this.project.read('script.js')}
     if (this.state.stage === 'narrate') await this.narrate();
     if (this.state.stage === 'pages') await this.pages();
     if (this.state.stage === 'review') await this.review();
-    if (this.state.stage === 'render') this.ready();   // a run saved before exports were separate: it is ready to preview
+    if (this.state.stage === 'render') await this.ready();   // a run saved before exports were separate: it is ready to preview
   }
 
   /** the exported mp4 if it shows the film as it is now */

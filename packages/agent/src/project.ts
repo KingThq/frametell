@@ -24,11 +24,14 @@ export const nodeEnv = (extra: Record<string, string | undefined> = {}) => ({ ..
 /** run a program to completion without blocking the process */
 const run = (cmd: string, args: string[], cwd?: string) => new Promise<void>((ok, fail) => execFile(cmd, args, { cwd, timeout: 120_000, env: nodeEnv() }, (e, _o, err) => (e ? fail(new Error(String(err || e.message).slice(0, 1000))) : ok())));
 
+/** run an engine tool and collect its output. Never synchronously: lint and snapshots drive Chrome for seconds, and in the
+ *  desktop app this process is also the one answering the panel (ten pages checking themselves froze every click) */
 function tool(dir: string, name: string, args: string[], opts: { timeoutMs?: number; env?: Record<string, string> } = {}) {
-  const r = spawnSync(process.execPath, [path.join(ENGINE_DIR, 'tools', name), ...args], {
-    cwd: dir, encoding: 'utf8', timeout: opts.timeoutMs ?? 240_000, maxBuffer: 64 << 20, env: nodeEnv(opts.env),
+  return new Promise<{ code: number; out: string; err: string }>((ok) => {
+    execFile(process.execPath, [path.join(ENGINE_DIR, 'tools', name), ...args], {
+      cwd: dir, encoding: 'utf8', timeout: opts.timeoutMs ?? 240_000, maxBuffer: 64 << 20, env: nodeEnv(opts.env),
+    }, (e, stdout, stderr) => ok({ code: e ? (typeof e.code === 'number' ? e.code : 1) : 0, out: (stdout || '').trim(), err: (stderr || '').trim() }));
   });
-  return { code: r.status ?? 1, out: (r.stdout || '').trim(), err: (r.stderr || '').trim() };
 }
 
 export class Project {
@@ -88,7 +91,7 @@ export class Project {
     return ts.map(rel);
   }
 
-  posters(video: string, pages: PageTiming[]): Record<string, string> {
+  async posters(video: string, pages: PageTiming[]): Promise<Record<string, string>> {
     const out: Record<string, string> = {};
     const dir = path.join(this.dir, 'out', 'thumbs');
     const vt = fs.statSync(video).mtimeMs;
@@ -97,8 +100,7 @@ export class Project {
       try {
         if (!fs.existsSync(abs) || fs.statSync(abs).mtimeMs < vt) {
           fs.mkdirSync(dir, { recursive: true });
-          const r = spawnSync(FFMPEG, ['-y', '-loglevel', 'error', '-ss', Math.max(p.start, p.end - 0.4).toFixed(2), '-i', video, '-frames:v', '1', '-vf', 'scale=640:-2', '-q:v', '4', abs]);
-          if (r.status !== 0) continue;
+          await run(FFMPEG, ['-y', '-loglevel', 'error', '-ss', Math.max(p.start, p.end - 0.4).toFixed(2), '-i', video, '-frames:v', '1', '-vf', 'scale=640:-2', '-q:v', '4', abs]);
         }
         out[p.id] = rel;
       } catch { /* a frame that will not cut leaves that page on its check sheet */ }
@@ -106,21 +108,21 @@ export class Project {
     return out;
   }
 
-  timeline(): Timeline {
-    const r = tool(this.dir, 'pages.mjs', ['--json']);
+  async timeline(): Promise<Timeline> {
+    const r = await tool(this.dir, 'pages.mjs', ['--json']);
     if (r.code) throw new Error(`时间轴计算失败：${r.err || r.out}`);
     return JSON.parse(r.out);
   }
 
-  lint(only?: string[], extra: string[] = []): LintIssue[] {
-    const r = tool(this.dir, 'lint.mjs', ['--json', ...(only ? ['--only', only.join(',')] : []), ...extra]);
+  async lint(only?: string[], extra: string[] = []): Promise<LintIssue[]> {
+    const r = await tool(this.dir, 'lint.mjs', ['--json', ...(only ? ['--only', only.join(',')] : []), ...extra]);
     const last = r.out.split('\n').pop() || '[]';
     try { return JSON.parse(last); } catch { throw new Error(`lint 失败：${r.err || r.out}`.slice(0, 2000)); }
   }
 
   /** A contact sheet of the given absolute times → path of the jpg. */
-  snap(name: string, times: number[], only?: string[], tile = 480): string {
-    const r = tool(this.dir, 'snap.mjs', [...(only ? ['--only', only.join(',')] : []), '--sheet', name, ...times.map((t) => t.toFixed(2))], { env: { SNAP_TILE: String(tile) } });
+  async snap(name: string, times: number[], only?: string[], tile = 480): Promise<string> {
+    const r = await tool(this.dir, 'snap.mjs', [...(only ? ['--only', only.join(',')] : []), '--sheet', name, ...times.map((t) => t.toFixed(2))], { env: { SNAP_TILE: String(tile) } });
     const f = this.file(`out/snap/${name}.jpg`);
     if (r.code || !fs.existsSync(f)) throw new Error(`截图失败：${r.err || r.out}`.slice(0, 2000));
     return f;
@@ -148,19 +150,26 @@ export class Project {
 
   // ── history: every change the agent makes is a commit, so any step can be undone (git revert) ──
   private git(args: string[]) { return spawnSync('git', args, { cwd: this.dir, encoding: 'utf8' }); }
+  private gitAsync(args: string[]) {
+    return new Promise<{ status: number; stdout: string }>((ok) => execFile('git', args, { cwd: this.dir, encoding: 'utf8', maxBuffer: 16 << 20 }, (e, stdout) => ok({ status: e ? 1 : 0, stdout: stdout || '' })));
+  }
   initHistory() {
     if (!fs.existsSync(this.file('.git'))) {
       this.git(['init', '-q', '-b', 'main']);
       this.git(['config', 'user.name', 'Frametell']);
       this.git(['config', 'user.email', 'studio@frametell.local']);
     }
-    this.commit('项目创建');
+    this.commitSync('项目创建');
   }
   /** Commit everything that changed; returns the commit id, or null when nothing changed. */
-  commit(message: string): string | null {
-    this.git(['add', '-A']);
-    const r = this.git(['commit', '-q', '-m', message]);
+  async commit(message: string): Promise<string | null> {
+    await this.gitAsync(['add', '-A']);
+    const r = await this.gitAsync(['commit', '-q', '-m', message]);
     if (r.status !== 0) return null;
-    return this.git(['rev-parse', '--short', 'HEAD']).stdout.trim();
+    return (await this.gitAsync(['rev-parse', '--short', 'HEAD'])).stdout.trim();
+  }
+  private commitSync(message: string) {
+    this.git(['add', '-A']);
+    this.git(['commit', '-q', '-m', message]);
   }
 }

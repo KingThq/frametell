@@ -72,7 +72,7 @@ export function createServer(studio = new Studio(), opts: { token?: string } = {
     const meta = studio.createProject(input, files);
     return c.json({ ...meta, previewBase: previewBase(meta.id) }, 201);
   });
-  app.get('/api/projects/:id/timeline', (c) => c.json(studio.timeline(c.req.param('id'))));
+  app.get('/api/projects/:id/timeline', async (c) => c.json(await studio.timeline(c.req.param('id'))));
   app.get('/api/projects/:id/frames', async (c) => c.json({ paths: await studio.frames(c.req.param('id'), String(c.req.query('t') || '').split(',').map(Number)) }));
   app.post('/api/projects/:id/start', async (c) => { await studio.start(c.req.param('id')); return c.json({ ok: true }); });
   app.post('/api/projects/:id/approve', async (c) => {

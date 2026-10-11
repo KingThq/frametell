@@ -130,7 +130,7 @@ export class Studio {
    * Pages with their narration lines and times (from script.js + voice.js), for the page canvas; null until the script
    * exists. Cached on the two files' mtimes, since computing it loads the engine.
    */
-  timeline(id: string): Timeline | null {
+  async timeline(id: string): Promise<Timeline | null> {
     const dir = this.store.dir(id);
     const film = (() => { try { return fs.readdirSync(path.join(dir, 'out')).find((f) => /-(无字幕|no-subtitles)\.mp4$/.test(f)); } catch { return undefined; } })();
     const stamp = ['script.js', 'voice.js', film ? `out/${film}` : ''].map((f) => { try { return f ? fs.statSync(path.join(dir, f)).mtimeMs : 0; } catch { return 0; } }).join('|');
@@ -140,8 +140,8 @@ export class Studio {
     let value: Timeline | null = null;
     try {
       const project = new Project(dir);
-      value = project.timeline();
-      if (film) value.posters = project.posters(path.join(dir, 'out', film), value.pages);
+      value = await project.timeline();
+      if (film) value.posters = await project.posters(path.join(dir, 'out', film), value.pages);
     } catch { value = null; }
     this.timelines.set(id, { stamp, value });
     return value;
