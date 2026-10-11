@@ -17,12 +17,16 @@ export interface Beat { at: string; object: string; action: string; camera?: str
 export interface StoryPage { id: string; section: string; say: string; core?: boolean; beats: Beat[] }
 export interface Storyboard { title: string; summary: string; durationSec?: number; style: string; cast: string; pages: StoryPage[] }
 
+/** The environment for a child that runs process.execPath as Node: inside Electron the executable is the app, which runs
+ * as plain Node only with ELECTRON_RUN_AS_NODE (it must not be set for the app's own helper processes, so only here). */
+export const nodeEnv = (extra: Record<string, string | undefined> = {}) => ({ ...process.env, ...(process.versions.electron ? { ELECTRON_RUN_AS_NODE: '1' } : {}), ...extra });
+
 /** run a program to completion without blocking the process */
-const run = (cmd: string, args: string[], cwd?: string) => new Promise<void>((ok, fail) => execFile(cmd, args, { cwd, timeout: 120_000 }, (e, _o, err) => (e ? fail(new Error(String(err || e.message).slice(0, 1000))) : ok())));
+const run = (cmd: string, args: string[], cwd?: string) => new Promise<void>((ok, fail) => execFile(cmd, args, { cwd, timeout: 120_000, env: nodeEnv() }, (e, _o, err) => (e ? fail(new Error(String(err || e.message).slice(0, 1000))) : ok())));
 
 function tool(dir: string, name: string, args: string[], opts: { timeoutMs?: number; env?: Record<string, string> } = {}) {
   const r = spawnSync(process.execPath, [path.join(ENGINE_DIR, 'tools', name), ...args], {
-    cwd: dir, encoding: 'utf8', timeout: opts.timeoutMs ?? 240_000, maxBuffer: 64 << 20, env: { ...process.env, ...opts.env },
+    cwd: dir, encoding: 'utf8', timeout: opts.timeoutMs ?? 240_000, maxBuffer: 64 << 20, env: nodeEnv(opts.env),
   });
   return { code: r.status ?? 1, out: (r.stdout || '').trim(), err: (r.stderr || '').trim() };
 }
@@ -125,7 +129,7 @@ export class Project {
   /** Render the film; progress lines are passed through. Resolves with the output files. */
   render(o: { fps?: number; workers?: number; onLine?: (l: string) => void; signal?: AbortSignal } = {}): Promise<{ withSubs: string; noSubs: string }> {
     return new Promise((resolve, reject) => {
-      const child = spawn(process.execPath, [path.join(ENGINE_DIR, 'tools/render.mjs'), '--fps', String(o.fps ?? 30), '--workers', String(o.workers ?? 4)], { cwd: this.dir, signal: o.signal });
+      const child = spawn(process.execPath, [path.join(ENGINE_DIR, 'tools/render.mjs'), '--fps', String(o.fps ?? 30), '--workers', String(o.workers ?? 4)], { cwd: this.dir, signal: o.signal, env: nodeEnv() });
       let tail = '';
       const onData = (d: Buffer) => { for (const l of d.toString().split('\n')) if (l.trim()) { tail = (tail + '\n' + l).slice(-4000); o.onLine?.(l); } };
       child.stdout.on('data', onData); child.stderr.on('data', onData);

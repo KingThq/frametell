@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { nodeEnv } from '../project.js';
 import { Type } from 'typebox';
 import type { AgentTool } from '@earendil-works/pi-agent-core';
 import { rewriteRefusal } from '../runtime/types.js';
@@ -82,7 +83,7 @@ export function fileTools(root: string, opts: { timeoutMs?: number } = {}): Agen
     execute: (_id, p, signal) => new Promise((resolve, reject) => {
       if (/\brender\.mjs\b|\bnpm (i|install)\b|\bcurl\b|\bwget\b/.test(p.command)) return reject(new Error('this command is not allowed in a page session'));
       const [cmd, argv]: [string, string[]] = process.platform === 'win32' ? ['cmd.exe', ['/d', '/s', '/c', p.command]] : ['bash', ['-lc', p.command]];
-      const child = spawn(cmd, argv, { cwd: root, env: process.env, signal });
+      const child = spawn(cmd, argv, { cwd: root, env: nodeEnv(), signal });
       let out = '';
       const add = (d: Buffer) => { out += d.toString(); if (out.length > MAX_TEXT * 2) out = out.slice(-MAX_TEXT * 2); };
       child.stdout.on('data', add); child.stderr.on('data', add);
