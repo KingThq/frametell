@@ -12,7 +12,8 @@
     "dev": "pnpm --filter frametell dev",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
-    "test": "pnpm -r test"
+    "test": "pnpm -r test",
+    "package:desktop": "node apps/desktop/scripts/package.mjs"
   },
   "devDependencies": {
     "@types/node": "22",

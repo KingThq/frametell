@@ -15,7 +15,8 @@
     "@frametell/ui": "workspace:*"
   },
   "devDependencies": {
-    "electron": "44.4.5"
+    "electron": "44.4.5",
+    "electron-builder": "26.16.1"
   },
   "productName": "Frametell"
 }
