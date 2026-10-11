@@ -32,7 +32,7 @@ export const pageUrl = (query) => 'file://' + path.join(EP, 'index.html') + '?' 
 
 /** Opens a 1920×1080 (or 1080×1920 portrait) page on the episode and waits until fonts are loaded and pages are built. */
 export async function openStage(query, launchArgs = []) {
-  // META.webgl: the episode paints with WebGL (p5.brush) → use the Mac's GPU through Metal instead of software GL
+  // META.webgl: the project paints with WebGL (three.js) → use the Mac's GPU through Metal instead of software GL
   const gl = loadEpisode().META.webgl ? ['--use-angle=metal', '--ignore-gpu-blocklist', '--enable-gpu-rasterization'] : [];
   const browser = await chromium.launch({ executablePath: findChrome(), args: [...launchArgs, ...gl] });
   const page = await browser.newPage({ viewport: SIZE, deviceScaleFactor: 1 });

@@ -34,7 +34,7 @@ ENGINE.visual('p22', (P) => {
 | `P.tokens(list, { x, y, align, flipAt, idFirst })` → `chips[i].move = lt => ({ dx, dy, s, rot, op })` | token 块行：翻面显示编号、单独移动 |
 | `PV.K(lt, a, dur, ease)` / `PV.softmax(z, T)` | 进度 0→1 / 真实 softmax |
 | `P.shell3d({ cx, cy, core, step, band, gap, parts: [{ color }], at(i), explode(lt), lift(i, lt), op(i, lt), rot(lt), coreLabel })` → `{ S, z, proj, corner(i, lt), half }` | 模型内核外套 n 层方框壳的 3D 爆炸图；`corner` 给出第 i 层右前角的屏幕坐标，平面标签可以用 liveRough 连线钉上去（例：26/p05、p35）。`PV.tw(str, size)` 估字宽 |
-| `P.three(x, y, w, h, setup(T, S), draw(lt, S), { fov, at })` | **three.js 3D 场景**（量子力学系列首用）：`META.vendor: ['three']` + `META.webgl: true`。`setup` 只跑一次，往 `S.scene` 里加东西、引用挂在 `S` 上；`draw` 每帧按 `lt` 摆好物体和 `S.camera`（必须是 lt 的纯函数，随机数用 `PV.rng`）。所有场景共用一个 WebGL 渲染器再拷进各自的 2D canvas，页数再多也不会超出浏览器的 WebGL 上下文上限。例：`quantum/quantum-01` |
+| `P.three(x, y, w, h, setup(T, S), draw(lt, S), { fov, at })` | **three.js 3D 场景**：`META.vendor: ['three']` + `META.webgl: true`。`setup` 只跑一次，往 `S.scene` 里加东西、引用挂在 `S` 上；`draw` 每帧按 `lt` 摆好物体和 `S.camera`（必须是 lt 的纯函数，随机数用 `PV.rng`）。所有场景共用一个 WebGL 渲染器再拷进各自的 2D canvas，页数再多也不会超出浏览器的 WebGL 上下文上限。例：`quantum/quantum-01` |
 | `P.logo(name, cx, cy, size, { at, mono })` | **真实品牌 logo**：先在项目目录跑 `node engine/tools/logos.mjs anthropic openai …` 生成 `extras/logos.js`（simple-icons → iconify logos），并登记到 `META.extras`；`logos:openai` 可强制取横版带字标志 |
 | `P.bubble(x,y,w,str,{ side:'l'\|'r' })` / `P.chip` / `P.card(x,y,w,h,{ title })` / `P.keycap(x,y,label,{ press })` / `P.stamp(x,y,str)` / `P.live(x,y,lt=>str)` / `P.pulse(el,t)` | 组件 |
 | `P.layer()` → 子 Builder，`.wrap` 可整体移动/淡出；配合 `P.tick(lt => …)` 做分段切换（例：02/p01） | 一页内换场 |
