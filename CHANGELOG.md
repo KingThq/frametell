@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- A Linux render image (`docker/render.Dockerfile`): draws a finished project to mp4 with no desktop, GPU or Mac — Debian's Chromium and ffmpeg, Noto CJK and emoji fonts, the engine with its own modules. `docker run … frametell-render /project --fps 30 --workers 4`. Tried on 番茄工作法 (54.5 s, warm-story): frames identical to the Mac export; 75 s on 4 cores, 123 s on 2.
+
 ## [0.1.0] - 2026-10-11
 
 The first release of 画说 · Frametell: a local, open-source studio that turns an idea or your material into an explainer video. A director agent drafts a storyboard for you to approve, then writes the narration, voices it, draws every page in a chosen style, checks its own work, and renders a 1080p film with subtitles.
