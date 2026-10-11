@@ -310,7 +310,7 @@ export class Director {
     this.serverMeta();
     // a narrated film must carry its narration: check before spending minutes on frames
     if (this.o.voice && !/\bvoice:\s*\{/.test(this.project.read('script.js'))) this.fail('render', 'script.js 里丢了配音设置（META.voice），已停止渲染');
-    const out = await this.project.render({ workers: o.workers, signal: this.o.signal, onLine: (line) => { if (!line.startsWith('[chunk')) this.emit({ type: 'render', line }); } });
+    const out = await this.project.render({ workers: o.workers, signal: this.o.signal, onLine: (line) => { if (!/^\[(chunk|seg)-/.test(line)) this.emit({ type: 'render', line }); } });
     const g = this.project.gate(out.withSubs);
     this.emit({ type: 'gate', red: g.red, blank: g.gates.find((x) => x.key === 'blank')?.value ?? [], report: g.report.map((r) => ({ name: r.name, value: r.value, unit: r.unit })) });
     this.state.video = out.withSubs; this.state.exported = true; this.save();

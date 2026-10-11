@@ -2,6 +2,7 @@
 // node ../../kit/tools/render.mjs [--portrait] [--hw] [--fps 60]
 //   --hw: hardware H.264 (Apple media engine) for chunks and the subtitle pass — frees the CPU for the browsers; slightly larger files [--workers 12] [--from 0] [--to <end>] [--name <file name>] [--skip-video] [--skip-subs]
 import { spawn, execFileSync } from 'child_process';
+import { createHash } from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { loadEpisode, OUT, PORTRAIT, EP } from './lib.mjs';
@@ -25,7 +26,7 @@ const F0 = Math.round(from * FPS), F1 = Math.round(to * FPS);
 const chunkDir = path.join(OUT, PORTRAIT ? 'chunks-portrait' : 'chunks');
 fs.mkdirSync(chunkDir, { recursive: true });
 
-// one render per episode at a time: two runs share out/chunks and would overwrite each other's chunks
+// one render per episode at a time: two runs share out/chunks (the segment cache)
 const lock = path.join(OUT, '.render.lock');
 const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
 if (fs.existsSync(lock) && alive(+fs.readFileSync(lock, 'utf8'))) {
@@ -42,15 +43,55 @@ const nosub = path.join(OUT, `${name}-无字幕.mp4`), withsub = path.join(OUT, 
 
 if (!has('skip-video')) {
   console.time('video');
-  for (const f of fs.readdirSync(chunkDir)) fs.rmSync(path.join(chunkDir, f));
-  const per = Math.ceil((F1 - F0) / W), jobs = [];
-  for (let i = 0; i < W; i++) {
-    const a = F0 + i * per, b = Math.min(F1, a + per);
-    if (a >= b) break;
-    jobs.push({ a, b, out: path.join(chunkDir, `chunk-${String(i).padStart(2, '0')}.mp4`) });
+  // Segments that follow the pages (none longer than SEG seconds), each cached under a key of everything that draws it:
+  // the pages on screen in it (code and timing, with a margin for the cross-fades), the episode's settings, the engine.
+  // An export after a one-page change renders only that page's segments; the rest are reused as they are.
+  const SEG = 6, MARGIN = 1;
+  // files of a folder (recursive only where asked: a style folder holds its example episode, which links back here)
+  const files = (d, deep = true) => (fs.existsSync(d) ? fs.readdirSync(d, { recursive: deep }).map((f) => path.join(d, String(f))).filter((f) => fs.lstatSync(f).isFile()).sort() : []);
+  const digest = (...parts) => createHash('sha1').update(parts.map((x) => (typeof x === 'string' ? x : JSON.stringify(x))).join('\0')).digest('hex').slice(0, 16);
+  const read = (f) => { try { return fs.readFileSync(f); } catch { return ''; } };
+  const kitDir = path.join(dir, '..');
+  const shared = digest(
+    ...[...files(path.join(kitDir, 'runtime')), ...files(path.join(kitDir, 'lib')), ...files(path.join(kitDir, 'styles', META.style || 'warm-story'), false)].map((f) => read(f).toString('base64')),
+    ...files(path.join(EP, 'extras')).map((f) => read(f).toString('base64')), read(path.join(EP, 'index.html')).toString(),
+    { ...META, publish: undefined, voice: undefined }, L.pages.map((p) => [p.id, p.section, p.title]), FPS, PORTRAIT, has('hw'),
+  );
+  const pageKey = Object.fromEntries(L.pages.map((p) => [p.id, digest(p, read(path.join(EP, PORTRAIT ? 'pages-portrait' : 'pages', p.id + '.js')).toString())]));
+  // each page: a short piece at either end (where a neighbour's cross-fade reaches), the middle in pieces of ≤ SEG s;
+  // so a changed page costs its neighbours only those short end pieces
+  const EDGE = MARGIN + 0.2;
+  const segs = [];
+  for (const p of L.pages) {
+    const s0 = Math.max(from, p.start), s1 = Math.min(to, p.end);
+    const cuts = s1 - s0 > 2 * EDGE + 1 ? [s0, s0 + EDGE, s1 - EDGE, s1] : [s0, s1];
+    const bounds = [cuts[0]];
+    for (let k = 1; k < cuts.length; k++) {
+      const n = k === 2 ? Math.max(1, Math.ceil((cuts[2] - cuts[1]) / SEG)) : 1;
+      for (let j = 1; j <= n; j++) bounds.push(cuts[k - 1] + ((cuts[k] - cuts[k - 1]) * j) / n);
+    }
+    for (let k = 0; k + 1 < bounds.length; k++) {
+      const a = Math.round(bounds[k] * FPS), b = Math.round(bounds[k + 1] * FPS);
+      if (a >= b) continue;
+      const near = L.pages.filter((q) => q.start < b / FPS + MARGIN && q.end > a / FPS - MARGIN).map((q) => pageKey[q.id]);
+      segs.push({ a, b, out: path.join(chunkDir, `seg-${digest(shared, a, b, near)}.mp4`) });
+    }
   }
-  await Promise.all(jobs.map((j) => run(process.execPath, [path.join(dir, 'render-chunk.mjs'), j.a, j.b, FPS, j.out])));
-  fs.writeFileSync(path.join(chunkDir, 'list.txt'), jobs.map((j) => `file '${j.out}'`).join('\n'));
+  const todo = segs.filter((g) => !fs.existsSync(g.out));
+  for (const f of fs.readdirSync(chunkDir)) if (!segs.some((g) => path.basename(g.out) === f)) fs.rmSync(path.join(chunkDir, f), { force: true });
+  console.log(`segments: ${segs.length - todo.length}/${segs.length} reused`);
+  // the segments to draw, spread over the workers by frame count; each worker draws its list in one browser
+  const groups = Array.from({ length: Math.min(W, todo.length) }, () => ({ frames: 0, jobs: [] }));
+  for (const g of [...todo].sort((x, y) => (y.b - y.a) - (x.b - x.a))) { const w = groups.reduce((m, x) => (x.frames < m.frames ? x : m)); w.jobs.push(g); w.frames += g.b - g.a; }
+  await Promise.all(groups.map((w, i) => {
+    const list = path.join(chunkDir, `.jobs-${i}.json`);
+    fs.writeFileSync(list, JSON.stringify(w.jobs.map((j) => ({ ...j, out: j.out + '.part.mp4' }))));
+    return run(process.execPath, [path.join(dir, 'render-chunk.mjs'), '--jobs', list, FPS]).then(() => {
+      for (const j of w.jobs) fs.renameSync(j.out + '.part.mp4', j.out);   // only a finished segment enters the cache
+      fs.rmSync(list, { force: true });
+    });
+  }));
+  fs.writeFileSync(path.join(chunkDir, 'list.txt'), segs.map((g) => `file '${g.out}'`).join('\n'));
   await run(FFMPEG, ['-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', path.join(chunkDir, 'list.txt'), '-c', 'copy', '-movflags', '+faststart', nosub]);
   console.timeEnd('video');
 }

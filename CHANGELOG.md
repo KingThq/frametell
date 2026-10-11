@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Export renders incrementally. The video is cut into segments that follow the pages, each cached under a key of what draws it (the pages on screen in it with their timing, the episode's settings, the engine); an export renders only the segments whose key changed, each worker drawing its list in one browser. On a 53-second film: a cold export takes as long as before, an export after changing one page renders 6 of 20 segments (video 29.6 s → 9.1 s).
 - Film view: a quieter page lane — page names sit beneath the pictures instead of over them, the page on screen is lit with a fine outline while the others rest a step back, the playhead is a thin line inside the current page, and only pages that need a look carry a mark.
 - **A finished film is previewed live; mp4 is made only on export.** Making a film or revising one now ends once the pages are drawn and checked — the live player is the film, with its voice. 「导出 mp4」 renders on request (「导出最新版」 once a revision has changed the film); change requests sent during an export wait for it. A revision therefore no longer waits for a full render. The CLI's `run` still ends with an mp4.
 - Page focus: key frames come from the exported mp4 when it is current, else straight from the live film in one headless pass, so a revised page shows its new pictures without an export.
