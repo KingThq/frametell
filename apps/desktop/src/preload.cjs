@@ -11,6 +11,7 @@ ipcRenderer.on('studio:event', (_e, subId, ev) => handlers.get(subId)?.(ev));
 contextBridge.exposeInMainWorld('studioBridge', {
   settings: () => call('settings'),
   updateSettings: (patch) => call('updateSettings', patch),
+  providers: () => call('providers'),
   env: () => call('env'),
   styles: () => call('styles'),
   models: () => call('models'),

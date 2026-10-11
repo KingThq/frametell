@@ -1,9 +1,9 @@
 // Types shared by the core and every client (the panel in a browser, the Electron renderer). Type-only: importing it
 // never pulls Node code into a client bundle.
 import type { StudioEvent, Storyboard } from '@frametell/agent';
-import type { CustomProviderConfig, ModelInfo } from '@frametell/models';
+import type { CustomProviderConfig, ModelInfo, ProviderSpec } from '@frametell/models';
 
-export type { StudioEvent, Storyboard, ModelInfo };
+export type { StudioEvent, Storyboard, ModelInfo, ProviderSpec, CustomProviderConfig };
 export type { Timeline, PageTiming, UserRef } from '@frametell/agent';
 export type RuntimeId = 'pi' | 'claude-agent-sdk' | 'codex';
 /** interface language; 'auto' follows the system */

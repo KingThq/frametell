@@ -2,7 +2,7 @@
 // IPC in the desktop app) only translate calls and stream events, so behaviour is identical everywhere.
 import fs from 'node:fs';
 import path from 'node:path';
-import { createCatalog } from '@frametell/models';
+import { createCatalog, PROVIDERS, type ProviderSpec } from '@frametell/models';
 import { bundledSample, elevenLabsTts, listElevenLabsVoices, volcengineTts, VOLCENGINE_VOICES } from '@frametell/voice';
 import { Project, STYLES, type Timeline } from '@frametell/agent';
 import { DATA_DIR, loadConfig, patchConfig, publicConfig, saveConfig } from './config.js';
@@ -28,6 +28,9 @@ export class Studio {
   }
   env(): EnvCheck[] { return checkEnv(); }
   styles(): StyleInfo[] { return STYLES; }
+
+  /** the providers Studio offers, in the order it shows them (the user's own endpoints come from settings) */
+  providers(): ProviderSpec[] { return PROVIDERS; }
 
   async models(): Promise<{ models: ModelInfo[]; default?: ModelInfo }> {
     const cfg = loadConfig();

@@ -75,7 +75,7 @@ export function publicConfig(c: Config): PublicSettings {
 }
 
 /** Apply a settings patch from the panel; empty-string keys remove a key, absent keys are left alone. */
-export function patchConfig(c: Config, patch: SettingsPatch & { custom?: CustomProviderConfig[] }): Config {
+export function patchConfig(c: Config, patch: SettingsPatch): Config {
   const next = structuredClone(c);
   for (const [k, v] of Object.entries(patch.keys || {})) { if (v) next.keys[k] = v.trim(); else delete next.keys[k]; }
   for (const [k, v] of Object.entries(patch.tts || {}) as [keyof Config['tts'], string][]) { if (v) next.tts[k] = v.trim(); else delete next.tts[k]; }
@@ -93,7 +93,16 @@ export function patchConfig(c: Config, patch: SettingsPatch & { custom?: CustomP
   }
   for (const [k, v] of Object.entries(patch.baseUrls || {})) if (v.trim() && !/^https?:\/\//.test(v.trim())) throw new Error(tr(`${k} 的请求地址要以 http:// 或 https:// 开头`, `The ${k} address must start with http:// or https://`));
   if (patch.locale) { if (patch.locale === 'auto') delete next.locale; else next.locale = patch.locale; }
-  if (patch.custom) next.custom = patch.custom;
+  if (patch.custom) {
+    // the user's own endpoints: each a name, a protocol and an http(s) address; ids are Studio's own (custom-…)
+    for (const c of patch.custom) {
+      if (!/^custom-[a-z0-9-]{1,40}$/.test(c.id) || !c.name?.trim() || !['openai', 'anthropic'].includes(c.protocol) || !/^https?:\/\/\S+$/.test(c.baseUrl || '')) {
+        throw new Error(tr(`自定义服务商「${c.name || c.id}」的名称、协议或地址不对`, `The custom provider "${c.name || c.id}" needs a name, a protocol and an http(s) address`));
+      }
+    }
+    next.custom = patch.custom.map((c) => ({ id: c.id, name: c.name.trim(), protocol: c.protocol, baseUrl: c.baseUrl.trim().replace(/\/+$/, ''), models: c.models || [], discover: c.protocol === 'openai' }));
+    for (const k of Object.keys(next.keys)) if (k.startsWith('custom-') && !next.custom.some((c) => c.id === k)) delete next.keys[k];   // a removed endpoint takes its key along
+  }
   if (patch.defaults) next.defaults = { ...next.defaults, ...patch.defaults };
   return next;
 }
