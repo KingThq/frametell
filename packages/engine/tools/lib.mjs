@@ -1,10 +1,11 @@
 // Shared by every tool: the episode dir is the current working directory (run tools from inside an episode).
 import fs from 'fs';
+import { fileURLToPath } from 'node:url';
 import path from 'path';
 import vm from 'vm';
 import { createRequire } from 'module';
 
-export const KIT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+export const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const EP = process.cwd();
 export const OUT = path.join(EP, 'out');
 /** Portrait canvas (1080×1920, pages-portrait/): `--portrait` on any tool, or PORTRAIT=1 (render.mjs passes it to its children). Default is landscape. */

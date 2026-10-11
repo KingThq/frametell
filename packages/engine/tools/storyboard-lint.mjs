@@ -6,13 +6,13 @@
 // Exit code: 1 with any red issue, 0 otherwise, 2 when the storyboard can't be read.
 import fs from 'fs';
 import path from 'path';
-import { pathToFileURL } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 
 const args = process.argv.slice(2);
 const flag = (k) => args.includes('--' + k);
 const opt = (k) => { const i = args.indexOf('--' + k); return i >= 0 ? args[i + 1] : undefined; };
 const file = args.find((a, i) => !a.startsWith('--') && args[i - 1] !== '--source') || 'storyboard.json';
-const STYLES_DIR = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../styles');
+const STYLES_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../styles');
 
 // ── vocabulary ────────────────────────────────────────────────────────────────
 // layout words: an object made only of these is a slide element, not a thing in the world

@@ -1,0 +1,6 @@
+# LF everywhere, so files read the same on Windows checkouts
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.mp3 binary
+*.mp4 binary

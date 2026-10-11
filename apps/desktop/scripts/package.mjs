@@ -8,12 +8,13 @@
 //   5. runs electron-builder on it → release/Frametell-<version>-<arch>.dmg (or, with --dir, just the .app).
 // The app is not signed yet: macOS asks the first time it is opened (right-click → Open).
 import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 
-const DESKTOP = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+const DESKTOP = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ROOT = path.resolve(DESKTOP, '../..');
 const RELEASE = path.join(DESKTOP, 'release');
 const APP = path.join(RELEASE, 'app');

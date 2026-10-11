@@ -3,10 +3,11 @@
 //   engine_modules/  → the node_modules directory that holds the engine's browser libraries and fonts
 // Links are junctions on Windows (no admin rights needed) and symlinks elsewhere; both work for file:// and HTTP.
 import fs from 'fs';
+import { fileURLToPath } from 'node:url';
 import path from 'path';
 import { createRequire } from 'module';
 
-export const ENGINE_DIR = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+export const ENGINE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(path.join(ENGINE_DIR, 'package.json'));
 
 /** The node_modules directory that contains the engine's browser dependencies (npm hoists them, pnpm keeps them local). */

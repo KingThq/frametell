@@ -2,13 +2,14 @@
 // node engine/tools/render.mjs [--portrait] [--hw] [--fps 60]
 //   --hw: hardware H.264 (Apple media engine) for chunks and the subtitle pass — frees the CPU for the browsers; slightly larger files [--workers 12] [--from 0] [--to <end>] [--name <file name>] [--skip-video] [--skip-subs]
 import { spawn, execFileSync } from 'child_process';
+import { fileURLToPath } from 'node:url';
 import { createHash } from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { loadEpisode, OUT, PORTRAIT, EP } from './lib.mjs';
 import { mixTrack } from './mix.mjs';
 import { FFMPEG, probe } from './bins.mjs';
-const dir = path.dirname(new URL(import.meta.url).pathname);
+const dir = path.dirname(fileURLToPath(import.meta.url));
 const arg = (k, d) => { const i = process.argv.indexOf('--' + k); return i > 0 ? process.argv[i + 1] : d; };
 const has = (k) => process.argv.includes('--' + k);
 const { META, L, TIMING } = loadEpisode();
