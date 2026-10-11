@@ -3,7 +3,8 @@
 import { InMemoryCredentialStore, type Api, type Model, type MutableModels } from '@earendil-works/pi-ai';
 import { builtinModels } from '@earendil-works/pi-ai/providers/all';
 import { RELAY_BASE_URL, RELAY_ID, relayProvider } from './relay.js';
-import { customProvider, VOLCENGINE_ARK, type CustomProviderConfig } from './custom.js';
+import { customProvider, type CustomProviderConfig } from './custom.js';
+import { compatConfig, PROVIDERS, providerSpec } from './providers.js';
 
 export interface ProviderKey {
   providerId: string;
@@ -16,6 +17,10 @@ export interface CatalogOptions {
   keys: ProviderKey[];
   custom?: CustomProviderConfig[];
   relayBaseUrl?: string;
+  /** the user's own endpoint per provider (a relay, a local server on another port) */
+  baseUrls?: Record<string, string>;
+  /** model ids the user typed in per provider, on top of what the provider lists */
+  models?: Record<string, string[]>;
 }
 
 export interface ModelInfo {
@@ -31,6 +36,8 @@ export interface ModelInfo {
   cost: { input: number; output: number; cacheRead: number; cacheWrite: number };
   currency: 'CNY' | 'USD';
   recommended: boolean;
+  /** typed in by the user, not listed by the provider */
+  added?: boolean;
 }
 
 /** What Studio suggests, in order: the first one the user has a key for becomes the default. */
@@ -42,17 +49,39 @@ export const RECOMMENDED: { provider: string; id: string }[] = [
   { provider: 'google', id: 'gemini-3.7-flash' },
 ];
 
-export class Catalog {
-  constructor(readonly models: MutableModels) {}
+/** a user's base URL in the shape the protocol expects: Anthropic's root has no /v1, OpenAI-style roots keep theirs */
+export function normalizeBaseUrl(protocol: string, url?: string): string | undefined {
+  const u = url?.trim().replace(/\/+$/, '');
+  if (!u) return undefined;
+  if (protocol === 'anthropic' || protocol === 'anthropic-messages') return u.replace(/\/v1$/, '');
+  try { return new URL(u).pathname === '/' ? `${u}/v1` : u; } catch { return u; }
+}
 
-  /** Chat models whose provider has a working key. */
+export class Catalog {
+  constructor(readonly models: MutableModels, private o: Pick<CatalogOptions, 'baseUrls' | 'models'> = {}) {}
+
+  /** Chat models whose provider has a working key, with the ones the user added by hand. */
   async available(): Promise<ModelInfo[]> {
     const list = await this.models.getAvailable();
-    return list.map((m) => this.info(m));
+    const out = list.map((m) => this.info(m));
+    const keyed = new Set(list.map((m) => m.provider));
+    for (const [provider, ids] of Object.entries(this.o.models || {})) {
+      if (!keyed.has(provider)) continue;
+      for (const id of ids) if (!out.some((m) => m.provider === provider && m.id === id)) { const m = this.get(provider, id); if (m) out.push({ ...this.info(m), added: true }); }
+    }
+    return out;
   }
 
+  /** a model, on the user's base URL when they set one; a model id the provider does not list is used as typed */
   get(provider: string, id: string): Model<Api> | undefined {
-    return this.models.getModel(provider, id);
+    let m: Model<Api> | undefined = this.models.getModel(provider, id);
+    if (!m && (this.o.models?.[provider] || []).includes(id)) {
+      // typed in by hand: shaped like the provider's own models (same API), with neutral defaults
+      const like = this.models.getModels().find((x) => x.provider === provider);
+      if (like) m = { ...like, id, name: id, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } };
+    }
+    const own = m && !providerSpec(provider)?.compat ? normalizeBaseUrl(m.api, this.o.baseUrls?.[provider]) : undefined;
+    return m && own ? { ...m, baseUrl: own } : m;
   }
 
   /** The recommended model the user can actually run, else the first available vision model. */
@@ -77,15 +106,16 @@ export async function createCatalog(opts: CatalogOptions): Promise<Catalog> {
   const credentials = new InMemoryCredentialStore();
   for (const k of opts.keys) await credentials.modify(k.providerId, async () => ({ type: 'api_key', key: k.apiKey, env: k.env }));
   const models = builtinModels({ credentials });
-  models.setProvider(relayProvider(opts.relayBaseUrl || RELAY_BASE_URL));
-  models.setProvider(customProvider(VOLCENGINE_ARK));
-  for (const c of opts.custom || []) models.setProvider(customProvider(c));
-  // dynamic catalogs (Relay, Ark, custom endpoints) are fetched only for providers the user has a key for
+  models.setProvider(relayProvider(normalizeBaseUrl('anthropic', opts.baseUrls?.[RELAY_ID]) || opts.relayBaseUrl || RELAY_BASE_URL));
+  // the OpenAI-compatible providers Studio adds to Pi's own, on the user's base URL when set
+  const compat = PROVIDERS.filter((p) => p.compat).map((p) => compatConfig(p, opts.baseUrls?.[p.id], opts.models?.[p.id] || []));
+  for (const c of [...compat, ...(opts.custom || [])]) models.setProvider(customProvider(c));
+  // dynamic catalogs (Relay, compatible and custom endpoints) are fetched only for providers the user has a key for
   const keyed = new Set(opts.keys.map((k) => k.providerId));
-  const dynamic = [RELAY_ID, VOLCENGINE_ARK.id, ...(opts.custom || []).map((c) => c.id)].filter((id) => keyed.has(id));
+  const dynamic = [RELAY_ID, ...compat.map((c) => c.id), ...(opts.custom || []).map((c) => c.id)].filter((id) => keyed.has(id));
   if (dynamic.length) {
     const res = await models.refresh({ providers: dynamic });
     for (const [provider, error] of res.errors) console.warn(`[models] ${provider}: ${error instanceof Error ? error.message : String(error)}`);
   }
-  return new Catalog(models);
+  return new Catalog(models, { baseUrls: opts.baseUrls, models: opts.models });
 }
