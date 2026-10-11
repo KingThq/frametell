@@ -102,6 +102,8 @@ class Runner {
   private afterExport: string[] = [];
   status: RunStatus = 'idle';
   private log: string;
+  /** the language of the user's latest message, which the director answers in */
+  private replyLang?: 'zh' | 'en';
 
   constructor(readonly id: string, private dir: string, private config: ConfigStore) {
     this.log = studioFile(dir, 'events.jsonl');
@@ -215,7 +217,7 @@ class Runner {
       const voice = meta.voice && tts ? { speaker: meta.voice.id, rate: 0, instruction: '像跟朋友分享一个实用的发现，语气轻松、真诚、自然，有轻重缓急' } : undefined;
       director = new Director({
         dir, runtime, style: meta.style, prices, tts, voice, concurrency: cfg.defaults.concurrency,
-        brief: { durationSec: meta.durationSec, topic: meta.topic, notes: meta.notes, lang: meta.lang ?? 'zh', replyLang: resolveLocale(cfg.locale) },
+        brief: { durationSec: meta.durationSec, topic: meta.topic, notes: meta.notes, lang: meta.lang ?? 'zh', replyLang: this.replyLang ?? resolveLocale(cfg.locale) },
         emit: this.emit, signal: this.abort.signal,
       });
     } catch (e) {
@@ -264,6 +266,8 @@ class Runner {
     said = said.trim();
     if (!said && !refs.length) return false;
     this.emit({ type: 'user', text: said, ...(refs.length ? { refs } : {}) });
+    // answer in the language the user writes in: the saved interface language can differ from the panel they type into
+    this.replyLang = /[\u3400-\u9fff]/.test(said) ? 'zh' : /[a-z]{3}/i.test(said) ? 'en' : this.replyLang;
     const text = withRefs(said, refs);   // what the director reads: the references, then the words
     if (this.gate || this.status === 'awaiting_approval') return this.approve(text);
     if (this.status === 'running' && this.exporting) {
