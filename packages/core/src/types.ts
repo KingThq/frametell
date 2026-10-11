@@ -26,6 +26,8 @@ export interface ProjectMeta {
   runtime: RuntimeId;
   voice?: VoiceChoice;
   subtitles: boolean;
+  /** the film's language: narration, subtitles and on-screen text (absent in projects from before: Chinese) */
+  lang?: Locale;
   topic?: string;
   notes?: string;
   materials: string[];
@@ -41,6 +43,8 @@ export interface NewProjectInput {
   runtime?: RuntimeId;
   voice?: VoiceChoice;
   subtitles?: boolean;
+  /** default: the panel's language */
+  lang?: Locale;
   topic?: string;
   notes?: string;
 }

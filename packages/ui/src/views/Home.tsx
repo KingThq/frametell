@@ -42,7 +42,7 @@ function route(s: PublicSettings | undefined, modelId: string | undefined) {
 }
 
 export function Home({ openSettings }: { openSettings: () => void }) {
-  const { t } = useT();
+  const { t, locale } = useT();
   const projects = useLoad(() => client.projects());
   const models = useLoad(() => client.models());
   const styles = useLoad(() => client.styles());
@@ -52,6 +52,7 @@ export function Home({ openSettings }: { openSettings: () => void }) {
   const [files, setFiles] = useState<File[]>([]);
   const [topic, setTopic] = useState('');
   const [duration, setDuration] = useState(60);
+  const [lang, setLang] = useState<'zh' | 'en'>();
   const [style, setStyle] = useState<string>();
   const [model, setModel] = useState<string>();
   const [voice, setVoice] = useState<string>();
@@ -64,7 +65,12 @@ export function Home({ openSettings }: { openSettings: () => void }) {
   const modelId = model ?? settings.data?.defaults.model ?? (models.data?.default ? `${models.data.default.provider}/${models.data.default.id}` : undefined);
   const styleId = style ?? settings.data?.defaults.style ?? 'warm-story';
   const voiceList = voices.data?.voices || [];
-  const voiceId = voice ?? (voiceList.some((v) => v.id === settings.data?.defaults.voice?.id) ? settings.data?.defaults.voice?.id : voiceList[0]?.id);
+  const filmLang = lang ?? locale;
+  // a voice speaks the film's language: Volcengine's are Chinese voices (lang 'zh'); ElevenLabs' speak many (no lang)
+  const speaks = (v: { lang?: string }) => !v.lang || v.lang === filmLang;
+  const defaultVoice = voiceList.find((v) => v.id === settings.data?.defaults.voice?.id && speaks(v)) ?? voiceList.find(speaks) ?? voiceList[0];
+  const voiceId = voice ?? defaultVoice?.id;
+  const voiceOtherLang = !!voiceList.find((v) => v.id === voiceId && !speaks(v));
   const hasInput = !!topic.trim() || files.length > 0;
   const ready = hasInput && !!modelId && !busy;
   const add = (list: FileList | null) => {
@@ -79,7 +85,7 @@ export function Home({ openSettings }: { openSettings: () => void }) {
     setBusy(true); setError(undefined);
     try {
       const v = voiceList.find((x) => x.id === voiceId);
-      const p = await client.createProject({ durationSec: duration, style: styleId, model: modelId, notes: topic.trim() || undefined, voice: v ? { provider: v.provider, id: v.id, name: v.name } : undefined }, files);
+      const p = await client.createProject({ durationSec: duration, lang: filmLang, style: styleId, model: modelId, notes: topic.trim() || undefined, voice: v ? { provider: v.provider, id: v.id, name: v.name } : undefined }, files);
       go(`#/p/${p.id}`);
     } catch (e) { setError((e as Error).message); setBusy(false); }
   };
@@ -127,15 +133,24 @@ export function Home({ openSettings }: { openSettings: () => void }) {
         </div>
 
         <div className="grid gap-x-6 gap-y-5 px-5 py-5 sm:grid-cols-2">
-          <fieldset>
-            <legend className="fs-label">{t('home.duration')}</legend>
-            <div className="flex flex-wrap gap-1.5" role="radiogroup">
-              {DURATIONS.map((s) => <button key={s} type="button" role="radio" aria-checked={duration === s} className="fs-chip" onClick={() => setDuration(s)}>{t('home.minutes', { n: s / 60 })}</button>)}
-            </div>
-          </fieldset>
+          <div className="flex flex-wrap gap-x-6 gap-y-5">
+            <fieldset>
+              <legend className="fs-label">{t('home.duration')}</legend>
+              <div className="flex flex-wrap gap-1.5" role="radiogroup">
+                {DURATIONS.map((s) => <button key={s} type="button" role="radio" aria-checked={duration === s} className="fs-chip" onClick={() => setDuration(s)}>{t('home.minutes', { n: s / 60 })}</button>)}
+              </div>
+            </fieldset>
+            <fieldset>
+              <legend className="fs-label">{t('home.lang')}</legend>
+              <div className="flex flex-wrap gap-1.5" role="radiogroup">
+                {(['zh', 'en'] as const).map((l) => <button key={l} type="button" role="radio" aria-checked={filmLang === l} className="fs-chip" onClick={() => { setLang(l); setVoice(undefined); }}>{t(l === 'zh' ? 'home.langZh' : 'home.langEn')}</button>)}
+              </div>
+            </fieldset>
+          </div>
           <div>
             <label htmlFor="voice" className="fs-label">{t('home.voice.label')}</label>
             <VoicePicker voices={voiceList} value={voiceId} onChange={setVoice} />
+            {voiceOtherLang && <p className="mt-1.5 text-[12px] text-ink-2">{t('home.voice.langMismatch')}</p>}
           </div>
           <fieldset className="sm:col-span-2">
             <legend className="fs-label">{t('home.style')}</legend>

@@ -12,7 +12,7 @@ import { checkEnv } from './env.js';
 import { applyProxy } from './net.js';
 import { attach, cleanRefs } from './refs.js';
 import type { UserRef, EnvCheck, LoggedEvent, ModelInfo, NewProjectInput, ProjectMeta, ProjectSummary, PublicSettings, SettingsPatch, StyleInfo, Voice } from './types.js';
-import { tr } from './i18n.js';
+import { locale, tr } from './i18n.js';
 
 export interface MaterialFile { name: string; data: Uint8Array }
 
@@ -45,7 +45,8 @@ export class Studio {
 
   async voices(): Promise<{ voices: Voice[]; configured: { volcengine: boolean; elevenlabs: boolean } }> {
     const cfg = loadConfig();
-    const voices: Voice[] = cfg.tts.volcengine ? [...VOLCENGINE_VOICES] : [];
+    // the built-in voices are listed without a key: their samples ship with Studio, so they can be heard before connecting
+    const voices: Voice[] = [...VOLCENGINE_VOICES];
     if (cfg.tts.elevenlabs) { try { voices.push(...(await listElevenLabsVoices(cfg.tts.elevenlabs))); } catch {} }
     return { voices, configured: { volcengine: !!cfg.tts.volcengine, elevenlabs: !!cfg.tts.elevenlabs } };
   }
@@ -86,12 +87,12 @@ export class Studio {
     if (!files.length && !said && !input.topic) throw new Error(tr('说一句想讲什么，或者附上资料', 'Say what the video is about, or attach some material'));
     // without materials, the sentence the user wrote is the topic; it also names the project
     const topic = input.topic || (files.length ? undefined : said);
-    const fromText = (t?: string) => t?.replace(/^(讲讲|讲一讲|介绍一下|介绍|聊聊|说说|帮我做一条|做一条)/, '').replace(/[。！？!?，,].*$/, '').trim().slice(0, 24) || undefined;
+    const fromText = (t?: string) => t?.replace(/^(讲讲|讲一讲|介绍一下|介绍|聊聊|说说|帮我做一条|做一条|(?:please )?(?:explain|tell me about|talk about|make a video about|a video about)\s+)/i, '').replace(/[。！？!?，,].*$/, '').trim().slice(0, 24) || undefined;
     const meta = newProject({
       title: input.title?.trim() || fromText(topic) || fromText(said) || files[0]?.name.replace(/\.[^.]+$/, '') || tr('未命名视频', 'Untitled video'),
       style: input.style || d.style, durationSec: input.durationSec || d.durationSec, model,
       runtime: input.runtime || d.runtime, voice: input.voice ?? d.voice, subtitles: input.subtitles ?? d.subtitles,
-      topic, notes: topic ? undefined : input.notes,
+      lang: input.lang ?? locale(), topic, notes: topic ? undefined : input.notes,
     }, files.map((f) => ({ name: f.name, data: Buffer.from(f.data) })));
     void runner(meta.id).start();
     return meta;

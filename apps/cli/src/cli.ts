@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// frametell run <material…> [--style warm-story] [--duration 60] [--model relay/gemini-3.7-flash-high]
+// frametell run <material…> [--style warm-story] [--duration 60] [--model relay/gemini-3.7-flash-high] [--lang zh|en]
 //                     [--voice zh_male_yuanboxiaoshu_uranus_bigtts] [--title …] [--out dir]
 // Headless end-to-end run: storyboard (auto-approved) → script → narration → pages → review → render.
 // Keys come from the environment: RELAY_API_KEY (recommended), ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY,
@@ -11,7 +11,7 @@ import { createProject } from '@frametell/engine/tools/project.mjs';
 import { createCatalog, type ProviderKey } from '@frametell/models';
 import { elevenLabsTts, volcengineTts } from '@frametell/voice';
 import { Director, piRuntime, type AgentRuntime, type StudioEvent } from '@frametell/agent';
-import { tr } from '@frametell/core';
+import { locale, tr } from '@frametell/core';
 
 const ENV_KEYS: Record<string, string> = {
   relay: 'RELAY_API_KEY', anthropic: 'ANTHROPIC_API_KEY', openai: 'OPENAI_API_KEY', google: 'GEMINI_API_KEY',
@@ -27,7 +27,7 @@ const sec = (t0: number) => ((Date.now() - t0) / 1000).toFixed(0).padStart(4) + 
 
 async function run(argv: string[]) {
   const { o, pos } = args(argv);
-  if (!pos.length) { console.error(tr('用法：frametell run <资料文件…> [--style warm-story] [--duration 60] [--model relay/gemini-3.7-flash-high]', 'Usage: frametell run <material…> [--style warm-story] [--duration 60] [--model relay/gemini-3.7-flash-high]')); process.exit(1); }
+  if (!pos.length) { console.error(tr('用法：frametell run <资料文件…> [--style warm-story] [--duration 60] [--model relay/gemini-3.7-flash-high] [--lang zh|en]', 'Usage: frametell run <material…> [--style warm-story] [--duration 60] [--model relay/gemini-3.7-flash-high] [--lang zh|en]')); process.exit(1); }
   const keys: ProviderKey[] = Object.entries(ENV_KEYS).filter(([, env]) => process.env[env]).map(([providerId, env]) => ({ providerId, apiKey: process.env[env]! }));
   const catalog = await createCatalog({ keys });
   const [prov, ...rest] = (o.model || '').split('/');
@@ -61,7 +61,7 @@ async function run(argv: string[]) {
     else if (e.type === 'gate') console.log(`[${sec(t0)}]   ` + tr(`成片门禁：${e.red ? '红灯 ' + JSON.stringify(e.blank) : '通过'}`, `Final check: ${e.red ? 'failed ' + JSON.stringify(e.blank) : 'passed'}`));
     else if (e.type === 'error') console.log(`[${sec(t0)}] ✗ ${e.message}`);
   };
-  const director = new Director({ dir, runtime, style, brief: { durationSec: +(o.duration || 60), topic: o.topic }, tts, voice, prices: { ...info.cost, currency: info.currency }, concurrency: +(o.concurrency || 3), emit });
+  const director = new Director({ dir, runtime, style, brief: { durationSec: +(o.duration || 60), topic: o.topic, lang: o.lang === 'en' || o.lang === 'zh' ? o.lang : locale(), replyLang: locale() }, tts, voice, prices: { ...info.cost, currency: info.currency }, concurrency: +(o.concurrency || 3), emit });
   await director.run();
   const out = await director.render();   // the CLI's run ends with the mp4
   const u = director.usage, c = director.cost();

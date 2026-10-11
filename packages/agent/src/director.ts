@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { narrate, type TtsProvider } from '@frametell/voice';
 import { Project, type LintIssue, type PageTiming, type Storyboard } from './project.js';
-import { checkPrompt, pagePrompt, pageSystem, plannerSystem, reviewPrompt, scriptPrompt, storyboardFixPrompt, storyboardPrompt, type Brief } from './prompts.js';
+import { checkPrompt, langNote, pagePrompt, pageSystem, plannerSystem, reviewPrompt, scriptPrompt, storyboardFixPrompt, storyboardPrompt, type Brief } from './prompts.js';
 import { addUsage, emptyUsage, type AgentRuntime, type AgentSession, type TokenUsage, type TurnResult } from './runtime/types.js';
 import type { PageStatus, Stage, StudioEvent } from './events.js';
 
@@ -148,6 +148,11 @@ export class Director {
     let r = await this.send(s, storyboardPrompt(this.o.brief, this.o.style, materials));
     this.state.planner = s.ref; this.save();
     if (!this.project.exists('storyboard.json')) this.fail('storyboard', `没有写出 storyboard.json：${r.error || r.text}`);
+    // the film's language is the server's to say (the page agents and the checks read it from here)
+    try {
+      const j = this.project.storyboard();
+      if (j.lang !== (this.o.brief.lang ?? 'zh')) fs.writeFileSync(this.project.file('storyboard.json'), JSON.stringify({ ...j, lang: this.o.brief.lang ?? 'zh' }, null, 2));
+    } catch {}
     for (let round = 1; ; round++) {
       const issues = this.project.storyboardIssues();
       this.emit({ type: 'storyboard_check', round, issues });
@@ -170,7 +175,7 @@ export class Director {
     this.state.stage = 'script'; this.save();
     this.serverMeta();
     const s = await this.session('planner', plannerSystem(this.o.style), MAX.planTurns, this.state.planner);
-    const r = await this.send(s, scriptPrompt(feedback) + this.unseen('planner'));
+    const r = await this.send(s, scriptPrompt(feedback, this.o.brief) + this.unseen('planner'));
     this.state.planner = s.ref; this.save();
     // the planner rewrites script.js: put the server-owned fields back (a lost META.voice once rendered a silent film)
     this.serverMeta();
@@ -192,7 +197,7 @@ export class Director {
     // a style component copied into extras/ by use-extra is the same file: load it once, from the engine
     const base = new Set((STYLE_EXTRAS[this.o.style] ?? []).map((e) => path.basename(e)));
     const list = [...extras].filter((e) => !(e.startsWith('extras/') && base.has(path.basename(e))));
-    this.setMeta({ style: this.o.style, voice: this.o.voice, gap: 0.8, pace: { maxHold: 1.0, gap: 0.8 }, extras: list });
+    this.setMeta({ style: this.o.style, lang: this.o.brief.lang ?? 'zh', voice: this.o.voice, gap: 0.8, pace: { maxHold: 1.0, gap: 0.8 }, extras: list });
   }
 
   /** Server-owned META fields, rewritten in place in script.js (the planner must not change them). */
@@ -275,7 +280,7 @@ export class Director {
     try {
       const s = await this.session(`page-${id}`, pageSystem(this.o.style, STYLE_EXTRAS[this.o.style] ?? []), MAX.pageTurns);
       const fix = this.state.revision?.[id];
-      let r = await this.send(s, pagePrompt(sb, id, t) + (fix ? revisionNote(id, fix, this.project.read(`pages/${id}.js`)) : '') + this.unseen(`page-${id}`));
+      let r = await this.send(s, pagePrompt(sb, id, t, this.o.brief.lang) + (fix ? revisionNote(id, fix, this.project.read(`pages/${id}.js`)) : '') + this.unseen(`page-${id}`));
       if (!this.project.exists(`pages/${id}.js`)) r = await this.send(s, `还没有 pages/${id}.js，请写出来再停下。`);
       if (!this.project.exists(`pages/${id}.js`)) throw new Error(r.error || '没有写出页面文件');
       st.ref = s.ref;
@@ -339,7 +344,7 @@ export class Director {
     const sheet = this.project.snap('review', tl.pages.flatMap((p) => [(p.start + p.end) / 2, p.end - 0.35]), undefined, 400);
     const s = await this.session('review', pageSystem(this.o.style, STYLE_EXTRAS[this.o.style] ?? []), MAX.pageTurns);
     for (let round = 1; round <= MAX.reviewRounds; round++) {
-      const r = await this.send(s, reviewPrompt(round === 1 ? issues : this.project.lint(), flagged), [sheet]);
+      const r = await this.send(s, reviewPrompt(round === 1 ? issues : this.project.lint(), flagged) + (this.o.brief.replyLang === 'en' ? '\n给用户的话用英文写。' : ''), [sheet]);
       await this.commit(`全片检查：第 ${round} 轮`);
       if (/^DONE\b/i.test(r.text.trim())) break;
     }
@@ -428,6 +433,7 @@ export class Director {
 ${request}
 
 判断要改哪几页、每页怎么改：只改需要改的页（通常 1–2 页）。只有用户要改口播时才动 script.js，改对应的句子并保持句子数量不变。
+${langNote('revise', this.o.brief.lang, this.o.brief.replyLang).trim()}
 把决定写进 .studio/revision.json：{ "pages": [{ "id": "p03", "note": "给画面 Agent 的修改说明，具体到物和动作" }] }，然后一句话告诉用户你要改什么。
 下面已经给了分镜、script.js${named.length ? ' 和提到的页面代码' : ''}，不用再读它们；别的页需要时再读 pages/<id>.js。
 

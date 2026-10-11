@@ -15,7 +15,7 @@ export interface LintIssue { page: string; t: number; t1: number; local: number;
 
 export interface Beat { at: string; object: string; action: string; camera?: string; text?: string }
 export interface StoryPage { id: string; section: string; say: string; core?: boolean; beats: Beat[] }
-export interface Storyboard { title: string; summary: string; durationSec?: number; style: string; cast: string; pages: StoryPage[] }
+export interface Storyboard { title: string; summary: string; durationSec?: number; style: string; cast: string; lang?: 'zh' | 'en'; pages: StoryPage[] }
 
 /** The environment for a child that runs process.execPath as Node: inside Electron the executable is the app, which runs
  * as plain Node only with ELECTRON_RUN_AS_NODE (it must not be set for the app's own helper processes, so only here). */

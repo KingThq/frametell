@@ -13,7 +13,7 @@ import { prepareMaterials } from './materials.js';
 import { applyProxy } from './net.js';
 import { withRefs } from './refs.js';
 import type { LoggedEvent, ProjectMeta, ProjectSummary, RunStatus } from './types.js';
-import { tr } from './i18n.js';
+import { locale, tr } from './i18n.js';
 
 export type Logged = LoggedEvent;
 
@@ -200,7 +200,7 @@ class Runner {
       const voice = meta.voice && tts ? { speaker: meta.voice.id, rate: 0, instruction: '像跟朋友分享一个实用的发现，语气轻松、真诚、自然，有轻重缓急' } : undefined;
       director = new Director({
         dir, runtime, style: meta.style, prices, tts, voice, concurrency: cfg.defaults.concurrency,
-        brief: { durationSec: meta.durationSec, topic: meta.topic, notes: meta.notes },
+        brief: { durationSec: meta.durationSec, topic: meta.topic, notes: meta.notes, lang: meta.lang ?? 'zh', replyLang: locale() },
         emit: this.emit, signal: this.abort.signal,
       });
     } catch (e) {

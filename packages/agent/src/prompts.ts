@@ -33,7 +33,22 @@ export function pageSystem(style: string, extras: string[] = []) {
   return [read('PAGE.md'), '---\n# 本片风格\n\n' + grammar(style), '---\n' + read('API.md'), '---\n' + pagePack(style, extras), '---\n' + read('LIB.md')].join('\n\n');
 }
 
-export interface Brief { topic?: string; audience?: string; durationSec: number; notes?: string }
+/** the film's language (narration, on-screen text) and the language the director reports in (the panel's) */
+export type Lang = 'zh' | 'en';
+export interface Brief { topic?: string; audience?: string; durationSec: number; notes?: string; lang?: Lang; replyLang?: Lang }
+
+/** What a stage must know about the language; nothing for a Chinese film, the prompts' own language. It goes in the user
+ *  messages, never the system prompts, so every film shares the cached part whatever its language. */
+export function langNote(stage: 'storyboard' | 'script' | 'page' | 'revise', lang?: Lang, replyLang?: Lang) {
+  const reply = replyLang === 'en' ? '\n给用户的汇报用英文写。' : '';
+  if (lang !== 'en') return reply;
+  return '\n' + {
+    storyboard: '影片语言：**英文**。storyboard.json 写 `"lang": "en"`；title、summary、section、say 和拍点的 object / action / text 都用英文写：屏上字每个元素 ≤ 5 个英文单词，拍点 `at` 卡到词时写英文单词（`c2:thirty`）。',
+    script: '影片语言：**英文**。cue 是一句口语化的英文短句，≤ 12 个单词，一页 3–8 句；数字写阿拉伯数字（1,000、30%），口播里怎么念就怎么写单位（years、dollars）。',
+    page: '本片是英文片：画面上所有的字（标题、标签、数字的单位）都用英文写，与口播一致；英文比中文长，给文字留够宽度。',
+    revise: '本片是英文片：改口播时用英文写，句子数量不变；给画面 Agent 的修改说明用中文写即可。',
+  }[stage] + reply;
+}
 
 export function storyboardPrompt(brief: Brief, style: string, materials: string[]) {
   return [
@@ -43,7 +58,7 @@ export function storyboardPrompt(brief: Brief, style: string, materials: string[
     brief.notes ? `补充要求：${brief.notes}` : '',
     `风格：${style}（storyboard.json 的 style 写 "${style}"）。`,
     `资料：${materials.map((m) => 'materials/' + m).join('、') || '（无，按主题写）'}`,
-    '写好 storyboard.json 后停下汇报。',
+    '写好 storyboard.json 后停下汇报。' + langNote('storyboard', brief.lang, brief.replyLang),
   ].filter(Boolean).join('\n');
 }
 
@@ -51,11 +66,11 @@ export function storyboardFixPrompt(issues: { level: string; page?: string; beat
   return ['服务端检查了 storyboard.json，下面这些问题要改（红色必须改，黄色酌情）：', ...issues.map((i) => `- [${i.level === 'red' ? '红' : '黄'}] ${i.page ?? '全片'}${i.beat != null ? ` 拍点${i.beat + 1}` : ''}：${i.msg}`), '改好后停下，一句话说明改了什么。'].join('\n');
 }
 
-export function scriptPrompt(feedback?: string) {
-  return [feedback ? `用户对分镜的修改意见：${feedback}\n先按意见改好 storyboard.json，再写口播。` : '用户已确认分镜，没有修改。', '阶段 2：写 script.js，运行 node engine/tools/script.mjs 看估算时长，然后停下汇报。'].join('\n');
+export function scriptPrompt(feedback?: string, brief?: Brief) {
+  return [feedback ? `用户对分镜的修改意见：${feedback}\n先按意见改好 storyboard.json，再写口播。` : '用户已确认分镜，没有修改。', '阶段 2：写 script.js，运行 node engine/tools/script.mjs 看估算时长，然后停下汇报。' + langNote('script', brief?.lang, brief?.replyLang)].join('\n');
 }
 
-export function pagePrompt(sb: Storyboard, id: string, t: PageTiming) {
+export function pagePrompt(sb: Storyboard, id: string, t: PageTiming, lang: Lang | undefined = sb.lang) {
   const p = sb.pages.find((x) => x.id === id);
   const outline = sb.pages.map((x) => `- ${x.id} ${x.section}`).join('\n');
   return `你负责 **${id}** 这一页。
@@ -75,7 +90,7 @@ ${(p?.beats || []).map((b, i) => `  ${i + 1}. [${b.at}] ${b.object} —— ${b.a
 本页长 ${(t.end - t.start).toFixed(2)}s，口播在 ${(t.speechEnd - t.start).toFixed(2)}s 结束（P.endT）。
 ${t.cues.map((c) => `- c${c.i}：页内 ${c.at}s「${c.text}」`).join('\n')}
 
-写好 pages/${id}.js 后停下，一句话说明你画了什么。`;
+写好 pages/${id}.js 后停下，一句话说明你画了什么。${langNote('page', lang)}`;
 }
 
 export function checkPrompt(round: number, issues: LintIssue[], times: { t: number; local: number }[]) {
