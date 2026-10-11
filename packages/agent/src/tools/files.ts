@@ -5,6 +5,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { Type } from 'typebox';
 import type { AgentTool } from '@earendil-works/pi-agent-core';
+import { rewriteRefusal } from '../runtime/types.js';
 
 const READ_ONLY = ['engine', 'engine_modules', '.git'];
 const IMAGE = /\.(png|jpe?g|webp|gif)$/i;
@@ -46,11 +47,13 @@ export function fileTools(root: string, opts: { timeoutMs?: number } = {}): Agen
   };
   const write: AgentTool<typeof WriteP> = {
     name: 'write', label: 'Write',
-    description: 'Create or overwrite a file in the project with the given content.',
+    description: 'Create a new file in the project (or replace a small one). To change a page that already exists (pages/*.js), use edit: rewriting a whole page is refused.',
     parameters: WriteP,
     executionMode: 'sequential',
     execute: async (_id, p) => {
       const abs = resolveIn(root, p.path, true);
+      const refused = rewriteRefusal(path.relative(root, abs), fs.existsSync(abs) ? fs.readFileSync(abs, 'utf8') : undefined);
+      if (refused) throw new Error(refused);
       fs.mkdirSync(path.dirname(abs), { recursive: true });
       fs.writeFileSync(abs, p.content);
       return text(`wrote ${p.path} (${p.content.split('\n').length} lines)`);

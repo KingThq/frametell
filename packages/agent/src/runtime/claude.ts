@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
-import { addUsage, emptyUsage, toolSummary, proxyEnv, type AgentRuntime, type AgentSession, type SessionOptions, type StageInput, type TurnResult } from './types.js';
+import { addUsage, emptyUsage, rewriteRefusal, toolSummary, proxyEnv, type AgentRuntime, type AgentSession, type SessionOptions, type StageInput, type TurnResult } from './types.js';
 
 export interface ClaudeRuntimeOptions {
   apiKey: string;
@@ -60,7 +60,10 @@ export function claudeRuntime(o: ClaudeRuntimeOptions): AgentRuntime {
                   const p = String(ti.file_path || '');
                   const blocked = (/^(Write|Edit)$/.test(h.tool_name) && (/(^|\/)engine(_modules)?\//.test(path.relative(s.cwd, path.resolve(s.cwd, p))) || path.relative(s.cwd, path.resolve(s.cwd, p)).startsWith('..')))
                     || (h.tool_name === 'Bash' && /\brender\.mjs\b|\bnpm (i|install)\b|\bcurl\b|\bwget\b/.test(String(ti.command || '')));
-                  return blocked ? { decision: 'block', reason: '引擎目录和项目外的文件是只读的；页面会话里不能渲染、安装依赖或联网' } : {};
+                  if (blocked) return { decision: 'block', reason: '引擎目录和项目外的文件是只读的；页面会话里不能渲染、安装依赖或联网' };
+                  const abs = path.resolve(s.cwd, p);
+                  const refused = h.tool_name === 'Write' && p ? rewriteRefusal(path.relative(s.cwd, abs), fs.existsSync(abs) ? fs.readFileSync(abs, 'utf8') : undefined) : undefined;
+                  return refused ? { decision: 'block', reason: refused } : {};
                 }] }],
               },
             },

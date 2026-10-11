@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- 画说 · Showtell mark, for light backgrounds -->
+  <path fill="#1C1917" d="M8 8H31V14.5H14.5V31H8Z"/>
+  <path fill="#1C1917" d="M56 56H33V49.5H49.5V33H56Z"/>
+  <circle fill="#D4A574" cx="32" cy="32" r="7.5"/>
+</svg>

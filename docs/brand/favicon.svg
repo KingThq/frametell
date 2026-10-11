@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- Small-size variant: heavier corners, larger dot; follows the browser theme -->
+  <style>.k{fill:#1C1917}@media (prefers-color-scheme:dark){.k{fill:#F5F5F0}}</style>
+  <path class="k" d="M6 6H32V15H15V32H6Z"/>
+  <path class="k" d="M58 58H32V49H49V32H58Z"/>
+  <circle fill="#D4A574" cx="32" cy="32" r="9"/>
+</svg>

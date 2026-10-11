@@ -76,3 +76,12 @@ export function toolSummary(v: unknown): string {
   const s = typeof o === 'string' ? o : JSON.stringify(o);
   return s.length > 160 ? s.slice(0, 160) + '…' : s;
 }
+
+/**
+ * A page that exists is changed with edit, never rewritten whole: rewriting a 300-line page to change one thing costs
+ * minutes of output (seen: three 10k-token rewrites in one revision). Returns the refusal, or undefined when allowed.
+ */
+export function rewriteRefusal(rel: string, existing?: string): string | undefined {
+  if (!/^pages(-portrait)?\/p\w+\.js$/.test(rel.replace(/\\/g, '/')) || existing == null || existing.split('\n').length < 40) return undefined;
+  return `${rel} 已经有 ${existing.split('\n').length} 行：改已有的页面请用 edit 只改需要改的地方，不要整页重写（整页重写要几分钟）。`;
+}
