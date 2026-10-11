@@ -1,5 +1,5 @@
 // Register component files in script.js META.extras safely while several page sessions run in parallel.
-// node ../../kit/tools/use-extra.mjs extras/foo.js [lib-name.js …]   (a bare lib name copies kit/lib/<name> into extras/ first)
+// node engine/tools/use-extra.mjs extras/foo.js [lib-name.js …]   (a bare lib name copies engine/lib/<name> into extras/ first)
 import fs from 'fs';
 import path from 'path';
 import { KIT, EP } from './lib.mjs';
@@ -9,7 +9,7 @@ try {
   const files = process.argv.slice(2).map((f) => {
     if (f.includes('/')) return f;
     const src = path.join(KIT, 'lib', f);
-    if (!fs.existsSync(src)) throw new Error(`kit/lib/${f} not found`);
+    if (!fs.existsSync(src)) throw new Error(`engine/lib/${f} not found`);
     fs.mkdirSync(path.join(EP, 'extras'), { recursive: true });
     if (!fs.existsSync(path.join(EP, 'extras', f))) fs.copyFileSync(src, path.join(EP, 'extras', f));
     return `extras/${f}`;

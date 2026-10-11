@@ -1,4 +1,6 @@
-/* Time-driven building blocks (from episode 03): rough shapes re-drawn per frame (liveRough), text that follows lt (follow), bars, slider, KaTeX formula (tex, needs META.libs katex), canvas, PV.K / PV.softmax. */
+/* Time-driven building blocks: rough shapes re-drawn per frame (liveRough), text that follows lt (follow), bars, slider, KaTeX formula
+ * (tex, needs META.libs katex), canvas, a layer mover (move), points along a path (pathAt), and PV.K / PV.keys / PV.mix / PV.arcAt /
+ * PV.mmss / PV.softmax. */
 (function () {
   const { s, h, col, gen, rrect, clamp, ease, Builder } = PV;
   const B = Builder.prototype;
@@ -15,6 +17,50 @@
     const ex = z.map((v) => (v === -Infinity ? 0 : Math.exp(v / T - m)));
     const sum = ex.reduce((a, b) => a + b, 0);
     return ex.map((v) => v / sum);
+  };
+  /** Piecewise keyframes → value at lt, eased per segment: PV.keys([[t, v], …], lt, easing). Holds the first / last value outside. */
+  PV.keys = (keys, lt, e = ease.inOut) => {
+    if (lt <= keys[0][0]) return keys[0][1];
+    for (let i = 1; i < keys.length; i++) {
+      const [t0, v0] = keys[i - 1], [t1, v1] = keys[i];
+      if (lt < t1) return v0 + (v1 - v0) * e(clamp((lt - t0) / Math.max(1e-6, t1 - t0)));
+    }
+    return keys[keys.length - 1][1];
+  };
+  /** Blend two palette colours: PV.mix('blue', 'red', k) → 'rgb(…)'. */
+  PV.mix = (a, b, k) => {
+    const hex = (c) => { const v = col(c).replace('#', ''); return [0, 2, 4].map((i) => parseInt(v.slice(i, i + 2), 16)); };
+    const A = hex(a), Z = hex(b);
+    return `rgb(${A.map((v, i) => Math.round(v + (Z[i] - v) * clamp(k))).join(',')})`;
+  };
+  /** Point on an arc from a to b ([x, y] centres) at progress k; arc < 0 bulges upward. */
+  PV.arcAt = (a, b, k, arc = -80) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k + Math.sin(k * Math.PI) * arc];
+  /** 185 → '3:05' */
+  PV.mmss = (sec) => { sec = Math.max(0, Math.floor(sec)); return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0'); };
+
+  /** move(L, fn, origin) — drive a layer: fn(lt) → { x, y, s, rot, op } | null (null hides it); x / y are offsets in px. */
+  B.move = function (L, fn, origin) {
+    if (origin) L.wrap.style.transformOrigin = `${origin[0]}px ${origin[1]}px`;
+    this.tick((lt) => {
+      const v = fn(lt);
+      if (!v) { L.wrap.style.opacity = '0'; return; }
+      L.wrap.style.opacity = (v.op ?? 1).toFixed(3);
+      L.wrap.style.transform = `translate(${(v.x ?? 0).toFixed(1)}px, ${(v.y ?? 0).toFixed(1)}px) rotate(${(v.rot ?? 0).toFixed(2)}deg) scale(${(v.s ?? 1).toFixed(4)})`;
+    });
+    return L;
+  };
+  /** pathAt(d) → { len, at(u) → { x, y, a } } — a point at fraction u of an SVG path's length, a = heading in degrees. */
+  B.pathAt = function (d) {
+    const p = s('path', { d, fill: 'none', stroke: 'none' }, this.svg);
+    const len = p.getTotalLength();
+    return {
+      len,
+      at(u) {
+        const l = clamp(u) * len;
+        const q = p.getPointAtLength(l), r = p.getPointAtLength(Math.min(len, l + 1)), b = p.getPointAtLength(Math.max(0, l - 1));
+        return { x: q.x, y: q.y, a: (Math.atan2(r.y - b.y, r.x - b.x) * 180) / Math.PI };
+      },
+    };
   };
 
   /** Paints rough drawables into g (fills with the watercolour filter, then ink on top). */

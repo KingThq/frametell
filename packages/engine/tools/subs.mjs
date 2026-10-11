@@ -1,5 +1,5 @@
 // Renders each subtitle cue to a transparent full-frame PNG (1920×1080, or 1080×1920 with PORTRAIT) and writes an ffmpeg concat list with exact durations.
-// Usage (from an episode dir): node ../../kit/tools/subs.mjs <from> <to>
+// Usage (from a project dir): node engine/tools/subs.mjs <from> <to>
 import fs from 'fs';
 import path from 'path';
 import { openStage, OUT, PORTRAIT, closeStage } from './lib.mjs';

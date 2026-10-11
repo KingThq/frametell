@@ -1,5 +1,5 @@
 /* media.js · 真实素材（截图、视频片段的帧序列、角色表演、浏览器窗口）放进手绘画面里，全部由时间 lt 驱动。
- * 片段帧放在集目录 assets/clips/<name>/f000.jpg…，帧数登记在 window.CLIP_FRAMES（集的 extras 里生成，见 kit/README）。
+ * 片段帧放在项目目录 assets/clips/<name>/f000.jpg…，帧数登记在 window.CLIP_FRAMES（项目的 extras 里生成，见 engine/README.md）。
  *   P.img(src, x, y, w, h, o)           静态图（o.fit/pos/r/shadow/mask/pop）
  *   P.clip(name, x, y, w, h, o)         帧序列片段 assets/clips/<name>/f000.jpg…（o.fps/speed/from/to/loop/start）
  *   P.cameo(kind, cx, cy, size, o)      角色表演片段（clips/c-<kind>），纸面柔边 + 正片叠底融进背景
@@ -7,7 +7,7 @@
  * 静态图（截图、插图）建页时预加载，main.js 等 document.fonts.ready 时一并等它们解码完。
  * 片段帧**按需加载**：画到哪一帧才加载哪一帧（顺手预取后面几帧），最近用过的留在一个有上限的缓存里，其余释放——
  * 否则每个出片进程都要把几千帧解码进内存，12 个进程会把 48GB 内存吃满。没加载完的帧由 window.__frameReady(t) 等待：
- * kit 的 render-chunk / snap 在截图前会 await 它（等本帧所有图片解码完再重画一次），所以逐帧输出仍然确定、不闪。 */
+ * 引擎的 render-chunk / snap 在截图前会 await 它（等本帧所有图片解码完再重画一次），所以逐帧输出仍然确定、不闪。 */
 (function () {
   const { h, s, clamp, ease, smooth, col, Builder } = PV;
   const B = Builder.prototype;
@@ -40,7 +40,7 @@
     while (FRAMES.size > MAX_FRAMES) FRAMES.delete(FRAMES.keys().next().value);
     return im;
   }
-  /** Called by the kit tools after ENGINE.renderAt(t): wait for every frame this t needs, then redraw once more. */
+  /** Called by the engine tools after ENGINE.renderAt(t): wait for every frame this t needs, then redraw once more. */
   window.__frameReady = async (t) => {
     for (let k = 0; k < 4 && waiting.size; k++) { await Promise.all([...waiting]); ENGINE.renderAt(t); }
   };

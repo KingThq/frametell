@@ -1,5 +1,5 @@
-// Parallel render → out/<name>-无字幕.mp4, then burn subtitles → out/<name>-有字幕.mp4. Run from an episode dir:
-// node ../../kit/tools/render.mjs [--portrait] [--hw] [--fps 60]
+// Parallel render → out/<name>-无字幕.mp4, then burn subtitles → out/<name>-有字幕.mp4. Run from a project dir:
+// node engine/tools/render.mjs [--portrait] [--hw] [--fps 60]
 //   --hw: hardware H.264 (Apple media engine) for chunks and the subtitle pass — frees the CPU for the browsers; slightly larger files [--workers 12] [--from 0] [--to <end>] [--name <file name>] [--skip-video] [--skip-subs]
 import { spawn, execFileSync } from 'child_process';
 import { createHash } from 'crypto';

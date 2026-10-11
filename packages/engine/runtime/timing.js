@@ -44,7 +44,7 @@
     return text.replace(/[，。；：、,.;:]+$/u, '').replace(/——$/u, '');
   }
 
-  // Real voice (voice.js from kit/tools/tts.mjs): cue length = trimmed audio + a natural pause, holds are capped,
+  // Real voice (voice.js from engine/tools/tts.mjs): cue length = trimmed audio + a natural pause, holds are capped,
   // pages follow each other closely — no long silences.
   const VOICE = { lead: 0.2, comma: 0.18, stop: 0.4, pageEnd: 0.3, maxHold: 0.5, gap: 0.3, tail: 1.2 };
   const voiceOf = (voice, pi, ci, text) => { const v = voice && voice.pages[pi] && voice.pages[pi][ci]; return v && v.t === text ? v : null; };
@@ -52,7 +52,7 @@
   /** opts.gap overrides GAP (script.js META.gap); opts.voice = SCRIPT.VOICE switches to real audio durations. */
   function layout(pages, opts = {}) {
     const voice = opts.voice || null;
-    const V = { ...VOICE, ...(opts.pace || {}) };   // META.pace: { maxHold, gap } 放宽配音集的停顿（默认很紧凑）
+    const V = { ...VOICE, ...(opts.pace || {}) };   // META.pace: { maxHold, gap } 放宽配音片的停顿（默认很紧凑）
     const gap = voice ? V.gap : opts.gap ?? GAP;
     let t = 0;
     const out = pages.map((pg, idx) => {

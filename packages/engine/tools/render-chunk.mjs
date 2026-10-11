@@ -1,4 +1,4 @@
-// Renders frames [f0, f1) at FPS to an mp4 chunk. Usage (from an episode dir): node ../../kit/tools/render-chunk.mjs <f0> <f1> <fps> <out.mp4>
+// Renders frames [f0, f1) at FPS to an mp4 chunk. Usage (from a project dir): node engine/tools/render-chunk.mjs <f0> <f1> <fps> <out.mp4>
 //   or: render-chunk.mjs --jobs <list.json> <fps> — several chunks [{ a, b, out }] in one browser, one after another
 // HW=1 (render.mjs --hw): encode on the Mac's media engine (h264_videotoolbox) so every CPU core is left for the browsers.
 import { spawn } from 'child_process';

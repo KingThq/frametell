@@ -1,4 +1,4 @@
-// Prints "mid end" seconds of the given pages (all if none) — handy as snap.mjs arguments: node ../../kit/tools/times.mjs p02 p03
+// Prints "mid end" seconds of the given pages (all if none) — handy as snap.mjs arguments: node engine/tools/times.mjs p02 p03
 import { loadEpisode } from './lib.mjs';
 const { L } = loadEpisode();
 const ids = process.argv.slice(2);

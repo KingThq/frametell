@@ -1,7 +1,7 @@
 /* Boot: an episode's index.html loads its script.js, then this file. Writes the stage DOM and loads, in order:
- * kit runtime → third-party libs (SCRIPT.META.libs, paths under kit/node_modules; .css or classic/UMD .js)
+ * engine runtime → third-party libs (SCRIPT.META.libs, paths under engine_modules; .css or classic/UMD .js)
  * → episode extras (SCRIPT.META.extras) → one pages/<id>.js per SCRIPT.PAGES entry → main.
- * META.vendor: ESM-only libs bundled by esbuild into classic IIFE files under kit/vendor/ (e.g. 'three' → vendor/three.js, global THREE).
+ * META.vendor: ESM-only libs bundled by esbuild into classic IIFE files under engine/vendor/ (e.g. 'three' → vendor/three.js, global THREE).
  * Not ES modules + import map: Chromium blocks module scripts on file:// (CORS, origin null), in preview and in render. */
 (function () {
   // canvas: landscape 1920×1080 by default; ?portrait → 1080×1920 with pages from pages-portrait/ (same script.js)
@@ -28,7 +28,7 @@
     .concat(['timing', 'core', 'text', 'doodles', 'widgets', 'live', 'tokens', 'shell3d', 'three', 'media', 'player'].map((f) => `${KIT}runtime/${f}.js`))
     .concat((meta.vendor || []).map((v) => `${KIT}vendor/${v}.js`))
     .concat(libs.filter((f) => !f.endsWith('.css')))
-    .concat(meta.voice ? ['voice.js'] : [])      // real narration timing from kit/tools/tts.mjs (SCRIPT.VOICE)
+    .concat(meta.voice ? ['voice.js'] : [])      // real narration timing from engine/tools/tts.mjs (SCRIPT.VOICE)
     .concat(meta.extras || [])
     .concat(KIT + 'runtime/engine.js')
     .concat(SCRIPT.PAGES.map((p) => `${portrait ? 'pages-portrait' : 'pages'}/${p.id}.js`))

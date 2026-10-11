@@ -1,4 +1,4 @@
-/* shell3d (from episode 26): the harness "exploded view" — a model core wrapped by nested square shells that lift apart in CSS 3D,
+/* shell3d: the harness "exploded view" — a model core wrapped by nested square shells that lift apart in CSS 3D,
  * with a projector so 2D labels stay flat and legible next to 3D points; plus PV.tw (approximate text width). All pure in lt. */
 (function () {
   const { clamp, ease, Builder } = PV;

@@ -1,5 +1,5 @@
 // Real page timeline (with voice.js when present): every page's start / end and when each cue starts.
-// node ../../kit/tools/pages.mjs [p03 …] [--json]
+// node engine/tools/pages.mjs [p03 …] [--json]
 import { loadEpisode } from './lib.mjs';
 const { L, SCRIPT } = loadEpisode();
 const ids = process.argv.slice(2).filter((a) => !a.startsWith('--'));

@@ -1,6 +1,6 @@
 // Publishing kit → out/发布信息.md: per-platform titles, description, tags, and timestamped chapters.
 // Chapters come from script.js: consecutive pages with the same `section` form one chapter, starting when its first page starts
-// (so timestamps always match the video). Titles/description/tags come from META.publish. Run from an episode dir.
+// (so timestamps always match the video). Titles/description/tags come from META.publish. Run from a project dir.
 import fs from 'fs';
 import path from 'path';
 import { loadEpisode, OUT } from './lib.mjs';

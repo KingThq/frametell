@@ -1,4 +1,5 @@
-/* Waffle of little people: a cols×rows grid whose cells pop in and re-colour as a function of lt. */
+/* A waffle of little people (waffle): a cols×rows grid of figures that pop in and re-colour as a function of lt — share of a
+ * population at a glance. */
 (function () {
   const { s, gen, clamp, ease, Builder } = PV;
 

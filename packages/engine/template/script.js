@@ -5,9 +5,9 @@
   const META = {
     title: '__TITLE__',     // 口播脚本标题
     name: '__TITLE__',      // 成片文件名前缀
-    libs: [],               // 三方库（kit/node_modules 下的路径，.css 或 UMD .js），如 'katex/dist/katex.min.js'
-    gap: 0.5,               // 翻页间隔（秒），kit 默认 1.5
-    extras: [],             // 本集专用的组件文件（相对本目录），在页面之前加载
+    libs: [],               // 三方库（engine_modules 下的路径，.css 或 UMD .js），如 'katex/dist/katex.min.js'
+    gap: 0.5,               // 翻页间隔（秒），引擎默认 1.5
+    extras: [],             // 本项目专用的组件文件（相对本目录），在页面之前加载
     publish: {              // 发布信息（npm run publish → out/发布信息.md）；章节 = 下面 PAGES 的 section，时间码自动算
       titles: {
         bilibili: '',       // ≤ 80 字
