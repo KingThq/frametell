@@ -36,6 +36,7 @@
     return out;
   }
 
+  const CLOSE = /[，。、；：！？）》」』”’,.;:!?)\]…—%]/, OPEN = /[（《「『“‘(\[]/;
   function spansFor(el, segs) {
     const spans = [];
     for (const sg of segs) {
@@ -44,9 +45,18 @@
         wrap = h('span', (sg.mono ? 'mono ' : '') + (sg.bold ? 'b' : ''), null, el);
         if (sg.color) wrap.style.color = col(sg.color);
       }
+      // lines break only between units: a latin word with the spaces after it, a CJK character with the closing marks
+      // after it (，。」…), an opening mark (「（“) with what follows — so English never splits inside a word, no line
+      // starts with a space or a comma, and none ends on an opening quote
+      let unit = null, open = false, word = false;
       for (const c of sg.text) {
-        if (c === '\n') { h('br', '', null, wrap); continue; }
-        spans.push(h('span', 'ch', c === ' ' ? '&nbsp;' : c.replace('<', '&lt;'), wrap));
+        if (c === '\n') { h('br', '', null, wrap); unit = null; continue; }
+        const latin = /[A-Za-z0-9'’.%$€£¥_-]/.test(c);
+        const join = c === ' ' || CLOSE.test(c) || open || (latin && word);
+        if (!unit || !join) unit = h('span', 'w', null, wrap);
+        spans.push(h('span', 'ch', c === ' ' ? '&nbsp;' : c.replace('<', '&lt;'), unit));
+        open = OPEN.test(c);
+        word = latin;
       }
     }
     return spans;

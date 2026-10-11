@@ -31,6 +31,7 @@ svg.ink { position: absolute; left: 0; top: 0; overflow: visible; }
 .tx .mono { font-family: var(--mono); font-size: 0.86em; }
 .tx .b { font-weight: 700; }
 .ch { display: inline-block; white-space: pre; opacity: 0; }
+.w { white-space: nowrap; }
 .code { position: absolute; font-family: var(--mono); color: #3A332D; white-space: pre; }
 .code .row { height: auto; white-space: pre; }
 .code .kw { color: #8A4F9E; font-weight: 600; }
