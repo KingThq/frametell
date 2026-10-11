@@ -77,4 +77,4 @@ For bugs and feature requests, open an [issue](../../issues).
 
 ## License
 
-[MIT](LICENSE) · Made by **Sitor Team**
+[MIT](LICENSE) · Made by [**Sitor Team**](https://sitor.ai)

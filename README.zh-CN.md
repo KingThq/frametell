@@ -77,4 +77,4 @@ Bug 和功能建议也可以直接提 [Issue](../../issues)。
 
 ## 许可
 
-[MIT](LICENSE) · **Sitor Team** 出品
+[MIT](LICENSE) · [**Sitor Team**](https://sitor.ai) 出品

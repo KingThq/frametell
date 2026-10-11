@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "Turn documents into polished explainer videos with an AI director. Local-first, any model; Relay recommended.",
   "license": "MIT",
-  "author": "Sitor Team",
+  "author": "Sitor Team (https://sitor.ai)",
   "homepage": "https://github.com/sitor-ai/frametell#readme",
   "repository": {
     "type": "git",

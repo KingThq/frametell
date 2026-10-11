@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "Frametell's application core: settings, projects and their runs, events. Transport-agnostic; the CLI serves it over HTTP and the desktop app over IPC.",
   "license": "MIT",
-  "author": "Sitor Team",
+  "author": "Sitor Team (https://sitor.ai)",
   "homepage": "https://github.com/sitor-ai/frametell#readme",
   "repository": {
     "type": "git",
