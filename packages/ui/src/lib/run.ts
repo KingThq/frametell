@@ -177,7 +177,7 @@ export function reduce(v: RunView, e: LoggedEvent): RunView {
     case 'error': r.error = e.message; push({ kind: 'error', key, message: e.message, at }); return r;
     case 'user':
       if (r.awaitingApproval) r.awaitingApproval = false;   // at the storyboard, saying something is the change request
-      else if ((r.ready || r.video) && !r.current && !r.exporting) r.revising = at;   // after the film, it is a change request
+      else if ((r.ready || r.video) && !r.current && !r.exporting) { r.revising = at; r.startedAt = at; }   // after the film, a change request: its own round
       push({ kind: 'user', key, text: e.text, refs: e.refs, at }); return r;
     case 'note': push({ kind: 'note', key, text: e.text, at }); return r;
     case 'paused': {
