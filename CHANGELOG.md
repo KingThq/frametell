@@ -7,85 +7,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-11
+
+The first release of 画说 · Frametell: a local, open-source studio that turns an idea or your material into an explainer video. A director agent drafts a storyboard for you to approve, then writes the narration, voices it, draws every page in a chosen style, checks its own work, and renders a 1080p film with subtitles.
+
 ### Added
 
-- Core: `new Studio({ dataDir, config })` keeps its projects under `<dataDir>/projects` and its settings in the store it is given (`<dataDir>/config.json` by default), so one process can serve several Studios, each seeing only its own projects and keys. Without options nothing changes (`~/.frametell`, or `FRAMETELL_HOME`). The proxy setting still applies to the whole process.
-- The page check catches LaTeX written into plain text (a `\lambda` showing on screen) and asks for the character, or P.tex for a formula.
-- Videos in English as well as Chinese. Home asks for the video's language (the panel's by default; `frametell run --lang en`). The director writes the storyboard, narration and on-screen text in it and talks to you in the panel's language; English storyboards are checked in English (layout words, catch-all verbs, at most 5 words of on-screen text), English sentences are voiced as sentences, and Home picks a voice that speaks the language — ElevenLabs for English, Volcengine for Chinese. An English film is exported as `<name>-with-subtitles.mp4` / `<name>-no-subtitles.mp4`. Tried end to end: a 72-second English film on compound interest, Gemini through Relay, an ElevenLabs voice, word-level subtitle timing.
-- Ready to be open-sourced under the Sitor organization (`sitor-ai/frametell`): CI builds, type-checks and tests every push and pull request on Linux, macOS and Windows; `CONTRIBUTING.md`, `SECURITY.md` (private vulnerability reports), issue forms for bugs and ideas, and a pull request checklist. The architecture and roadmap docs are in English, with the Chinese versions beside them (`*.zh-CN.md`). The READMEs have a community section — the WeCom group in Chinese, Discord in English — and the licence names Sitor Team.
-- Home: the built-in Volcengine voices are listed, and can be heard, before a key is connected. A voice whose service is not connected is marked 「未连接 · 可试听」, says what it needs under the picker with a link straight to Settings → Voices, and keeps the film from starting, instead of the voice list being empty and the film coming out silent.
-- A desktop app to install: `pnpm package:desktop` builds `Frametell.app` (394 MB) and a `.dmg` (173 MB, macOS arm64) with the engine, ffmpeg and everything else inside; it uses the Chrome already on the machine and needs no Node: page agents' `node` runs the app's own. The main process is one minified bundle, only the files the engine reads from disk are shipped (fonts trimmed to the weights it uses), and only Chinese and English Chromium locales are kept. The ffmpeg inside is a pinned, checksummed GPLv3 build with its licence and source beside it, refused if it has nonfree parts (ffmpeg-static's macOS binary may not be redistributed). Not signed yet, so macOS asks before the first open (right-click → Open).
-- The READMEs show films Frametell made end to end, in their own language: the English one *Why is the sky blue?* (chalkboard) and *Why starting early matters* (warm illustration), the Chinese one 测不准原理 and 番茄工作法 — frames and the films to watch, in `docs/media`.
-- Every exported mp4 (the finished-film card, the export line in the conversation, the film view's toolbar) has 「在访达中显示」 in the desktop app (Explorer on Windows, the file manager elsewhere) — only for files of Studio's own projects — and, in a browser, which cannot open one, 「文件位置」: the full path with a copy button.
-- Pages fix themselves instead of breaking the film. The engine isolates each page: one whose code throws — while loading, building or at some moment — shows its name on quiet paper while the rest of the film builds and plays, so the preview stays watchable while pages are being drawn. Every such error is recorded with where it happened in the page's code. The page check reports it as an issue for the page's agent to fix, and before drawing a single frame checks every `P.x(` / `PV.x(` call against the live engine (「unknown API: P.titel does not exist — did you mean P.title? — at pages/p04.js:5」, 「PV.C is not a function — it holds PV.C.ink, …」). A page still throwing after its rounds is marked not drawn, and an export refuses a film with a broken page.
-- API: `GET /api/providers` (and the desktop `providers` method) lists the providers Studio offers; settings take hand-added model ids per provider (`models`) and the user's own OpenAI- or Anthropic-compatible endpoints (`custom`), both checked before they are saved — removing an endpoint removes its key.
-- Models: Studio's own provider list — Relay (recommended), Claude, OpenAI, Gemini, Grok, OpenRouter, DeepSeek, Kimi, Zhipu GLM, Qwen, MiniMax, SiliconFlow, Doubao, Hunyuan, Xiaomi MiMo and Ollama — each with its endpoint and where to get a key. Every provider can point at the user's own base URL, and model ids it does not list can be added by hand; the OpenAI-compatible ones (GLM, Qwen, SiliconFlow, Doubao, Hunyuan, Ollama) list their models from `/models`.
-- Rebrand to 画说 · Frametell (by Sitor Team): a new mark (「」 corners, which are both Chinese quotation marks and a viewfinder, around a recording dot), a wordmark that reads 画说 in Chinese and FRAMETELL in English, a new favicon and desktop app name, and a brand handbook in `docs/brand`. The README is now in English and Chinese, with banners for each language in light and dark.
-- The interface in Chinese or English. Settings → Language: follow system, 中文 or English. The choice is saved with the other settings and the core, CLI and server use it too for their errors, checks and notes. Dictionaries are in `packages/ui/src/i18n/<locale>/`; Chinese is the source and English is typed against it, so a missing string fails the build.
-- Live progress while a response is still being written: the status line says what is being written and how far it has got (「第 1 页 · 在写画面 · 已写 212 行」) with the line it is on, and the page list shows it too. Progress is streamed from the Pi runtime about once a second and never written to the log. Providers that hand a tool call over only when it is whole (Gemini) show the phase instead — 「在想」, then 「在写画面」 once the thinking goes quiet — and check rounds say 「在截图自检」 / 「在看自检截图」.
-- Page canvas: each page card offers 「引用」 on hover, to hand that page to the director without opening it.
-- Composer: a reference tray above the message. Hand the director exactly what you mean — a page (「改这一页」), a narration line or a frame from the workbench (「引用」), or files and images you attach, paste (⌘V) or drop. References show as chips with thumbnails; image and frame chips open full size; Backspace in an empty box removes the last one; the page you are looking at is offered as a one-click chip.
-- Agent: references reach the director as a `<references>` block ahead of the message, with film times and project paths it can open (frames and images with its read tool). Attached documents are parsed to Markdown under `refs/`.
-- API: `POST /api/projects/:id/attach` (and the desktop `attach` method) saves a file for a message; `say` takes `refs`.
-- Page focus: a strip of full-resolution key frames, one per narration line, linked both ways with the lines and the player — whatever is on screen is highlighted in both.
-- Page focus: a lightbox to read any frame or the self-check sheet in detail (click to zoom where you point, drag to pan, wheel zoom, ←/→ to step), and a full-screen button on the player.
-- API: `GET /api/projects/:id/frame?t=` (and the desktop `frame` method) cuts a full-resolution 1920×1080 frame from the finished film, cached until the film changes.
-- Workbench: drag the divider between the conversation and the stage to resize them, like VS Code; double-click resets, arrow keys nudge, and the width is remembered.
-- Settings: dedicated cards for the official Claude (Anthropic) and OpenAI APIs, each with an optional relay base URL.
-- Settings: a 「用这个」 button switches the default model to a connected provider in one click; the provider in use is marked.
-- Settings: an HTTP proxy for every outbound request — Pi, voices, model lists, and the Claude Code / Codex CLIs. Local addresses always go direct; the proxy password is never shown to the panel.
-- Home: the model field shows where a run goes (runtime · endpoint · proxy), links to settings, and blocks a runtime/model mismatch.
-- Voice: previews of the built-in Volcengine voices ship with Studio, so listening to a voice never spends TTS credit.
-- Workbench: a live line shows what the director is doing while you wait; revisions get a 「修改计划」 chapter and a 修改中 status.
-- Workbench: film view with a page lane, a canvas of page cards with their narration, and a focus view for one page.
-- Workbench: playable exports with a subtitles on/off toggle; cost, model and token usage in a popover.
-- Styles: whiteboard, chalkboard and tech-dark.
-- Agent runtimes: Claude Agent SDK and Codex, both API-key only.
-- Conversation with the director, runs that resume after the app is closed, optional materials, voice samples.
+#### Making a film
 
-### Changed
+- Start from one sentence or from material: PDF, Word, PowerPoint, EPUB, Markdown and images, parsed to Markdown beforehand (headings, lists, tables, pictures, slide notes).
+- A storyboard of pages and beats (a concrete object, what it does, the camera, the text on screen) that you approve or change before anything is drawn. It is checked before you see it: layout words instead of things, catch-all verbs, too much text on screen, an opening or ending carried by text, and numbers on screen that the material does not contain.
+- Narration written for the voice, voiced with word-level timing, and animations cued to the words they belong to.
+- Pages drawn up to 10 at once. Each page checks itself against lint (out of frame, the subtitle band, overlapping or too-small text, empty boxes, text-heavy or sparse pages, frames that differ depending on playback, LaTeX left in plain text) and against screenshots of itself, with up to three rounds to fix what it finds. A final pass then reviews the whole film.
+- A page whose code breaks shows its name in place while the rest of the film plays. The error, with the line it came from, goes back to that page's agent, and an export refuses a film with a broken page.
+- The film is previewed live as soon as its pages are drawn. An mp4 is rendered only when you export, and incrementally: after a one-page change, only the segments that page appears in are rendered again.
+- Changes by conversation: a request that names pages goes straight to them, and anything that may touch the narration is planned first. Pages are fixed with edits, not rewrites, and every revision says where its time went (a one-page picture change takes about half a minute).
+- Hand the director exactly what you mean: a page, a narration line, a frame, or files and images you attach, paste or drop. They show as chips above the message.
+- Runs pick up where they stopped after the app is closed. Cost, model and token use are shown for every film.
 
-- Installs are about half the size. ffprobe is no longer needed (durations and picture sizes come from ffmpeg), and the parked Claude Agent SDK and Codex runtimes are optional peer dependencies loaded only through `@frametell/agent/runtime/claude` or `/codex`, so `npm install frametell` stays near 390 MB instead of 730 MB. Every package carries its repository, homepage and author, ready to publish.
-- The project is called Frametell everywhere: the repository (`sitor-ai/frametell`), the command (`frametell`, `frametell run`), the packages (`@frametell/*`) and the data directory (`~/.frametell`, or `FRAMETELL_HOME`). An existing `~/.frametell` moves to `~/.frametell` the first time Frametell starts, and every project's links to the engine are renewed on start, so projects keep working after the install moves; materials parsed before the rename are still recognised.
-- **The component library has no course in it.** Every file in `engine/lib` is named for what it draws (`gauges.js`, `radar.js`, `filetree.js`, … instead of `widgets01.js`, `ctx14.js`, `jit18.js`) and takes its labels, colours and numbers from the page; the data of the course the library came from — its pillars and dimensions, framework scores, the skills installed on one machine, a demo project's tree, step roadmaps — is gone. Components whose names clashed are renamed (`filetree`, `lanes`, `stageDots`, `packet`, `cellgrid`, `netgraph`, `scoretubes`), and the helpers several files shared — `P.move`, `P.pathAt`, `PV.keys`, `PV.mix`, `PV.arcAt`, `PV.mmss` — are now part of the engine, so any file can be used alone. A gallery project (`engine/test/gallery`) draws every component and is a test: all files load together, no name shadows another or the engine's, and nothing throws. Projects keep the copies in their own `extras/`.
-- Engine: forgiving where pages often guess — `PV.K` takes an easing by name (`'out'`) as well as a function, and `PV.ease` is callable (as `PV.ease.inOut`) besides holding the named easings; a wrong easing says which ones exist.
-- Pages are drawn up to 10 at once (was 3; a saved 3 becomes 10). With Claude, which bills writing the shared page prompt to its cache, the first page goes alone until its first answer is back so the rest find the prompt cached; with Gemini or OpenAI every page starts at once. While several pages are drawn, the status line says so in one steady line (「同时在画 3 页」) and each page's own moment (thinking, writing, checking its pictures) is shown on its row, instead of the line hopping between pages.
-- Conversation: a stage's steps (files read, checks run, the model's notes to itself) show only while it runs or when it failed; once it has its result — a storyboard to confirm, pages drawn, a plan made — only the result and what the director said remain.
-- Settings → model providers: a long model list can be searched, narrowed to one maker by the id's prefix (OpenRouter's 401 models: openai 97, qwen 51, google 33, …) and is shown 40 at a time; every provider links to its site beside its description, and its key page link stays visible after connecting.
-- **Settings is a centred dialog.** Sections on the left (model providers, voices, general, network proxy, this computer — one entry each, so a new kind of setting is one more entry); model providers and voices are a list with the open one beside it. Each provider shows its official mark, whether it is connected and which one is in use; its page has the key, an optional own base URL, and its models — the ones it lists and ids typed in by hand — any of which can be made the default. OpenAI- or Anthropic-compatible endpoints of your own can be added. On a phone the sections become tabs and a provider opens on its own page.
-- **No native selects on Home.** The model is chosen from a searchable list grouped by provider, with marks; an id the provider does not list can be typed and used. The voice is chosen from a list where every voice can be heard without choosing it.
-- The Agent-runtime choice is gone from Settings and Home; the line under the model only appears when the run goes through your own base URL or a proxy.
-- Every project runs on the Studio Agent (Pi), which works with any provider. The Claude Agent SDK and Codex runtimes are parked: their code stays in `packages/agent`, but Studio no longer offers them. The user's own base URL and hand-added model ids now apply to every provider, through the model catalog.
-- A change to the picture of the page(s) it names goes straight to those pages, without a planning step; anything that may touch the narration, or names no page, is still planned first. Every revision ends with where its time went (「这次改了 27 秒：画和自检 24 秒 · 全片检查 3 秒」). On the sample film: a one-page picture change in 27 s.
-- An existing page can no longer be rewritten whole: the write tool (and the Claude Agent runtime's Write, through its hook) refuses to overwrite a page of 40+ lines and points the agent to edit; new pages and other files are written as before.
-- Pages are fixed with targeted edits: a revised page's agent is handed the current code, and every check round (and the film review) asks for edits instead of rewriting the file. On the sample film a one-page change had spent 5½ of its 7 minutes on three whole-file rewrites of ~10k tokens each.
-- Revisions are faster and cheaper. Each change is planned in a fresh, small session that is handed the storyboard, the script and the code of the pages the request names (instead of resuming the session that made the whole film and reading files one round trip at a time), and a revised page gets two check rounds instead of three. On the sample film a one-page change went from about 8 minutes plus a render to under a minute to preview; deciding what to change went from 43 s to 16 s.
-- Export renders incrementally. The video is cut into segments that follow the pages, each cached under a key of what draws it (the pages on screen in it with their timing, the episode's settings, the engine); an export renders only the segments whose key changed, each worker drawing its list in one browser. On a 53-second film: a cold export takes as long as before, an export after changing one page renders 6 of 20 segments (video 29.6 s → 9.1 s).
-- Film view: a quieter page lane — page names sit beneath the pictures instead of over them, the page on screen is lit with a fine outline while the others rest a step back, the playhead is a thin line inside the current page, and only pages that need a look carry a mark.
-- **A finished film is previewed live; mp4 is made only on export.** Making a film or revising one now ends once the pages are drawn and checked — the live player is the film, with its voice. 「导出 mp4」 renders on request (「导出最新版」 once a revision has changed the film); change requests sent during an export wait for it. A revision therefore no longer waits for a full render. The CLI's `run` still ends with an mp4.
-- Page focus: key frames come from the exported mp4 when it is current, else straight from the live film in one headless pass, so a revised page shows its new pictures without an export.
-- API: `GET /api/projects/:id/frames?t=` (batch) replaces `/frame`; `POST /api/projects/:id/export` starts an export; project summaries carry `stale` when the mp4 is older than the film.
-- Composer: rebuilt as a card with the reference tray, an attach button, a drop target and a toolbar, instead of a single line.
-- The CLI server keeps its panel token per data directory, so a restart no longer locks out a panel that is already open.
-- Page agents receive their component reference and a worked example up front instead of searching the engine.
-- The ETA during a revision counts only the pages being redrawn.
+#### Languages
 
-### Fixed
+- Films in Chinese or English. Home asks for the film's language (the panel's by default). The director writes the storyboard, narration and on-screen text in it and talks to you in the panel's language; English storyboards are checked in English, and English text wraps between words.
+- The interface in Chinese or English, following the system or chosen in Settings; the core, CLI and server messages follow it too.
 
-- Text on a page wraps between words: English no longer splits inside a word, and no line starts with a space or a Chinese comma.
-- Voicing no longer stops on a page whose audio ends in silence: durations read from ffmpeg are rounded to 1/100 s, which made the trailing silence look a few milliseconds short.
-- With the language set to follow the system, the core's own messages on a Mac follow the system's language (as the panel does) instead of a terminal's `LANG`, which is often en_US.
-- An export cut short by its process ending (the app quit or was killed) is recognised however far it had got, and shows as interrupted with a way to export again, instead of 「正在导出」 counting up forever.
-- A project stopped loading (black player, grey thumbnails) once five or six Studio tabs were open: each tab's live event stream held one of the six connections a browser gives a host. A hidden tab now lets its stream go and picks up from its last event when shown again; nine open tabs load as fast as one.
-- A page whose code throws is no longer marked 「没画出来」 at its first check: the error and where it happened (the page's line, the engine function) go back to its agent to fix, with one extra round for it; the page fails only if it still throws after that.
-- Settings: the connection status sits beside the provider's name instead of under the close button; Kimi's mark is drawn in the text colour so it shows on a light background.
-- Conversation: every edit reads as what it changes (「修改口播稿」「修改分镜」「修改第 5 页」) — tool summaries now lead with the path before any file content, and older logs whose path was cut off are recognised from the text they change; repeats read 「2 次」 instead of 「×2」.
-- The finished-film card times the latest round (a revision counts from the change request), not the whole life of the project.
-- Page focus: opening a page no longer flashes the start of the film — the player boots on that page, with the page's picture standing in until it is ready.
-- Page focus: narration times are positions in the film, matching the frames and the player, instead of offsets within the page; the time column is no longer clipped and the stray scrollbar corner is gone.
-- Codex talks to gateways over HTTP only, instead of failing five WebSocket attempts per turn.
-- Turning a page in the focus view seeks the film instead of reloading the player.
-- Renders no longer stall when the browser hangs on close.
-- Electron no longer wraps main-process errors in its own text before they reach the panel.
+#### Styles and engine
 
-[Unreleased]: https://github.com/sitor-ai/frametell/commits/main
+- Five styles, each with a grammar card and a benchmark film used as a regression test: warm illustration (`warm-story`), quiet study (`study`), chalkboard, whiteboard and tech-dark.
+- An engine where every page is a function of time: shapes, text, charts, KaTeX, three.js scenes, camera presets (quick push, pan, slam, shake), brand logos from simple-icons, and a component library of 28 files (gauges, timelines, flows, sequence diagrams, 3D stacks, file trees, rankings and more) that take their data from the page. A gallery project draws every component and is a test.
+- A film check on the rendered mp4 that blocks blank frames and reports motion.
+
+#### Models and voices
+
+- Any model: Relay (recommended), Claude, OpenAI, Gemini, Grok, OpenRouter, DeepSeek, Kimi, Zhipu GLM, Qwen, MiniMax, SiliconFlow, Doubao, Hunyuan, Xiaomi MiMo and Ollama, each with its own base URL if you have one. Models a provider does not list can be typed in, and your own OpenAI- or Anthropic-compatible endpoints can be added. An optional HTTP proxy applies to every request.
+- Voices from Volcengine TTS (Chinese) and ElevenLabs (English and more). Every voice can be heard before you choose it, and the built-in Volcengine previews ship with Frametell, so listening costs nothing.
+- Keys stay on your computer, in a settings file only you can read, and the panel only ever sees them masked.
+
+#### Workbench
+
+- A conversation with the director beside the stage, with a live line saying what is being written and how far it has got.
+- A film view with a page lane, a canvas of every page with its narration, and a focus view for one page: key frames linked both ways with its narration lines and the player, a lightbox to read any frame or self-check sheet in detail.
+- Settings in one dialog: model providers with their marks, voices, general settings, the network proxy and a check of this computer (Chrome, ffmpeg, git).
+- Exports with and without burned-in subtitles. In the desktop app, 「在访达中显示」 shows the file in Finder; in a browser, its path can be copied.
+
+#### Apps and API
+
+- A desktop app for macOS (Apple silicon), built with `pnpm package:desktop`. It contains the engine and a redistributable GPLv3 ffmpeg, and needs neither Node nor anything else installed except Chrome.
+- A command line: `frametell` opens the studio in your browser; `frametell run <material…> [--style] [--duration] [--model] [--lang]` makes a film straight through.
+- One core behind every client (`@frametell/core`), with an HTTP + SSE server in the CLI and IPC in the desktop app. A `Studio` can take its own data directory and settings store, and keeps its data in `~/.frametell` (or `FRAMETELL_HOME`) by default.
+- Open-source groundwork: MIT licence, CI on Linux, macOS and Windows, contributing and security guides, issue forms and a pull request checklist, READMEs and docs in English and Chinese.
+
+### Known limitations
+
+- The desktop app is not signed or notarized yet: the first time, open it with right-click → Open. Only an Apple-silicon macOS build is provided; Windows is not packaged yet.
+- Chrome, Edge or Chromium must be installed; Frametell draws and renders with it.
+- Undoing a change uses git; without it a film is still made, but its versions are not kept.
+- The npm packages are not published yet; install from source (see the README).
+- The Claude Agent SDK and Codex runtimes are in the code but not offered; every film runs on the built-in agent, which works with any provider.
+
+[Unreleased]: https://github.com/sitor-ai/frametell/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/sitor-ai/frametell/releases/tag/v0.1.0
