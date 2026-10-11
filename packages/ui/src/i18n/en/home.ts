@@ -25,6 +25,9 @@ const en: typeof zh = {
     preview: 'Play sample of {name}',
     stop: 'Stop',
     listen: 'Listen',
+    noKeyTag: 'Not connected · samples only',
+    needKey: "{service} isn't connected yet. You can listen to the samples, but to narrate with it you need an API key.",
+    needKeyLink: 'Open Settings',
   },
   via: {
     relay: 'via your relay {host}',
@@ -33,6 +36,7 @@ const en: typeof zh = {
   skipped: 'Some files are in formats we can’t read yet and were skipped',
   hintInput: 'Say what you want to explain, or attach your material',
   hintModel: 'Pick a model first',
+  hintVoiceKey: 'Connect the voice service to start',
   titleA: 'Turn an idea into a ',
   titleB: 'beautiful',
   titleC: ' explainer video',

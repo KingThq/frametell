@@ -13,7 +13,7 @@ export default {
     en: 'English',
   },
   voice: {
-    desc: '不连接也能出片，只是没有声音。Key 只保存在这台电脑上。',
+    desc: '配音要用它：连接后才能用这家的音色出片，没连接时只能试听。Key 只保存在这台电脑上。',
     volcengine: '火山引擎',
     elevenlabs: 'ElevenLabs',
     volcengineBlurb: '豆包语音合成，中文音色',

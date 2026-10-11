@@ -51,7 +51,7 @@ function PlayButton({ v, p, size = 'md' }: { v: Voice; p: ReturnType<typeof useP
   );
 }
 
-export function VoicePicker({ id = 'voice', voices, value, onChange }: { id?: string; voices: Voice[]; value?: string; onChange: (id: string) => void }) {
+export function VoicePicker({ id = 'voice', voices, value, onChange, unconfigured = [] }: { id?: string; voices: Voice[]; value?: string; onChange: (id: string) => void; unconfigured?: readonly Voice['provider'][] }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
   const [hi, setHi] = useState(0);
@@ -117,7 +117,7 @@ export function VoicePicker({ id = 'voice', voices, value, onChange }: { id?: st
           <div ref={list} tabIndex={-1} role="listbox" aria-label={t('home.voice.label')} aria-activedescendant={flat.length ? `${id}-o${hi}` : undefined} className="max-h-[320px] overflow-y-auto overscroll-contain py-1.5 outline-none">
             {groups.map((g) => (
               <div key={g.provider} role="group" aria-label={PROVIDER_NAME[g.provider]()}>
-                {groups.length > 1 && <div className="flex items-center gap-2 px-3 pb-1 pt-2.5 text-[11.5px] font-medium text-ink-3"><ProviderLogo id={g.provider} size={13} />{PROVIDER_NAME[g.provider]()}</div>}
+                {(groups.length > 1 || unconfigured.includes(g.provider)) && <div className="flex items-center gap-2 px-3 pb-1 pt-2.5 text-[11.5px] font-medium text-ink-3"><ProviderLogo id={g.provider} size={13} />{PROVIDER_NAME[g.provider]()}{unconfigured.includes(g.provider) && <span className="ml-auto font-normal">{t('home.voice.noKeyTag')}</span>}</div>}
                 {g.items.map((v) => {
                   i++;
                   const idx = i, on = v.id === value;

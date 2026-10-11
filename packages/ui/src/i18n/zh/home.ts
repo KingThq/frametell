@@ -24,6 +24,9 @@ export default {
     preview: '试听 {name}',
     stop: '停止',
     listen: '试听',
+    noKeyTag: '未连接 · 可试听',
+    needKey: '{service}还没有连接，可以先试听；用它配音，要先填 API Key。',
+    needKeyLink: '去设置',
   },
   via: {
     relay: '经你的中转 {host}',
@@ -32,6 +35,7 @@ export default {
   skipped: '有些文件格式还不支持，已跳过',
   hintInput: '说一句想讲什么，或者附上资料',
   hintModel: '先选一个模型',
+  hintVoiceKey: '连接配音服务后才能开始',
   titleA: '把一个想法，讲成一条',
   titleB: '好看的',
   titleC: '视频',

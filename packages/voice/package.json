@@ -4,14 +4,14 @@
   "description": "Narration for Frametell: Volcengine TTS 2.0 and ElevenLabs, cut into cues with per-character timing.",
   "license": "MIT",
   "author": "Sitor Team",
-  "homepage": "https://github.com/sanyuan0704/frametell#readme",
+  "homepage": "https://github.com/sitor-ai/frametell#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/sanyuan0704/frametell.git",
+    "url": "git+https://github.com/sitor-ai/frametell.git",
     "directory": "packages/voice"
   },
   "bugs": {
-    "url": "https://github.com/sanyuan0704/frametell/issues"
+    "url": "https://github.com/sitor-ai/frametell/issues"
   },
   "type": "module",
   "main": "./dist/index.js",

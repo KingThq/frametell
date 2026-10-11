@@ -41,7 +41,7 @@ function route(s: PublicSettings | undefined, modelId: string | undefined) {
   return parts.length ? parts.join(' · ') : undefined;
 }
 
-export function Home({ openSettings }: { openSettings: () => void }) {
+export function Home({ openSettings }: { openSettings: (section?: string) => void }) {
   const { t, locale } = useT();
   const projects = useLoad(() => client.projects());
   const models = useLoad(() => client.models());
@@ -70,9 +70,12 @@ export function Home({ openSettings }: { openSettings: () => void }) {
   const speaks = (v: { lang?: string }) => !v.lang || v.lang === filmLang;
   const defaultVoice = voiceList.find((v) => v.id === settings.data?.defaults.voice?.id && speaks(v)) ?? voiceList.find(speaks) ?? voiceList[0];
   const voiceId = voice ?? defaultVoice?.id;
-  const voiceOtherLang = !!voiceList.find((v) => v.id === voiceId && !speaks(v));
+  const picked = voiceList.find((v) => v.id === voiceId);
+  // a voice of a service with no key can be heard, not used: the film would come out silent
+  const voiceNoKey = !!picked && voices.data?.configured[picked.provider] === false;
+  const voiceOtherLang = !!picked && !speaks(picked);
   const hasInput = !!topic.trim() || files.length > 0;
-  const ready = hasInput && !!modelId && !busy;
+  const ready = hasInput && !!modelId && !voiceNoKey && !busy;
   const add = (list: FileList | null) => {
     if (!list) return;
     const ok = [...list].filter((f) => READABLE.test(f.name));
@@ -98,7 +101,7 @@ export function Home({ openSettings }: { openSettings: () => void }) {
     if (!cur.includes(id)) await client.updateSettings({ models: { [provider]: [...cur, id] } });
     settings.reload(); models.reload();
   };
-  const hint = noModel ? null : !hasInput ? t('home.hintInput') : !modelId ? t('home.hintModel') : null;
+  const hint = noModel ? null : !hasInput ? t('home.hintInput') : !modelId ? t('home.hintModel') : voiceNoKey ? t('home.hintVoiceKey') : null;
 
   return (
     <main className="mx-auto w-full max-w-[880px] px-6 pb-24 pt-14 sm:pt-20">
@@ -149,8 +152,14 @@ export function Home({ openSettings }: { openSettings: () => void }) {
           </div>
           <div>
             <label htmlFor="voice" className="fs-label">{t('home.voice.label')}</label>
-            <VoicePicker voices={voiceList} value={voiceId} onChange={setVoice} />
-            {voiceOtherLang && <p className="mt-1.5 text-[12px] text-ink-2">{t('home.voice.langMismatch')}</p>}
+            <VoicePicker voices={voiceList} value={voiceId} onChange={setVoice} unconfigured={voices.data ? (['volcengine', 'elevenlabs'] as const).filter((p) => !voices.data!.configured[p]) : []} />
+            {voiceOtherLang && !voiceNoKey && <p className="mt-1.5 text-[12px] text-ink-2">{t('home.voice.langMismatch')}</p>}
+            {voiceNoKey && picked && (
+              <p className="mt-1.5 text-[12px] text-ink-2">
+                {t('home.voice.needKey', { service: picked.provider === 'volcengine' ? t('home.voice.volcengine') : 'ElevenLabs' })}
+                <button type="button" className="ml-1 text-accent-ink underline-offset-2 hover:underline" onClick={() => openSettings('voice')}>{t('home.voice.needKeyLink')}</button>
+              </p>
+            )}
           </div>
           <fieldset className="sm:col-span-2">
             <legend className="fs-label">{t('home.style')}</legend>
@@ -167,7 +176,7 @@ export function Home({ openSettings }: { openSettings: () => void }) {
           <div className="sm:col-span-2">
             <div className="flex items-baseline justify-between gap-3">
               <label htmlFor="model" className="fs-label">{t('home.model')}</label>
-              <button type="button" onClick={openSettings} className="-mr-1 inline-flex items-center gap-1 rounded-md px-1 text-[12px] text-ink-3 transition-colors hover:text-ink">
+              <button type="button" onClick={() => openSettings()} className="-mr-1 inline-flex items-center gap-1 rounded-md px-1 text-[12px] text-ink-3 transition-colors hover:text-ink">
                 <Settings2 size={13} aria-hidden /> {t('home.modelSettings')}
               </button>
             </div>
@@ -178,7 +187,7 @@ export function Home({ openSettings }: { openSettings: () => void }) {
 
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-b-2xl border-t border-line bg-paper-2/50 px-5 py-3.5">
           {noModel ? (
-            <p className="text-[12.5px] text-ink-2">{t('home.noModelA')}<button className="text-accent-ink underline-offset-2 hover:underline" onClick={openSettings}>{t('home.noModelLink')}</button>{t('home.noModelB')}</p>
+            <p className="text-[12.5px] text-ink-2">{t('home.noModelA')}<button className="text-accent-ink underline-offset-2 hover:underline" onClick={() => openSettings()}>{t('home.noModelLink')}</button>{t('home.noModelB')}</p>
           ) : error ? (
             <p className="text-[12.5px] text-seal" role="alert">{error}</p>
           ) : hint ? (

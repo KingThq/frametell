@@ -4,14 +4,14 @@
   "description": "Hand-drawn explainer video engine: page runtime as a pure function of time, components, styles, and the render pipeline.",
   "license": "MIT",
   "author": "Sitor Team",
-  "homepage": "https://github.com/sanyuan0704/frametell#readme",
+  "homepage": "https://github.com/sitor-ai/frametell#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/sanyuan0704/frametell.git",
+    "url": "git+https://github.com/sitor-ai/frametell.git",
     "directory": "packages/engine"
   },
   "bugs": {
-    "url": "https://github.com/sanyuan0704/frametell/issues"
+    "url": "https://github.com/sitor-ai/frametell/issues"
   },
   "type": "module",
   "files": [

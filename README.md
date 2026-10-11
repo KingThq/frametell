@@ -52,7 +52,7 @@ Built-in styles: `warm-story`, `study`, `chalkboard`, `whiteboard`, `tech-dark`.
 You need Node.js 22.19 or later, pnpm, and Chrome, Edge or Chromium installed. FFmpeg is bundled.
 
 ```bash
-git clone <this repo> && cd <repo>
+git clone https://github.com/sitor-ai/frametell.git && cd frametell
 pnpm install && pnpm build
 
 export RELAY_API_KEY=...          # or ANTHROPIC_API_KEY / OPENAI_API_KEY

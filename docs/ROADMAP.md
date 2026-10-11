@@ -1,51 +1,53 @@
-# 路线图
+**English** · [简体中文](ROADMAP.zh-CN.md)
 
-一步一步来，每一步都能独立验证。做完的打勾，没做完的写清楚还差什么。
+# Roadmap
 
-## M1 · 引擎（packages/engine）
-- [x] 从 kit 迁入运行时、模板、工具；去掉个人内容（课程流程、个人音色、私有路径）
-- [x] 渲染改为 `playwright-core` + 系统浏览器探测 + `ffmpeg-static`
-- [x] lint 增加字号检查（正文 < 28px 报错）与空框检查
-- [x] 组件库 `lib/` 去课程化：按画的东西命名，数据由页面传入，名字互不覆盖，索引在 `packages/agent/prompts/LIB.md`
-- [x] 回归：各风格的标杆项目（storyboard-lint + lint + 确定性双渲）和组件样片 `test/gallery`（全部组件一起加载、无运行时错误）
-- [x] 页面隔离：一页出错只显示占位，错误连同代码位置交给画面 Agent 修
-- [x] 增量导出：按页分段缓存，改一页只重渲受影响的段
+We go one step at a time, and each step can be verified on its own. Finished items are checked. Unfinished items say what's still missing.
 
-## M1.5 · 质量体系（见 QUALITY.md）
-- [x] 分镜改为拍点结构 + 分镜 lint（版面词、万能动词、屏上字、首尾页、数字溯源、节奏）
-- [x] 页面 lint 补齐：空框、文字主导面积、画面饱满度、推拉切字、确定性双渲
-- [x] 成片门禁（Node + ffmpeg）：空画面为门禁；运动类指标只报告（暂无标定集）
-- [x] 镜头预设（快推 / 横移 / 砸入 / 震镜）与词级卡点
-- [x] 暖调叙事插画：语法卡 → 插画组件库 → 标杆项目（复利，61 秒）
-- [x] 白板、黑板、科技深色：语法卡 + 标杆项目
-- [ ] 安静书房（默认样式）：还缺语法卡和标杆项目
-- [ ] 评测集与经验库：改提示词前后有数字可比；Agent 踩过的坑沉淀下来
-- [ ] 一页修两轮仍坏时，换更强的模型兜底
+## M1 · Engine (packages/engine)
+- [x] Move the runtime, templates and tools over from kit; remove personal content (course workflow, personal voices, private paths)
+- [x] Rendering switched to `playwright-core` + system browser detection + `ffmpeg-static`
+- [x] lint adds a font size check (body text < 28px is an error) and an empty box check
+- [x] Component library `lib/` no longer tied to courses: components are named after what they draw, data comes from the page, names don't overwrite each other, and the index is in `packages/agent/prompts/LIB.md`
+- [x] Regression: reference projects for each style (storyboard-lint + lint + deterministic double render) and a component sample gallery `test/gallery` (all components loaded together, no runtime errors)
+- [x] Page isolation: a page that errors only shows a placeholder, and the error, with its code location, goes to the page agent to fix
+- [x] Incremental export: segments are cached per page, so changing one page only re-renders the affected segments
 
-## M2 · Agent 与模型（packages/agent、packages/models、packages/voice）
-- [x] 模型目录：16 家 provider（Relay 推荐）+ 自填模型 id + 自定义 OpenAI / Anthropic 兼容端点 + 代理
-- [x] 导演 Agent（基于 Pi）：分镜 → 口播 → 画面（最多 10 页并发）→ 全片检查，编排器强制 lint / 截图
-- [x] 修改走增量：只改点到的页，预览即时，mp4 只在导出时生成
-- [x] 配音：火山 TTS 2.0（内置试听）
-- [ ] 配音：ElevenLabs 已接入，还没用真实 key 跑通整片
-- [x] 无界面跑通：`frametell run <素材>` 产出一条视频
-- Claude Agent SDK 与 Codex 运行时：代码保留，暂不开放
+## M1.5 · Quality system (see QUALITY.md)
+- [x] Storyboard switched to a beat structure + storyboard lint (layout words, catch-all verbs, on-screen text, first and last pages, number sourcing, pacing)
+- [x] Page lint completed: empty boxes, text-dominated area, frame fullness, push/pull and cut text, deterministic double render
+- [x] Final-film gate (Node + ffmpeg): blank frames are a gate; motion metrics are reported only (no calibration set yet)
+- [x] Camera presets (quick push / pan / slam-in / shake) and word-level sync to beats
+- [x] Warm narrative illustration: grammar card → illustration component library → reference project (compound interest, 61 seconds)
+- [x] Whiteboard, chalkboard, tech dark: grammar card + reference project
+- [ ] Quiet study (the default style): still missing a grammar card and a reference project
+- [ ] Eval set and lessons library: numbers to compare before and after prompt changes; record the pitfalls the agent has hit
+- [ ] When a page is still broken after two rounds of fixes, fall back to a stronger model
 
-## M3 · 面板（packages/ui、apps/cli、apps/desktop）
-- [x] 本地服务：项目、素材上传与解析、SSE 事件流、断点续跑
-- [x] 首页、工作台（对话 + 成片 / 页面 / 单页聚焦）、分镜确认、导出（在访达中显示 / 复制路径）
-- [x] 设置：模型与密钥、配音、通用（语言）、网络代理、本机环境
-- [x] 中英双语界面
-- [x] 桌面端（Electron，开发模式）
-- [ ] 桌面端打包：.app / .dmg、签名与公证、自动更新
+## M2 · Agent and models (packages/agent, packages/models, packages/voice)
+- [x] Model catalog: 16 providers (Relay recommended) + custom model ids + custom OpenAI- / Anthropic-compatible endpoints + proxy
+- [x] Director agent (built on Pi): storyboard → narration → pages (up to 10 in parallel) → full-film check, with the orchestrator enforcing lint / screenshots
+- [x] Edits are incremental: only the pages you point at change, the preview updates instantly, and the mp4 is only produced on export
+- [x] Voiceover: Volcengine TTS 2.0 (with built-in preview)
+- [ ] Voiceover: ElevenLabs is integrated but hasn't yet run a full film with a real key
+- [x] Headless run works end to end: `frametell run <materials>` produces a video
+- Claude Agent SDK and Codex runtimes: code kept, not enabled for now
 
-## M4 · 发布
-- [ ] `npx frametell` 一条命令安装与启动
-- [ ] README 配一条示例成片
-- [ ] 打 0.1.0 版本，仓库公开（MIT）
+## M3 · Studio (packages/ui, apps/cli, apps/desktop)
+- [x] Local server: projects, material upload and parsing, SSE event stream, resume from where a run stopped
+- [x] Home, workspace (chat + film / pages / single-page focus), storyboard approval, export (show in Finder / copy path)
+- [x] Settings: models and keys, voiceover, general (language), network proxy, local environment
+- [x] Chinese and English interface
+- [x] Desktop app (Electron, dev mode)
+- [ ] Desktop packaging: .app / .dmg, signing and notarization, auto-update
 
-## M5 · 画布（二期）
-- [x] 每句口播的关键帧，与播放器、口播双向联动
-- [x] 引用某一页 / 某一句 / 某一帧，让导演只改那里
-- [ ] 改一句口播、只重配这一句
-- [ ] 在画面上圈选区域，让 Agent 修改
+## M4 · Release
+- [ ] `npx frametell`: install and launch with one command
+- [ ] Add a sample film to the README
+- [ ] Tag version 0.1.0 and make the repo public (MIT)
+
+## M5 · Canvas (phase two)
+- [x] Keyframes for each narration line, linked both ways with the player and the narration
+- [x] Reference a specific page / line / frame so the director changes only that part
+- [ ] Change one narration line and re-voice only that line
+- [ ] Circle an area on a page and have the agent change it

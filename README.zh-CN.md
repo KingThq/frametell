@@ -13,7 +13,7 @@
 
 它是给知识创作者用的：讲历史、科学、技术、投资、心理学、读书的人。你只管把事情讲清楚，不用学剪辑。
 
-> **状态：** 开发中。进度见 [路线图](docs/ROADMAP.md)，架构见 [ARCHITECTURE.md](docs/ARCHITECTURE.md)。
+> **状态：** 开发中。进度见 [路线图](docs/ROADMAP.zh-CN.md)，架构见 [ARCHITECTURE.md](docs/ARCHITECTURE.zh-CN.md)。
 
 ## 看看效果
 
@@ -52,7 +52,7 @@
 需要 Node.js 22.19 以上、pnpm，以及本机装有 Chrome、Edge 或 Chromium。FFmpeg 已内置。
 
 ```bash
-git clone <本仓库> && cd <仓库目录>
+git clone https://github.com/sitor-ai/frametell.git && cd frametell
 pnpm install && pnpm build
 
 export RELAY_API_KEY=...          # 或 ANTHROPIC_API_KEY / OPENAI_API_KEY

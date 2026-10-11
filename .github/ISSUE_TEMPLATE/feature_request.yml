@@ -1,0 +1,20 @@
+name: Feature request
+description: An idea for Frametell
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you're trying to do
+      description: The film you're making or the problem you hit. Tell us the situation, not just the feature.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help
+      description: How you'd like it to work.
+  - type: textarea
+    id: else
+    attributes:
+      label: What you do today instead

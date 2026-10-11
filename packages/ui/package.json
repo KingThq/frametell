@@ -29,14 +29,14 @@
   "description": "The Frametell panel (React). Talks to the core through StudioClient: HTTP + SSE in a browser, IPC inside the desktop app.",
   "license": "MIT",
   "author": "Sitor Team",
-  "homepage": "https://github.com/sanyuan0704/frametell#readme",
+  "homepage": "https://github.com/sitor-ai/frametell#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/sanyuan0704/frametell.git",
+    "url": "git+https://github.com/sitor-ai/frametell.git",
     "directory": "packages/ui"
   },
   "bugs": {
-    "url": "https://github.com/sanyuan0704/frametell/issues"
+    "url": "https://github.com/sitor-ai/frametell/issues"
   },
   "files": [
     "dist"

@@ -4,14 +4,14 @@
   "description": "The Frametell director: staged agent runs (storyboard, narration script, pages, review) on Pi, the Claude Agent SDK or the Codex SDK, with lint and frame checks enforced by the orchestrator.",
   "license": "MIT",
   "author": "Sitor Team",
-  "homepage": "https://github.com/sanyuan0704/frametell#readme",
+  "homepage": "https://github.com/sitor-ai/frametell#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/sanyuan0704/frametell.git",
+    "url": "git+https://github.com/sitor-ai/frametell.git",
     "directory": "packages/agent"
   },
   "bugs": {
-    "url": "https://github.com/sanyuan0704/frametell/issues"
+    "url": "https://github.com/sitor-ai/frametell/issues"
   },
   "type": "module",
   "main": "./dist/index.js",

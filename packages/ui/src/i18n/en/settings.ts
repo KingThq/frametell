@@ -14,7 +14,7 @@ const en: typeof zh = {
     en: 'English',
   },
   voice: {
-    desc: 'You can make a film without one; it just has no voice. Keys stay on this computer.',
+    desc: "Narration needs it: until it's connected you can listen to the voices but not make a film with them. Keys stay on this computer.",
     volcengine: 'Volcengine',
     elevenlabs: 'ElevenLabs',
     volcengineBlurb: 'Doubao speech synthesis, Chinese voices',
