@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/banner-en-dark.png">
-    <img alt="画说 Frametell: turn what you know into an explainer video" src="docs/brand/readme/banner-en-light.png" width="100%">
+    <img alt="画说 Frametell: turn your ideas and material into vivid explainer videos" src="docs/brand/readme/banner-en-light.png" width="100%">
   </picture>
 </p>
 
@@ -9,7 +9,7 @@
   <b>English</b> · <a href="README.zh-CN.md">简体中文</a>
 </p>
 
-**Frametell** (画说, *huà shuō*) turns your documents, PDFs, slides and images into an explainer video with pages that move. A director agent first drafts a storyboard for you to sign off on. Then it writes the narration, voices it, draws each page and checks its own work. You get a 1080p video, with subtitles and publishing notes.
+**Frametell** (画说, *huà shuō*) turns your ideas and your material into vivid explainer videos with pages that move. One sentence is enough to start ("explain the uncertainty principle"), or you can hand it notes, documents, PDFs, slides and images. A director agent first drafts a storyboard for you to sign off on. Then it writes the narration, voices it, draws each page and checks its own work. You get a 1080p video, with subtitles and publishing notes.
 
 It's built for knowledge creators who explain history, science, technology, investing, psychology or books, and who'd rather tell the story than learn video editing.
 
@@ -39,8 +39,8 @@ Two films Frametell made end to end: storyboard, narration, voice, every page an
 
 ## How it works
 
-1. **Materials.** Drop in a document, PDF, slide deck, images or Markdown.
-2. **Storyboard.** The director breaks your material into pages and story beats, and you approve or edit them.
+1. **Idea or material.** Type what you want to explain, as one sentence or a page of thoughts, or drop in a document, PDF, slide deck, images or Markdown. Either is enough, and you can give it both.
+2. **Storyboard.** The director turns your idea or material into pages and story beats, and you approve or edit them.
 3. **Narration and voice.** It writes the script and voices it with Volcengine TTS or ElevenLabs.
 4. **Pages.** It draws every page in the style you chose and checks each one with lint and screenshots.
 5. **Film.** It runs a final check on the full video, then renders a 1080p MP4 with subtitles.

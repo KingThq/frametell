@@ -1,7 +1,7 @@
 {
   "name": "frametell-monorepo",
   "private": true,
-  "description": "Frametell: turn documents into polished explainer videos with an AI director agent.",
+  "description": "Frametell: turn your ideas and material into vivid explainer videos with an AI director agent.",
   "license": "MIT",
   "type": "module",
   "engines": {

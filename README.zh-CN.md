@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/banner-zh-dark.png">
-    <img alt="画说 Frametell：把你的资料，画说成一条讲解视频" src="docs/brand/readme/banner-zh-light.png" width="100%">
+    <img alt="画说 Frametell：把想法和资料，画说成生动的视频" src="docs/brand/readme/banner-zh-light.png" width="100%">
   </picture>
 </p>
 
@@ -9,7 +9,7 @@
   <a href="README.md">English</a> · <b>简体中文</b>
 </p>
 
-**画说**（Frametell）把文档、PDF、PPT 和图片变成一条画面会动的讲解视频。导演 Agent 先出分镜给你拍板，再写口播、配音、逐页作画并自检，最后渲染成 1080p 成片，附带字幕和发布信息。
+**画说**（Frametell）把你的想法和资料，变成画面会动、生动好看的讲解视频。一句灵感就能开始，比如「讲讲量子力学测不准原理」；也可以交给它笔记、文档、PDF、PPT 和图片。导演 Agent 先出分镜给你拍板，再写口播、配音、逐页作画并自检，最后渲染成 1080p 成片，附带字幕和发布信息。
 
 它是给知识创作者用的：讲历史、科学、技术、投资、心理学、读书的人。你只管把事情讲清楚，不用学剪辑。
 
@@ -39,8 +39,8 @@
 
 ## 怎么做出来的
 
-1. **资料**：交给它文档、PDF、PPT、图片或一段 Markdown。
-2. **分镜**：导演把资料拆成一页页、一个个拍点，你确认或修改。
+1. **想法或资料**：一句话、一段想法，或者交给它文档、PDF、PPT、图片、Markdown。有一样就够，也可以一起给。
+2. **分镜**：导演把你的想法或资料拆成一页页、一个个拍点，你确认或修改。
 3. **口播与配音**：写好讲稿，用火山 TTS 或 ElevenLabs 配音。
 4. **逐页画面**：按你选的风格画每一页，用 lint 和截图逐页自检。
 5. **成片**：全片检查后渲染 1080p MP4，带字幕。
