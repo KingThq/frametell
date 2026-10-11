@@ -8,6 +8,7 @@ const en: typeof zh = {
   light: 'Light',
   dark: 'Dark',
   settings: 'Settings',
+  signOut: 'Sign out',
   requestFailed: 'Request failed ({status})',
   styles: {
     'warm-story': 'Warm storybook', study: 'Quiet study', whiteboard: 'Whiteboard', chalkboard: 'Chalkboard', 'tech-dark': 'Tech dark',

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowRight, CircleAlert, FileText, Image as ImageIcon, Loader2, Paperclip, Play, Settings2, Square, X } from 'lucide-react';
-import { client, type ProjectView, type PublicSettings, type Voice } from '../lib/client';
+import { client, hosted, type ProjectView, type PublicSettings, type Voice } from '../lib/client';
 import { go, useLoad } from '../lib/hooks';
 import { STAGE_NAME, type Stage } from '../lib/run';
 import { STYLE_SWATCH, styleName, styleSummary } from '../lib/styles';
@@ -50,7 +50,8 @@ export function Home({ openSettings }: { openSettings: (section?: string) => voi
   const settings = useLoad(() => client.settings());
 
   const [files, setFiles] = useState<File[]>([]);
-  const [topic, setTopic] = useState('');
+  // ?topic= starts the box with an idea typed elsewhere (frametell.ai's landing page)
+  const [topic, setTopic] = useState(() => new URLSearchParams(location.search).get('topic') || '');
   const [duration, setDuration] = useState(60);
   const [lang, setLang] = useState<'zh' | 'en'>();
   const [style, setStyle] = useState<string>();
@@ -64,7 +65,8 @@ export function Home({ openSettings }: { openSettings: (section?: string) => voi
   const noModel = models.data && !models.data.models.length;
   const modelId = model ?? settings.data?.defaults.model ?? (models.data?.default ? `${models.data.default.provider}/${models.data.default.id}` : undefined);
   const styleId = style ?? settings.data?.defaults.style ?? 'warm-story';
-  const voiceList = voices.data?.voices || [];
+  // hosted: only the voices the service can speak with
+  const voiceList = (voices.data?.voices || []).filter((v) => !hosted || voices.data?.configured[v.provider]);
   const filmLang = lang ?? locale;
   // a voice speaks the film's language: Volcengine's are Chinese voices (lang 'zh'); ElevenLabs' speak many (no lang)
   const speaks = (v: { lang?: string }) => !v.lang || v.lang === filmLang;
@@ -152,7 +154,7 @@ export function Home({ openSettings }: { openSettings: (section?: string) => voi
           </div>
           <div>
             <label htmlFor="voice" className="fs-label">{t('home.voice.label')}</label>
-            <VoicePicker voices={voiceList} value={voiceId} onChange={setVoice} unconfigured={voices.data ? (['volcengine', 'elevenlabs'] as const).filter((p) => !voices.data!.configured[p]) : []} />
+            <VoicePicker voices={voiceList} value={voiceId} onChange={setVoice} unconfigured={voices.data && !hosted ? (['volcengine', 'elevenlabs'] as const).filter((p) => !voices.data!.configured[p]) : []} />
             {voiceOtherLang && !voiceNoKey && <p className="mt-1.5 text-[12px] text-ink-2">{t('home.voice.langMismatch')}</p>}
             {voiceNoKey && picked && (
               <p className="mt-1.5 text-[12px] text-ink-2">
@@ -173,7 +175,7 @@ export function Home({ openSettings }: { openSettings: (section?: string) => voi
             </div>
             {current && <p className="mt-2 text-[12.5px] text-ink-3">{styleSummary(current.id) ?? current.summary}</p>}
           </fieldset>
-          <div className="sm:col-span-2">
+          {!hosted && <div className="sm:col-span-2">
             <div className="flex items-baseline justify-between gap-3">
               <label htmlFor="model" className="fs-label">{t('home.model')}</label>
               <button type="button" onClick={() => openSettings()} className="-mr-1 inline-flex items-center gap-1 rounded-md px-1 text-[12px] text-ink-3 transition-colors hover:text-ink">
@@ -182,7 +184,7 @@ export function Home({ openSettings }: { openSettings: (section?: string) => voi
             </div>
             <ModelPicker models={models.data?.models || []} value={modelId} onChange={setModel} onAdd={addModel} onManage={openSettings} disabled={!models.data} />
             {via && <p className="mt-2 text-[12px] text-ink-3">{via}</p>}
-          </div>
+          </div>}
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-b-2xl border-t border-line bg-paper-2/50 px-5 py-3.5">

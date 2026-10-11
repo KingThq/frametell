@@ -7,6 +7,7 @@ export default {
   light: '浅色',
   dark: '深色',
   settings: '设置',
+  signOut: '退出登录',
   requestFailed: '请求失败（{status}）',
   styles: {
     'warm-story': '暖调叙事插画', study: '安静书房', whiteboard: '白板手绘', chalkboard: '黑板', 'tech-dark': '科技深色',

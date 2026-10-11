@@ -41,6 +41,15 @@ export interface StudioClient {
   reveal?(file: string): Promise<void>;
   /** a URL for a file inside the project (preview player, snapshot, video) */
   fileUrl(p: ProjectView, rel: string): string;
+  /** set by a hosted service (Frametell Cloud): it runs the models and voices, so the panel leaves out settings, the
+   * model choice and voices it cannot use, and shows the account instead */
+  hosted?: Hosted;
+}
+
+export interface Hosted {
+  /** the signed-in account, shown in the top bar */
+  email?: string;
+  signOut(): void;
 }
 
 class HttpError extends Error { constructor(msg: string, readonly status: number) { super(msg); } }
@@ -105,3 +114,4 @@ declare global { interface Window { studioBridge?: StudioClient & { platform?: s
 
 /** the desktop app's bridge when present, else the local HTTP server */
 export const client: StudioClient = (typeof window !== 'undefined' && window.studioBridge) || httpClient;
+export const hosted = client.hosted;

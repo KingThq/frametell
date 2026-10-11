@@ -1,7 +1,8 @@
-import { Moon, Settings2, Sun } from 'lucide-react';
+import { LogOut, Moon, Settings2, Sun } from 'lucide-react';
 import { Wordmark } from './Logo';
 import { useTheme } from '../lib/hooks';
 import { useT } from '../i18n';
+import { hosted } from '../lib/client';
 
 export function TopBar({ children, onSettings }: { children?: React.ReactNode; onSettings: () => void }) {
   const { dark, toggle } = useTheme();
@@ -13,7 +14,14 @@ export function TopBar({ children, onSettings }: { children?: React.ReactNode; o
       <a href="#/" className="shrink-0 rounded-lg" aria-label={t('common.home')}><Wordmark /></a>
       <div className="flex min-w-0 flex-1 items-center gap-3">{children}</div>
       <button className="fs-icon-btn" onClick={toggle} aria-label={dark ? t('common.toLight') : t('common.toDark')} title={dark ? t('common.light') : t('common.dark')}>{dark ? <Sun size={16} /> : <Moon size={16} />}</button>
-      <button className="fs-icon-btn" onClick={onSettings} aria-label={t('common.settings')} title={t('common.settings')}><Settings2 size={16} /></button>
+      {hosted ? (
+        <>
+          {hosted.email && <span className="hidden max-w-[220px] truncate text-[12.5px] text-ink-3 sm:inline" title={hosted.email}>{hosted.email}</span>}
+          <button className="fs-icon-btn" onClick={() => hosted?.signOut()} aria-label={t('common.signOut')} title={t('common.signOut')}><LogOut size={16} /></button>
+        </>
+      ) : (
+        <button className="fs-icon-btn" onClick={onSettings} aria-label={t('common.settings')} title={t('common.settings')}><Settings2 size={16} /></button>
+      )}
     </header>
   );
 }
