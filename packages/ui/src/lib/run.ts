@@ -42,6 +42,8 @@ export interface PageView {
   tools: number;
   /** what it is writing right now, while the model streams it: 「已写 212 行」 */
   progress?: string;
+  /** what this page's agent is doing right now (pages are drawn side by side, each says its own) */
+  activity?: RunView['activity'];
   startedAt?: number;
   endedAt?: number;
 }
@@ -93,7 +95,15 @@ export const emptyRun = (): RunView => ({
 const isPage = (session: string) => session.startsWith('page-');
 
 /** pure reducer: (view, event) → view; events arrive in seq order */
+/** with several pages drawn at once, a page's moment belongs on that page: the shared line would hop between them */
 export function reduce(v: RunView, e: LoggedEvent): RunView {
+  const r = step(v, e);
+  const a = r.activity;
+  if (a?.page && a !== v.activity && r.pages[a.page]) r.pages = { ...r.pages, [a.page]: { ...r.pages[a.page], activity: a } };
+  return r;
+}
+
+function step(v: RunView, e: LoggedEvent): RunView {
   const at = e.at, key = String(e.seq);
   const r: RunView = { ...v, seq: e.seq, activeAt: at };
   const stage = v.current;

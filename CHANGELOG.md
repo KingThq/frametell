@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Pages are drawn up to 10 at once (was 3; a saved 3 becomes 10). With Claude, which bills writing the shared page prompt to its cache, the first page goes alone until its first answer is back so the rest find the prompt cached; with Gemini or OpenAI every page starts at once. While several pages are drawn, the status line says so in one steady line (「同时在画 3 页」) and each page's own moment (thinking, writing, checking its pictures) is shown on its row, instead of the line hopping between pages.
 - Conversation: a stage's steps (files read, checks run, the model's notes to itself) show only while it runs or when it failed; once it has its result — a storyboard to confirm, pages drawn, a plan made — only the result and what the director said remain.
 - Settings → model providers: a long model list can be searched, narrowed to one maker by the id's prefix (OpenRouter's 401 models: openai 97, qwen 51, google 33, …) and is shown 40 at a time; every provider links to its site beside its description, and its key page link stays visible after connecting.
 - **Settings is a centred dialog.** Sections on the left (model providers, voices, general, network proxy, this computer — one entry each, so a new kind of setting is one more entry); model providers and voices are a list with the open one beside it. Each provider shows its official mark, whether it is connected and which one is in use; its page has the key, an optional own base URL, and its models — the ones it lists and ids typed in by hand — any of which can be made the default. OpenAI- or Anthropic-compatible endpoints of your own can be added. On a phone the sections become tabs and a provider opens on its own page.
@@ -58,6 +59,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A page whose code throws is no longer marked 「没画出来」 at its first check: the error and where it happened (the page's line, the engine function) go back to its agent to fix, with one extra round for it; the page fails only if it still throws after that.
 - Settings: the connection status sits beside the provider's name instead of under the close button; Kimi's mark is drawn in the text colour so it shows on a light background.
 - Conversation: every edit reads as what it changes (「修改口播稿」「修改分镜」「修改第 5 页」) — tool summaries now lead with the path before any file content, and older logs whose path was cut off are recognised from the text they change; repeats read 「2 次」 instead of 「×2」.
 - The finished-film card times the latest round (a revision counts from the change request), not the whole life of the project.

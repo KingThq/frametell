@@ -111,10 +111,19 @@ function Approval({ sb, project, active }: { sb: Storyboard; project: ProjectVie
   );
 }
 
+/** what a page's agent is doing now, without the page's name (the row already says which page) */
+const moment = (p?: PageView) => {
+  const a = p?.activity;
+  if (!a?.text || !p) return undefined;
+  const prefix = t('run.now.who', { page: pageName(p.id), doing: '' });
+  const text = a.text.startsWith(prefix) ? a.text.slice(prefix.length) : a.text;
+  return p.progress && !text.includes(p.progress) ? `${text} · ${p.progress}` : text;
+};
+
 const PAGE_STATE: Record<PageView['status'], { text: (p?: PageView) => string; icon: React.ReactNode; tone: string }> = {
   queued: { text: () => t('conversation.page.queued'), icon: <CircleDashed size={14} />, tone: 'text-ink-3' },
-  drawing: { text: (p) => t('conversation.page.drawing', { progress: p?.progress }), icon: <Loader2 size={14} className="animate-spin" />, tone: 'text-accent-ink' },
-  checking: { text: (p) => t('conversation.page.checking', { round: p?.round ?? 0 }), icon: <Loader2 size={14} className="animate-spin" />, tone: 'text-accent-ink' },
+  drawing: { text: (p) => moment(p) ?? t('conversation.page.drawing', { progress: p?.progress }), icon: <Loader2 size={14} className="animate-spin" />, tone: 'text-accent-ink' },
+  checking: { text: (p) => moment(p) ?? t('conversation.page.checking', { round: p?.round ?? 0 }), icon: <Loader2 size={14} className="animate-spin" />, tone: 'text-accent-ink' },
   ok: { text: () => t('conversation.page.ok'), icon: <Check size={14} />, tone: 'text-jade' },
   flagged: { text: () => t('conversation.page.flagged'), icon: <TriangleAlert size={14} />, tone: 'text-seal' },
   failed: { text: () => t('conversation.page.failed'), icon: <TriangleAlert size={14} />, tone: 'text-seal' },
@@ -259,6 +268,22 @@ function WorkChapter({ b, live }: { b: Extract<Block, { kind: 'work' }>; live: b
 function LiveLine({ run }: { run: RunView }) {
   useT();
   const now = useNow(true);
+  // several pages at once: one steady line for all of them; each page's own moment is on its row in the list
+  const busy = run.current === 'pages' ? run.pageOrder.filter((id) => ['drawing', 'checking'].includes(run.pages[id]?.status)) : [];
+  if (busy.length > 1) {
+    const since = run.stages.pages.startedAt;
+    const secs = since ? Math.max(0, Math.round((now - since) / 1000)) : 0;
+    return (
+      <div className="flex items-center gap-2.5" role="status">
+        <span className="relative flex h-5 w-5 shrink-0 items-center justify-center" aria-hidden>
+          <span className="absolute inset-0 rounded-full bg-accent/40 motion-safe:animate-halo" />
+          <span className="relative flex h-5 w-5 items-center justify-center rounded-full bg-paper ring-1 ring-accent/50"><Crest size={11} /></span>
+        </span>
+        <span className="fs-shimmer min-w-0 truncate text-[13px]">{t('conversation.live.pagesAtOnce', { n: busy.length })}…</span>
+        {secs > 2 && <span className="shrink-0 text-[12px] text-ink-3 tabular">{secs < 60 ? t('conversation.live.sec', { n: secs }) : clock(secs * 1000)}</span>}
+      </div>
+    );
+  }
   const a = run.activity;
   // thinking that has gone quiet, with nothing done yet: the model is writing an answer it hands over only when whole
   const writing = !!a?.updated && !!a.thinking && now - a.updated > 4000;
@@ -322,7 +347,7 @@ function Chapter({ b, run, project, onSelectPage, selected }: { b: Extract<Block
   );
 }
 
-const ESTIMATE: Record<Stage, (pages: number) => number> = { storyboard: () => 100, script: () => 80, narrate: () => 20, pages: (n) => Math.ceil(Math.max(n, 1) / 3) * 240, review: () => 60, render: () => 120 };
+const ESTIMATE: Record<Stage, (pages: number) => number> = { storyboard: () => 100, script: () => 80, narrate: () => 20, pages: (n) => Math.ceil(Math.max(n, 1) / 10) * 240, review: () => 60, render: () => 120 };
 
 /** the line above the composer: what is happening now, how long it has taken, about how long is left */
 function NowBar({ run }: { run: RunView }) {
@@ -338,6 +363,7 @@ function NowBar({ run }: { run: RunView }) {
     left = Math.max(30, ESTIMATE[run.current!](pages) - (cur.startedAt ? (now - cur.startedAt) / 1000 : 0)) + STAGES.slice(i + 1).reduce((a, s) => a + ESTIMATE[s](pages), 0);
   }
   const busyPage = run.pageOrder.find((id) => run.pages[id]?.status === 'checking' || run.pages[id]?.status === 'drawing');
+  const busyCount = run.pageOrder.filter((id) => run.pages[id]?.status === 'checking' || run.pages[id]?.status === 'drawing').length;
   if (running && !run.current) left = 0;
   const seconds = Math.round(run.ready?.duration ?? run.video?.duration ?? 0);
   const text = run.revising ? t('conversation.bar.revising')
@@ -345,6 +371,7 @@ function NowBar({ run }: { run: RunView }) {
     : finished(run) && !running ? t('conversation.bar.ready', { secs: seconds, stale: !!run.stale })
     : run.awaitingApproval ? t('conversation.bar.awaiting')
     : run.paused ? t('conversation.bar.paused')
+    : running && run.current === 'pages' && busyCount > 1 ? t('conversation.live.pagesAtOnce', { n: busyCount })
     : running ? `${stageDoing(run.current!)}${run.current === 'pages' && busyPage ? t('conversation.bar.busyPage', { page: pageName(busyPage), checking: run.pages[busyPage].status === 'checking' }) : ''}`
     : t('conversation.bar.idle');
   return (

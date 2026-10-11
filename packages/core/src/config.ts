@@ -40,13 +40,15 @@ export interface Config {
 
 const DEFAULTS: Config = {
   keys: {}, custom: [], baseUrls: {}, models: {}, tts: {},
-  defaults: { runtime: 'pi', style: 'warm-story', durationSec: 60, subtitles: true, concurrency: 3, voice: { provider: 'volcengine', id: 'zh_male_yuanboxiaoshu_uranus_bigtts', name: '渊博小叔' } },
+  defaults: { runtime: 'pi', style: 'warm-story', durationSec: 60, subtitles: true, concurrency: 10, voice: { provider: 'volcengine', id: 'zh_male_yuanboxiaoshu_uranus_bigtts', name: '渊博小叔' } },
 };
 
 export function loadConfig(): Config {
   try {
     const c = JSON.parse(fs.readFileSync(FILE, 'utf8')) as Partial<Config>;
-    return { ...DEFAULTS, ...c, defaults: { ...DEFAULTS.defaults, ...(c.defaults || {}) }, tts: { ...(c.tts || {}) }, keys: { ...(c.keys || {}) }, baseUrls: { ...(c.baseUrls || {}) }, models: { ...(c.models || {}) }, custom: c.custom || [] };
+    const defaults = { ...DEFAULTS.defaults, ...(c.defaults || {}) };
+    if (defaults.concurrency === 3) defaults.concurrency = 10;   // the old default: pages now draw up to 10 at once
+    return { ...DEFAULTS, ...c, defaults, tts: { ...(c.tts || {}) }, keys: { ...(c.keys || {}) }, baseUrls: { ...(c.baseUrls || {}) }, models: { ...(c.models || {}) }, custom: c.custom || [] };
   } catch { return structuredClone(DEFAULTS); }
 }
 

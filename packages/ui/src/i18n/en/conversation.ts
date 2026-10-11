@@ -41,6 +41,7 @@ const en: typeof zh = {
   export: { running: 'Exporting mp4', done: 'Exported', failed: 'Export failed', withSubs: 'With subtitles', noSubs: 'No subtitles' },
   plan: { title: 'Revision plan', looking: 'Working out which pages to change' },
   live: {
+    pagesAtOnce: 'Drawing {n} pages at once',
     preparing: 'Getting ready',
     sec: '{n}s',
     wholeAnswer: 'The model hands its answer over only when it’s finished, so nothing shows until then',

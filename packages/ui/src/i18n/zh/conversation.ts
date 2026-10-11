@@ -42,6 +42,7 @@ export default {
   export: { running: '正在导出 mp4', done: '导出好了', failed: '导出没成功', withSubs: '带字幕', noSubs: '无字幕' },
   plan: { title: '修改计划', looking: '在看要改哪几页' },
   live: {
+    pagesAtOnce: '同时在画 {n} 页',
     preparing: '准备中',
     sec: '{n} 秒',
     wholeAnswer: '模型会一次写完再交出来，写好前看不到内容',
