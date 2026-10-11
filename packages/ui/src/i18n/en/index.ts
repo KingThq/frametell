@@ -6,6 +6,8 @@ import workbench from './workbench';
 import stage from './stage';
 import conversation from './conversation';
 import run from './run';
+import picker from './picker';
+import providers from './providers';
 
-const en: typeof zh = { common, home, settings, workbench, stage, conversation, run };
+const en: typeof zh = { common, home, settings, workbench, stage, conversation, run, picker, providers };
 export default en;

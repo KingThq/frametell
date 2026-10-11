@@ -24,6 +24,7 @@ module.exports = {
       keyframes: {
         rise: { from: { opacity: '0', transform: 'translateY(6px)' }, to: { opacity: '1', transform: 'none' } },
         fade: { from: { opacity: '0' }, to: { opacity: '1' } },
+        eq: { '0%,100%': { transform: 'scaleY(0.35)' }, '50%': { transform: 'scaleY(1)' } },
         pop: { from: { opacity: '0', transform: 'scale(0.92)' }, to: { opacity: '1', transform: 'none' } },
         trace: { to: { strokeDashoffset: '0' } },
         breathe: { '0%,100%': { opacity: '0.45' }, '50%': { opacity: '1' } },

@@ -1,246 +1,246 @@
-import { useEffect, useRef, useState } from 'react';
-import { Check, CircleAlert, ExternalLink, KeyRound, X } from 'lucide-react';
-import { client, type PublicSettings, type SettingsPatch } from '../lib/client';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowLeft, AudioLines, Boxes, Check, CircleAlert, Globe, KeyRound, Monitor, SlidersHorizontal, X, type LucideIcon } from 'lucide-react';
+import { client, type ModelInfo, type PublicSettings, type SettingsPatch } from '../lib/client';
 import { useLoad } from '../lib/hooks';
-import { useT, type LocalePref, type MessageKey } from '../i18n';
+import { t, useT, type MessageKey } from '../i18n';
+import { ProviderLogo } from '../components/ProviderLogo';
+import { CustomForm, ProviderDetail, ProviderList, type ProviderView } from './ProviderSettings';
 
-/** the official APIs the Claude Agent and Codex runtimes run on; each can also point at the user's own relay */
-const OFFICIAL: { id: 'anthropic' | 'openai'; name: MessageKey; desc: MessageKey; hint: string; url: string; base: string }[] = [
-  { id: 'anthropic', name: 'settings.models.anthropicName', desc: 'settings.models.anthropicDesc', hint: 'sk-ant-…', url: 'https://console.anthropic.com/settings/keys', base: 'https://api.anthropic.com' },
-  { id: 'openai', name: 'settings.models.openaiName', desc: 'settings.models.openaiDesc', hint: 'sk-…', url: 'https://platform.openai.com/api-keys', base: 'https://api.openai.com/v1' },
-];
-/** name: a brand name, or a key when the name is translated */
-const PROVIDERS: { id: string; name: string; nameKey?: MessageKey; hint: string; url?: string }[] = [
-  { id: 'google', name: 'Google Gemini', hint: 'AIza…', url: 'https://aistudio.google.com/apikey' },
-  { id: 'openrouter', name: 'OpenRouter', hint: 'sk-or-…', url: 'https://openrouter.ai/keys' },
-  { id: 'vercel-ai-gateway', name: 'Vercel AI Gateway', hint: 'vck_…', url: 'https://vercel.com/docs/ai-gateway' },
-  { id: 'deepseek', name: 'DeepSeek', hint: 'sk-…', url: 'https://platform.deepseek.com/api_keys' },
-  { id: 'volcengine-ark', name: 'Volcengine Ark', nameKey: 'settings.models.ark', hint: 'API Key', url: 'https://console.volcengine.com/ark' },
-];
-const RUNTIMES = [
-  { id: 'pi', name: 'Studio Agent', desc: 'settings.defaults.piDesc' },
-  { id: 'claude-agent-sdk', name: 'Claude Agent', desc: 'settings.defaults.claudeDesc' },
-  { id: 'codex', name: 'Codex', desc: 'settings.defaults.codexDesc' },
-] as const;
+// Settings: a centred dialog with the sections on the left. A section is one entry in SECTIONS — either a list with a
+// detail beside it (model providers, voices), or a single page — so a new kind of setting is one more entry.
 
-/** a key field: shows the saved key masked; typing replaces it, clearing removes it */
-function KeyField({ id, label, saved, placeholder, onSave }: { id: string; label: string; saved?: string; placeholder: string; onSave: (v: string) => Promise<void> }) {
-  const { t } = useT();
-  const [value, setValue] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState(false);
-  const save = async (v: string) => { setBusy(true); try { await onSave(v); setValue(''); setDone(true); setTimeout(() => setDone(false), 1600); } finally { setBusy(false); } };
+type Ctx = { s: PublicSettings; patch: (p: SettingsPatch) => Promise<void>; models: ModelInfo[]; modelsLoading: boolean; providers: ProviderView[] };
+interface Item { id: string; name: string; logo: string; on: boolean }
+interface Section {
+  id: string;
+  icon: LucideIcon;
+  label: MessageKey;
+  /** a list with a detail beside it */
+  list?: (c: Ctx) => { items: Item[]; render?: (c: Ctx, open: string | undefined, setOpen: (id: string | undefined) => void) => React.ReactNode };
+  detail: (c: Ctx, open: string | undefined, setOpen: (id: string | undefined) => void) => React.ReactNode;
+}
+
+const VOICES = [
+  { id: 'volcengine', key: 'volcengine' as const, url: 'https://console.volcengine.com/speech/app', hint: 'API Key' },
+  { id: 'elevenlabs', key: 'elevenlabs' as const, url: 'https://elevenlabs.io/app/settings/api-keys', hint: 'sk_…' },
+];
+
+const SECTIONS: Section[] = [
+  {
+    id: 'models', icon: Boxes, label: 'settings.nav.models',
+    list: (c) => ({
+      items: [],
+      render: (c2, open, setOpen) => <ProviderList providers={c2.providers} s={c2.s} open={open} onOpen={setOpen} onAddCustom={() => setOpen('+custom')} />,
+    }),
+    detail: (c, open, setOpen) => {
+      if (open === '+custom') return (
+        <CustomForm onCancel={() => setOpen(undefined)} onSave={async (x) => {
+          const id = `custom-${x.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || Date.now().toString(36)}`;
+          await c.patch({ custom: [...(c.s.custom as never[]), { id, name: x.name, protocol: x.protocol, baseUrl: x.baseUrl, models: [], discover: x.protocol === 'openai' }], keys: x.key ? { [id]: x.key } : undefined });
+          setOpen(id);
+        }} />
+      );
+      const p = c.providers.find((x) => x.id === open) ?? c.providers[0];
+      return p && (
+        <ProviderDetail key={p.id} p={p} s={c.s} models={c.models} loading={c.modelsLoading} patch={c.patch}
+          onRemoveCustom={p.group === 'custom' ? async () => { await c.patch({ custom: (c.s.custom as { id: string }[]).filter((x) => x.id !== p.id) as never[], keys: { [p.id]: '' } }); setOpen(undefined); } : undefined} />
+      );
+    },
+  },
+  {
+    id: 'voice', icon: AudioLines, label: 'settings.nav.voice',
+    list: (c) => ({ items: VOICES.map((v) => ({ id: v.id, name: t(`settings.voice.${v.id}` as MessageKey), logo: v.id, on: !!c.s.tts[v.key] })) }),
+    detail: (c, open) => { const v = VOICES.find((x) => x.id === open) ?? VOICES[0]; return <VoiceDetail key={v.id} v={v} c={c} />; },
+  },
+  { id: 'general', icon: SlidersHorizontal, label: 'settings.nav.general', detail: (c) => <General c={c} /> },
+  { id: 'network', icon: Globe, label: 'settings.nav.network', detail: (c) => <Network c={c} /> },
+  { id: 'machine', icon: Monitor, label: 'settings.nav.machine', detail: () => <Machine /> },
+];
+
+function Page({ title, desc, children }: { title: string; desc?: string; children: React.ReactNode }) {
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <header className="border-b border-line pb-5 pl-7 pr-14 pt-6"><h3 className="text-[17px] font-semibold text-ink">{title}</h3>{desc && <p className="mt-1 text-[12.5px] leading-relaxed text-ink-3">{desc}</p>}</header>
+      <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-7 py-6">{children}</div>
+    </div>
+  );
+}
+
+function SecretField({ id, label, saved, hint, onSave }: { id: string; label: string; saved?: string; hint?: string; onSave: (v: string) => Promise<void> }) {
+  const [v, setV] = useState('');
+  const [err, setErr] = useState('');
+  const save = async (x: string) => { try { await onSave(x); setV(''); setErr(''); } catch (e) { setErr((e as Error).message); } };
   return (
     <div>
-      <label htmlFor={`key-${id}`} className="sr-only">{label} API key</label>
+      <label htmlFor={id} className="fs-label">{label}</label>
       <div className="flex gap-2">
-        <input id={`key-${id}`} type="password" autoComplete="off" spellCheck={false} className="fs-input font-mono text-[12.5px]"
-          placeholder={saved ? t('settings.savedAs', { key: saved }) : placeholder} value={value} onChange={(e) => setValue(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && value && save(value)} />
-        {value ? (
-          <button className="fs-btn fs-btn-primary fs-btn-sm h-9" disabled={busy} onClick={() => save(value)}>{t('settings.save')}</button>
-        ) : saved ? (
-          <button className="fs-btn fs-btn-ghost fs-btn-sm h-9" disabled={busy} onClick={() => save('')} aria-label={t('settings.removeKey', { name: label })}>{t('settings.remove')}</button>
-        ) : null}
+        <input id={id} type="password" autoComplete="off" spellCheck={false} className="fs-input h-10 font-mono text-[12.5px]" value={v} onChange={(e) => setV(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && v.trim() && void save(v)} placeholder={saved ? t('providers.keySaved', { key: saved }) : hint} />
+        {v.trim() ? <button type="button" className="fs-btn fs-btn-primary h-10" onClick={() => void save(v)}>{t('providers.save')}</button>
+          : saved ? <button type="button" className="fs-btn fs-btn-ghost h-10" onClick={() => void save('')}>{t('providers.remove')}</button> : null}
       </div>
-      {done && <p className="mt-1.5 flex items-center gap-1 text-[12px] text-jade" role="status"><Check size={13} /> {t('settings.saved')}</p>}
+      {err && <p className="mt-1.5 flex items-center gap-1 text-[12px] text-seal" role="alert"><CircleAlert size={13} aria-hidden /> {err}</p>}
     </div>
   );
 }
 
-/** a plain setting saved on Enter or blur (a relay URL, the proxy); clearing it removes the setting */
-function TextField({ id, label, saved, placeholder, onSave }: { id: string; label: string; saved: string; placeholder: string; onSave: (v: string) => Promise<void> }) {
-  const { t } = useT();
-  const [value, setValue] = useState(saved);
-  const [error, setError] = useState('');
-  const [done, setDone] = useState(false);
-  useEffect(() => setValue(saved), [saved]);
-  const save = async () => {
-    if (value.trim() === saved) return;
-    try { await onSave(value.trim()); setError(''); setDone(true); setTimeout(() => setDone(false), 1600); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-  };
+function VoiceDetail({ v, c }: { v: (typeof VOICES)[number]; c: Ctx }) {
+  const on = !!c.s.tts[v.key];
   return (
-    <div>
-      <label htmlFor={id} className="mb-1.5 block text-[12px] text-ink-3">{label}</label>
-      <input id={id} type="url" autoComplete="off" spellCheck={false} className="fs-input font-mono text-[12.5px]" placeholder={placeholder}
-        value={value} onChange={(e) => setValue(e.target.value)} onBlur={save} onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
-        aria-invalid={!!error || undefined} aria-describedby={error ? `${id}-err` : undefined} />
-      {error && <p id={`${id}-err`} className="mt-1.5 flex items-center gap-1 text-[12px] text-seal" role="alert"><CircleAlert size={13} /> {error}</p>}
-      {done && <p className="mt-1.5 flex items-center gap-1 text-[12px] text-jade" role="status"><Check size={13} /> {t('settings.saved')}</p>}
+    <div className="flex h-full min-h-0 flex-col">
+      <header className="flex items-start gap-3.5 border-b border-line pb-5 pl-7 pr-14 pt-6">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-line bg-paper"><ProviderLogo id={v.id} size={24} /></span>
+        <div className="min-w-0 flex-1">
+          <h3 className="text-[17px] font-semibold leading-tight text-ink">{t(`settings.voice.${v.id}` as MessageKey)}</h3>
+          <p className="mt-1 text-[12.5px] text-ink-3">{t(`settings.voice.${v.id}Blurb` as MessageKey)}</p>
+        </div>
+        <span className={`mt-1 inline-flex shrink-0 items-center gap-1.5 text-[12px] ${on ? 'text-jade' : 'text-ink-3'}`}><span className={`h-1.5 w-1.5 rounded-full ${on ? 'bg-jade' : 'bg-line-2'}`} aria-hidden />{on ? t('providers.connected') : t('providers.notConnected')}</span>
+      </header>
+      <div className="space-y-4 px-7 py-6">
+        <SecretField id={`tts-${v.id}`} label={t('providers.key')} saved={c.s.tts[v.key]} hint={v.hint} onSave={(x) => c.patch({ tts: { [v.key]: x } })} />
+        {!on && <a href={v.url} target="_blank" rel="noreferrer" className="inline-flex text-[12.5px] text-accent-ink hover:underline">{t('providers.getKey', { name: t(`settings.voice.${v.id}` as MessageKey) })} ↗</a>}
+        <p className="text-[12.5px] leading-relaxed text-ink-3">{t('settings.voice.desc')}</p>
+      </div>
     </div>
   );
 }
 
-export function Settings({ open, onClose, onChanged }: { open: boolean; onClose: () => void; onChanged?: () => void }) {
-  const { t, pref, setPref } = useT();
+function General({ c }: { c: Ctx }) {
+  const { pref, setPref } = useT();
+  return (
+    <Page title={t('settings.nav.general')}>
+      <section aria-labelledby="sec-lang">
+        <h4 id="sec-lang" className="text-[13px] font-semibold text-ink">{t('settings.language.title')}</h4>
+        <p className="mt-1 text-[12.5px] text-ink-3">{t('settings.language.desc')}</p>
+        <div className="mt-3 flex flex-wrap gap-1.5" role="radiogroup" aria-labelledby="sec-lang">
+          {(['auto', 'zh', 'en'] as const).map((p) => (
+            <button key={p} type="button" role="radio" aria-checked={(c.s.locale ?? pref) === p} className="fs-chip" onClick={() => { setPref(p); void c.patch({ locale: p }); }}>{t(`settings.language.${p}`)}</button>
+          ))}
+        </div>
+      </section>
+    </Page>
+  );
+}
+
+function Network({ c }: { c: Ctx }) {
+  const [v, setV] = useState(c.s.proxy ?? '');
+  const [err, setErr] = useState('');
+  const [ok, setOk] = useState(false);
+  useEffect(() => setV(c.s.proxy ?? ''), [c.s.proxy]);
+  const commit = async () => { if (v.trim() === (c.s.proxy ?? '')) return; try { await c.patch({ proxy: v.trim() }); setErr(''); setOk(true); setTimeout(() => setOk(false), 1400); } catch (e) { setErr((e as Error).message); } };
+  return (
+    <Page title={t('settings.net.title')} desc={t('settings.net.desc')}>
+      <div>
+        <label htmlFor="proxy" className="fs-label">{t('settings.net.proxy')}</label>
+        <div className="relative">
+          <input id="proxy" type="url" spellCheck={false} className="fs-input h-10 pr-8 font-mono text-[12.5px]" value={v} placeholder="http://127.0.0.1:7890" onChange={(e) => setV(e.target.value)} onBlur={() => void commit()} onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
+          {ok && <Check size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-jade" aria-label={t('providers.saved')} />}
+        </div>
+        {err && <p className="mt-1.5 flex items-center gap-1 text-[12px] text-seal" role="alert"><CircleAlert size={13} aria-hidden /> {err}</p>}
+      </div>
+    </Page>
+  );
+}
+
+function Machine() {
+  const env = useLoad(() => client.env(), []);
+  return (
+    <Page title={t('settings.env.title')}>
+      <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line">
+        {(env.data || []).map((x) => (
+          <li key={x.id} className="flex items-start gap-3 px-4 py-3">
+            {x.ok ? <Check size={15} className="mt-0.5 shrink-0 text-jade" aria-label={t('settings.env.ok')} /> : <CircleAlert size={15} className="mt-0.5 shrink-0 text-seal" aria-label={t('settings.env.fix')} />}
+            <span className="min-w-0">
+              <span className="block text-[13px] font-medium text-ink">{t(`settings.env.${x.id}` as MessageKey)}</span>
+              <span className="mt-0.5 block truncate text-[12px] text-ink-3" title={x.detail}>{x.ok ? x.detail : x.fix}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+      <p className="flex items-center gap-1.5 text-[12px] text-ink-3"><KeyRound size={12} aria-hidden /> {t('settings.env.where')}</p>
+    </Page>
+  );
+}
+
+export function Settings({ open, onClose, onChanged, section: initial }: { open: boolean; onClose: () => void; onChanged?: () => void; section?: string }) {
+  useT();   // re-render on a language change
   const ref = useRef<HTMLDialogElement>(null);
   const settings = useLoad(() => client.settings(), [open]);
-  const env = useLoad(() => client.env(), [open]);
-  const models = useLoad(() => client.models(), [open, settings.data?.keys && JSON.stringify(settings.data.keys)]);
-  const [local, setLocal] = useState<PublicSettings | undefined>();
-  useEffect(() => { if (settings.data) setLocal(settings.data); }, [settings.data]);
+  const [s, setS] = useState<PublicSettings>();
+  const [keysStamp, setKeysStamp] = useState(0);
+  const models = useLoad(() => client.models(), [open, keysStamp]);
+  const catalog = useLoad(() => client.providers(), [open]);
+  const [section, setSection] = useState(initial ?? 'models');
+  const [opened, setOpened] = useState<Record<string, string | undefined>>({});
+  const [narrowDetail, setNarrowDetail] = useState(false);
+  useEffect(() => { if (settings.data) setS(settings.data); }, [settings.data]);
+  useEffect(() => { if (open && initial) setSection(initial); }, [open, initial]);
   useEffect(() => { const d = ref.current; if (!d) return; if (open && !d.open) d.showModal(); if (!open && d.open) d.close(); }, [open]);
 
-  const patch = async (p: SettingsPatch) => { const next = await client.updateSettings(p); setLocal(next); models.reload(); onChanged?.(); };
-  const s = local;
-  // the provider of the model new videos use; a card for it is "in use", any other card with a key offers itself
-  const current = s?.defaults.model ?? (models.data?.default ? `${models.data.default.provider}/${models.data.default.id}` : undefined);
-  const inUse = current?.split('/')[0];
-  const use = (provider: string) => {
-    const list = (models.data?.models || []).filter((m) => m.provider === provider);
-    const m = list.find((x) => x.recommended) ?? list.find((x) => x.vision) ?? list[0];
-    if (!m || !s) return;
-    // a runtime that cannot talk to this provider moves to the one that can
-    const runtime = provider === 'anthropic' && s.defaults.runtime === 'codex' ? 'claude-agent-sdk'
-      : provider === 'openai' && s.defaults.runtime === 'claude-agent-sdk' ? 'codex'
-      : !['relay', 'anthropic', 'openai'].includes(provider) && s.defaults.runtime !== 'pi' ? 'pi' : s.defaults.runtime;
-    return patch({ defaults: { model: `${m.provider}/${m.id}`, runtime } });
+  const patch = async (p: SettingsPatch) => {
+    const next = await client.updateSettings(p);
+    setS(next);
+    if (p.keys || p.baseUrls || p.models || p.custom) setKeysStamp((k) => k + 1);   // the model list follows the keys
+    onChanged?.();
   };
-  const card = (id: string) => `rounded-2xl border p-4 transition-colors ${inUse === id ? 'border-accent/60 bg-accent-soft/50' : 'border-line'}`;
-  const UseButton = ({ id }: { id: string }) => inUse === id
-    ? <span className="fs-tag border-accent/40 bg-accent-soft text-accent-ink"><Check size={11} aria-hidden /> {t('settings.inUse')}</span>
-    : s?.keys[id] && models.data?.models.some((m) => m.provider === id)
-      ? <button type="button" className="fs-btn fs-btn-ghost fs-btn-sm" onClick={() => use(id)}>{t('settings.useThis')}</button>
-      : null;
+  const providers: ProviderView[] = useMemo(() => [
+    ...(catalog.data || []),
+    ...((s?.custom as { id: string; name: string; baseUrl: string; protocol: string }[] | undefined) || []).map((c) => ({ id: c.id, name: c.name, group: 'custom' as const, baseUrl: c.baseUrl, protocol: c.protocol })),
+  ], [catalog.data, s?.custom]);
+
+  const sec = SECTIONS.find((x) => x.id === section) ?? SECTIONS[0];
+  const ctx: Ctx | undefined = s && { s, patch, models: models.data?.models || [], modelsLoading: models.loading, providers };
+  const list = ctx && sec.list?.(ctx);
+  const cur = opened[sec.id];
+  const setCur = (id: string | undefined) => { setOpened((o) => ({ ...o, [sec.id]: id })); setNarrowDetail(!!id); };
 
   return (
-    <dialog ref={ref} onClose={onClose} onCancel={onClose} aria-labelledby="settings-title"
-      className="fixed inset-y-0 right-0 m-0 ml-auto h-full max-h-none w-full max-w-[480px] border-l border-line bg-paper p-0 text-ink shadow-[var(--fs-shadow-lg)] backdrop:bg-black/40 open:animate-[fade_200ms_ease-out]">
-      <div className="flex h-full flex-col">
-        <header className="flex items-center justify-between border-b border-line px-6 py-4">
-          <h2 id="settings-title" className="text-[15px] font-semibold">{t('settings.title')}</h2>
-          <button className="fs-icon-btn" onClick={onClose} aria-label={t('settings.close')}><X size={16} /></button>
-        </header>
-        {!s ? <div className="p-6 text-[13px] text-ink-3">{t('settings.loading')}</div> : (
-          <div className="flex-1 space-y-9 overflow-y-auto px-6 py-6">
-            <section aria-labelledby="sec-lang">
-              <h3 id="sec-lang" className="text-[13px] font-semibold text-ink">{t('settings.language.title')}</h3>
-              <p className="mt-1 text-[12.5px] leading-relaxed text-ink-3">{t('settings.language.desc')}</p>
-              <div className="mt-3 flex flex-wrap gap-1.5" role="radiogroup" aria-labelledby="sec-lang">
-                {(['auto', 'zh', 'en'] as LocalePref[]).map((p) => (
-                  <button key={p} type="button" role="radio" aria-checked={(s.locale ?? pref) === p} className="fs-chip"
-                    onClick={() => { setPref(p); patch({ locale: p }); }}>{t(`settings.language.${p}`)}</button>
-                ))}
-              </div>
-            </section>
+    <dialog ref={ref} onClose={onClose} onCancel={onClose} aria-labelledby="settings-title" onMouseDown={(e) => { if (e.target === ref.current) ref.current?.close(); }}
+      className="m-auto h-[min(720px,calc(100dvh-48px))] w-[min(1080px,calc(100vw-32px))] max-w-none overflow-hidden rounded-2xl border border-line bg-surface p-0 text-ink shadow-[0_24px_64px_-16px_rgb(0_0_0/0.5),0_4px_12px_rgb(0_0_0/0.18)] backdrop:bg-black/50 backdrop:backdrop-blur-[2px] open:animate-pop max-md:h-[calc(100dvh-24px)] max-md:w-[calc(100vw-16px)]">
+      <div className="flex h-full min-h-0 max-md:flex-col">
+        {/* sections */}
+        <nav className="flex w-[196px] shrink-0 flex-col gap-0.5 border-r border-line bg-paper-2 p-3 max-md:w-full max-md:flex-row max-md:gap-1 max-md:overflow-x-auto max-md:border-b max-md:border-r-0 max-md:p-2 max-md:pr-12" aria-label={t('settings.title')}>
+          <h2 id="settings-title" className="px-2.5 pb-3 pt-2 text-[15px] font-semibold max-md:sr-only">{t('settings.title')}</h2>
+          {SECTIONS.map((x) => {
+            const on = x.id === sec.id;
+            return (
+              <button key={x.id} type="button" onClick={() => { setSection(x.id); setNarrowDetail(false); }} aria-current={on || undefined}
+                className={`flex shrink-0 items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] transition-colors duration-150 ${on ? 'bg-surface text-ink shadow-[var(--fs-shadow-sm)]' : 'text-ink-2 hover:bg-ink/[0.04] hover:text-ink'}`}>
+                <x.icon size={15} className={on ? 'text-accent-ink' : 'text-ink-3'} aria-hidden />{t(x.label)}
+              </button>
+            );
+          })}
+        </nav>
 
-            <section aria-labelledby="sec-models">
-              <h3 id="sec-models" className="text-[13px] font-semibold text-ink">{t('settings.models.title')}</h3>
-              <p className="mt-1 text-[12.5px] leading-relaxed text-ink-3">{t('settings.models.desc')}</p>
-              <div className={`mt-4 ${card('relay')}`}>
-                <div className="flex items-center justify-between gap-3">
-                  <span className="flex items-center gap-2 text-[14px] font-semibold">Relay <span className="fs-tag border-accent/40 text-accent-ink">{t('settings.recommended')}</span></span>
-                  <UseButton id="relay" />
-                </div>
-                <p className="mb-3 mt-1 text-[12.5px] leading-relaxed text-ink-2">{t('settings.models.relayDesc')}</p>
-                <KeyField id="relay" label="Relay" saved={s.keys.relay} placeholder="sk-flash-…" onSave={(v) => patch({ keys: { relay: v } })} />
-                <a href="https://relay.example.com" target="_blank" rel="noreferrer" className="mt-2.5 inline-flex items-center gap-1 text-[12px] text-accent-ink hover:underline">{t('settings.models.getRelay')} <ExternalLink size={12} /></a>
+        {!ctx ? <div className="flex flex-1 items-center justify-center text-[13px] text-ink-3">{t('settings.loading')}</div> : (
+          <div className="flex min-h-0 min-w-0 flex-1">
+            {list && (
+              <div className={`w-[248px] shrink-0 overflow-y-auto border-r border-line p-2.5 max-md:w-full max-md:border-r-0 ${narrowDetail ? 'max-md:hidden' : ''}`}>
+                {list.render ? list.render(ctx, cur ?? (sec.id === 'models' ? providers[0]?.id : undefined), setCur) : (
+                  <ul className="space-y-px">
+                    {list.items.map((it) => {
+                      const on = (cur ?? list.items[0]?.id) === it.id;
+                      return (
+                        <li key={it.id}>
+                          <button type="button" onClick={() => setCur(it.id)} aria-current={on || undefined}
+                            className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-left text-[13px] transition-colors ${on ? 'bg-ink/[0.07] text-ink' : 'text-ink-2 hover:bg-ink/[0.04] hover:text-ink'}`}>
+                            <ProviderLogo id={it.logo} name={it.name} size={18} /><span className="min-w-0 flex-1 truncate">{it.name}</span>
+                            {it.on && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-jade" aria-label={t('providers.connected')} />}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
               </div>
-              <div className="mt-3 space-y-3">
-                {OFFICIAL.map((p) => (
-                  <div key={p.id} className={card(p.id)}>
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-[13.5px] font-semibold">{t(p.name)}</span>
-                      <span className="flex items-center gap-3">
-                        {!s.keys[p.id] && <a href={p.url} target="_blank" rel="noreferrer" className="text-[11.5px] text-ink-3 hover:text-ink">{t('settings.getKey')}</a>}
-                        <UseButton id={p.id} />
-                      </span>
-                    </div>
-                    <p className="mb-3 mt-1 text-[12px] leading-relaxed text-ink-3">{t(p.desc)}</p>
-                    <KeyField id={p.id} label={t(p.name)} saved={s.keys[p.id]} placeholder={p.hint} onSave={(v) => patch({ keys: { [p.id]: v } })} />
-                    <details className="group/relay mt-2.5" open={!!s.baseUrls?.[p.id]}>
-                      <summary className="cursor-pointer list-none text-[12px] text-ink-3 hover:text-ink">
-                        {s.baseUrls?.[p.id] ? t('settings.models.baseUrl', { url: s.baseUrls[p.id] }) : t('settings.models.changeBase')}
-                      </summary>
-                      <div className="mt-2">
-                        <TextField id={`base-${p.id}`} label={t('settings.models.baseDefault', { url: p.base })} saved={s.baseUrls?.[p.id] ?? ''} placeholder={p.base}
-                          onSave={(v) => patch({ baseUrls: { [p.id]: v } })} />
-                      </div>
-                    </details>
-                  </div>
-                ))}
-              </div>
-              <details className="group mt-3">
-                <summary className="flex cursor-pointer list-none items-center justify-between rounded-lg px-1 py-2 text-[13px] text-ink-2 hover:text-ink">
-                  <span>{t('settings.models.others')} <span className="text-ink-3">{t('settings.models.connected', { n: PROVIDERS.filter((p) => s.keys[p.id]).length })}</span></span>
-                  <span className="text-ink-3 transition-transform group-open:rotate-90" aria-hidden>›</span>
-                </summary>
-                <div className="mt-2 space-y-4">
-                  {PROVIDERS.map((p) => (
-                    <div key={p.id}>
-                      <div className="mb-1.5 flex items-center justify-between">
-                        <span className="text-[12.5px] font-medium text-ink-2">{p.nameKey ? t(p.nameKey) : p.name}</span>
-                        {p.url && <a href={p.url} target="_blank" rel="noreferrer" className="text-[11.5px] text-ink-3 hover:text-ink">{t('settings.getKey')}</a>}
-                      </div>
-                      <KeyField id={p.id} label={p.nameKey ? t(p.nameKey) : p.name} saved={s.keys[p.id]} placeholder={p.hint} onSave={(v) => patch({ keys: { [p.id]: v } })} />
-                    </div>
-                  ))}
-                </div>
-              </details>
-            </section>
-
-            <section aria-labelledby="sec-default">
-              <h3 id="sec-default" className="text-[13px] font-semibold">{t('settings.defaults.title')}</h3>
-              <label htmlFor="default-model" className="fs-label mt-4">{t('settings.defaults.model')}</label>
-              <select id="default-model" className="fs-input" value={s.defaults.model ?? ''} disabled={!models.data?.models.length}
-                onChange={(e) => patch({ defaults: { model: e.target.value } })}>
-                {!s.defaults.model && <option value="">{models.data?.default ? t('settings.defaults.auto', { name: models.data.default.name }) : t('settings.defaults.connectFirst')}</option>}
-                {models.data?.models.map((m) => <option key={m.provider + m.id} value={`${m.provider}/${m.id}`}>{m.providerName} · {m.name}{m.recommended ? t('settings.defaults.recommended') : ''}{m.vision ? '' : t('settings.defaults.noVision')}</option>)}
-              </select>
-              <fieldset className="mt-5">
-                <legend className="fs-label">{t('settings.defaults.runtime')}</legend>
-                <div className="space-y-2">
-                  {RUNTIMES.map((r) => (
-                    <label key={r.id} className={`flex cursor-pointer items-start gap-3 rounded-xl border px-3.5 py-3 transition-colors ${s.defaults.runtime === r.id ? 'border-accent/60 bg-accent-soft/50' : 'border-line hover:border-line-2'}`}>
-                      <input type="radio" name="runtime" className="mt-0.5 accent-[rgb(var(--fs-accent))]" checked={s.defaults.runtime === r.id} onChange={() => patch({ defaults: { runtime: r.id } })} />
-                      <span><span className="block text-[13px] font-medium">{r.name}</span><span className="mt-0.5 block text-[12px] leading-relaxed text-ink-3">{t(r.desc)}</span></span>
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
-            </section>
-
-            <section aria-labelledby="sec-voice">
-              <h3 id="sec-voice" className="text-[13px] font-semibold">{t('settings.voice.title')}</h3>
-              <p className="mt-1 text-[12.5px] leading-relaxed text-ink-3">{t('settings.voice.desc')}</p>
-              <div className="mt-4 space-y-4">
-                <div>
-                  <div className="mb-1.5 flex items-center justify-between"><span className="text-[12.5px] font-medium text-ink-2">{t('settings.voice.volc')}</span><a href="https://console.volcengine.com/speech/app" target="_blank" rel="noreferrer" className="text-[11.5px] text-ink-3 hover:text-ink">{t('settings.getKey')}</a></div>
-                  <KeyField id="tts-volc" label={t('settings.voice.volcLabel')} saved={s.tts.volcengine} placeholder="API Key" onSave={(v) => patch({ tts: { volcengine: v } })} />
-                </div>
-                <div>
-                  <div className="mb-1.5 flex items-center justify-between"><span className="text-[12.5px] font-medium text-ink-2">ElevenLabs</span><a href="https://elevenlabs.io/app/settings/api-keys" target="_blank" rel="noreferrer" className="text-[11.5px] text-ink-3 hover:text-ink">{t('settings.getKey')}</a></div>
-                  <KeyField id="tts-11" label="ElevenLabs" saved={s.tts.elevenlabs} placeholder="sk_…" onSave={(v) => patch({ tts: { elevenlabs: v } })} />
-                </div>
-              </div>
-            </section>
-
-            <section aria-labelledby="sec-net">
-              <h3 id="sec-net" className="text-[13px] font-semibold">{t('settings.net.title')}</h3>
-              <p className="mt-1 text-[12.5px] leading-relaxed text-ink-3">{t('settings.net.desc')}</p>
-              <div className="mt-3">
-                <TextField id="proxy" label={t('settings.net.proxy')} saved={s.proxy ?? ''} placeholder="http://127.0.0.1:7890" onSave={(v) => patch({ proxy: v })} />
-              </div>
-            </section>
-
-            <section aria-labelledby="sec-env" className="pb-4">
-              <h3 id="sec-env" className="text-[13px] font-semibold">{t('settings.env.title')}</h3>
-              <ul className="mt-3 divide-y divide-line rounded-xl border border-line">
-                {(env.data || []).map((c) => (
-                  <li key={c.id} className="flex items-start gap-3 px-3.5 py-3">
-                    {c.ok ? <Check size={15} className="mt-0.5 shrink-0 text-jade" aria-label={t('settings.env.ok')} /> : <CircleAlert size={15} className="mt-0.5 shrink-0 text-seal" aria-label={t('settings.env.fix')} />}
-                    <span className="min-w-0">
-                      <span className="block text-[12.5px] font-medium">{t(`settings.env.${c.id}`)}</span>
-                      <span className="mt-0.5 block truncate text-[12px] text-ink-3" title={c.detail}>{c.ok ? c.detail : c.fix}</span>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-              <p className="mt-3 flex items-center gap-1.5 text-[11.5px] text-ink-3"><KeyRound size={12} /> {t('settings.env.where')}</p>
-            </section>
+            )}
+            <div className={`relative min-h-0 min-w-0 flex-1 ${list && !narrowDetail ? 'max-md:hidden' : ''}`}>
+              {list && <button type="button" className="fs-btn fs-btn-ghost fs-btn-sm absolute left-3 top-3 z-10 md:hidden" onClick={() => setNarrowDetail(false)}><ArrowLeft size={14} aria-hidden /> {t('settings.back')}</button>}
+              <div className="h-full max-md:pt-8">{sec.detail(ctx, cur, setCur)}</div>
+            </div>
           </div>
         )}
+        <button type="button" className="fs-icon-btn absolute right-3 top-3 z-20 max-md:right-2 max-md:top-2 max-md:bg-paper-2" onClick={() => ref.current?.close()} aria-label={t('settings.close')}><X size={16} /></button>
       </div>
     </dialog>
   );

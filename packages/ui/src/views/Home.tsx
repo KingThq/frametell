@@ -5,6 +5,8 @@ import { go, useLoad } from '../lib/hooks';
 import { STAGE_NAME, type Stage } from '../lib/run';
 import { STYLE_SWATCH, styleName, styleSummary } from '../lib/styles';
 import { intlTag, t, useT } from '../i18n';
+import { ModelPicker } from '../components/ModelPicker';
+import { VoicePicker } from '../components/VoicePicker';
 
 const DURATIONS = [60, 120, 300, 600];
 const ACCEPT = '.md,.markdown,.txt,.pdf,.docx,.pptx,.epub,.png,.jpg,.jpeg,.webp';
@@ -29,56 +31,14 @@ function rowState(p: ProjectView): { label: string; tone: string; action?: { tex
   }
 }
 
-/** a narrator picker with a play button: the sample is synthesized once with your key, then kept on this machine */
-function VoicePicker({ voices, value, onChange }: { voices: Voice[]; value?: string; onChange: (id: string) => void }) {
-  const { t } = useT();
-  const [state, setState] = useState<'idle' | 'loading' | 'playing'>('idle');
-  const [error, setError] = useState<string>();
-  const audio = useRef<HTMLAudioElement | null>(null);
-  const v = voices.find((x) => x.id === value);
-  useEffect(() => () => { audio.current?.pause(); }, []);
-  useEffect(() => { audio.current?.pause(); setState('idle'); setError(undefined); }, [value]);
-  const toggle = async () => {
-    if (!v) return;
-    if (state === 'playing') { audio.current?.pause(); setState('idle'); return; }
-    setError(undefined); setState('loading');
-    const a = new Audio(client.voicePreviewUrl(v));
-    audio.current = a;
-    a.onended = () => setState('idle');
-    a.onerror = () => { setState('idle'); setError(t('home.voice.previewFailed')); };
-    try { await a.play(); setState('playing'); } catch { setState('idle'); setError(t('home.voice.previewFailed')); }
-  };
-  return (
-    <div>
-      <label htmlFor="voice" className="fs-label">{t('home.voice.label')}</label>
-      <div className="flex gap-2">
-        <select id="voice" className="fs-input" value={value ?? ''} onChange={(e) => onChange(e.target.value)} disabled={!voices.length}>
-          {!voices.length && <option value="">{t('home.voice.none')}</option>}
-          {voices.map((x) => <option key={x.provider + x.id} value={x.id}>{x.name}{x.gender ? (x.gender === 'female' ? t('home.voice.female') : t('home.voice.male')) : ''}{x.provider === 'elevenlabs' ? ' · ElevenLabs' : ''}</option>)}
-        </select>
-        <button type="button" className="fs-btn fs-btn-secondary h-9 w-[76px] shrink-0 px-0" onClick={toggle} disabled={!v} aria-label={state === 'playing' ? t('home.voice.stopPreview', { name: v?.name ?? '' }) : t('home.voice.preview', { name: v?.name ?? '' })}>
-          {state === 'loading' ? <Loader2 size={14} className="animate-spin" aria-hidden /> : state === 'playing' ? <Square size={12} aria-hidden /> : <Play size={14} aria-hidden />}
-          {state === 'playing' ? t('home.voice.stop') : t('home.voice.listen')}
-        </button>
-      </div>
-      {error && <p className="mt-1.5 text-[12px] text-seal" role="alert">{error}</p>}
-    </div>
-  );
-}
-
-const RUNTIME_NAME: Record<string, string> = { pi: 'Studio Agent', 'claude-agent-sdk': 'Claude Agent', codex: 'Codex' };
 const host = (u: string) => { try { return new URL(u).host; } catch { return u; } };
 
-/** where this run's requests will go, in one line: runtime · endpoint · proxy; and a runtime/model mismatch, if any */
-function route(s: PublicSettings | undefined, modelId: string | undefined, providerName: string | undefined) {
+/** where this run's requests go, said only when it is not the provider's own endpoint: a relay, a proxy */
+function route(s: PublicSettings | undefined, modelId: string | undefined) {
   if (!s || !modelId) return undefined;
-  const provider = modelId.split('/')[0];
-  const runtime = s.defaults.runtime;
-  const relay = s.baseUrls?.[provider];
-  const via = provider === 'relay' ? t('home.via.relay') : relay ? t('home.via.relay', { host: host(relay) }) : provider === 'anthropic' ? t('home.via.anthropic') : provider === 'openai' ? t('home.via.openai') : t('home.via.direct', { name: providerName ?? provider });
-  const mismatch = runtime === 'claude-agent-sdk' && !['relay', 'anthropic'].includes(provider) ? t('home.via.claudeMismatch')
-    : runtime === 'codex' && !['relay', 'openai'].includes(provider) ? t('home.via.codexMismatch') : undefined;
-  return { parts: [RUNTIME_NAME[runtime] ?? runtime, via, s.proxy ? t('home.via.proxy', { host: host(s.proxy) }) : ''].filter(Boolean), mismatch };
+  const relay = s.baseUrls?.[modelId.split('/')[0]];
+  const parts = [relay ? t('home.via.relay', { host: host(relay) }) : '', s.proxy ? t('home.via.proxy', { host: host(s.proxy) }) : ''].filter(Boolean);
+  return parts.length ? parts.join(' · ') : undefined;
 }
 
 export function Home({ openSettings }: { openSettings: () => void }) {
@@ -115,7 +75,7 @@ export function Home({ openSettings }: { openSettings: () => void }) {
   };
 
   const start = async () => {
-    if (!ready || via?.mismatch) return;
+    if (!ready) return;
     setBusy(true); setError(undefined);
     try {
       const v = voiceList.find((x) => x.id === voiceId);
@@ -126,9 +86,12 @@ export function Home({ openSettings }: { openSettings: () => void }) {
 
   const recent = useMemo(() => projects.data || [], [projects.data]);
   const current = (styles.data || []).find((s) => s.id === styleId);
-  const picked = models.data?.models.find((m) => `${m.provider}/${m.id}` === modelId);
-  const via = route(settings.data, modelId, picked?.providerName);
-  const go_ = ready && !via?.mismatch;
+  const via = route(settings.data, modelId);
+  const addModel = async (provider: string, id: string) => {
+    const cur = settings.data?.models?.[provider] ?? [];
+    if (!cur.includes(id)) await client.updateSettings({ models: { [provider]: [...cur, id] } });
+    settings.reload(); models.reload();
+  };
   const hint = noModel ? null : !hasInput ? t('home.hintInput') : !modelId ? t('home.hintModel') : null;
 
   return (
@@ -138,10 +101,10 @@ export function Home({ openSettings }: { openSettings: () => void }) {
       </h1>
       <p className="mt-3 max-w-[60ch] text-[14.5px] leading-relaxed text-ink-2">{t('home.intro')}</p>
 
-      <section aria-label={t('home.newVideo')} className="fs-card mt-9 overflow-hidden"
+      <section aria-label={t('home.newVideo')} className="fs-card mt-9"
         onDragOver={(e) => { e.preventDefault(); setDrag(true); }} onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDrag(false); }}
         onDrop={(e) => { e.preventDefault(); setDrag(false); add(e.dataTransfer.files); }}>
-        <div className={`relative border-b border-line px-5 pb-4 pt-5 transition-colors duration-150 ${drag ? 'bg-accent-soft/60' : ''}`}>
+        <div className={`relative rounded-t-2xl border-b border-line px-5 pb-4 pt-5 transition-colors duration-150 ${drag ? 'bg-accent-soft/60' : ''}`}>
           <label htmlFor="topic" className="sr-only">{t('home.topicLabel')}</label>
           <textarea id="topic" value={topic} onChange={(e) => setTopic(e.target.value)} rows={3} autoFocus
             onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) start(); }}
@@ -170,7 +133,10 @@ export function Home({ openSettings }: { openSettings: () => void }) {
               {DURATIONS.map((s) => <button key={s} type="button" role="radio" aria-checked={duration === s} className="fs-chip" onClick={() => setDuration(s)}>{t('home.minutes', { n: s / 60 })}</button>)}
             </div>
           </fieldset>
-          <VoicePicker voices={voiceList} value={voiceId} onChange={setVoice} />
+          <div>
+            <label htmlFor="voice" className="fs-label">{t('home.voice.label')}</label>
+            <VoicePicker voices={voiceList} value={voiceId} onChange={setVoice} />
+          </div>
           <fieldset className="sm:col-span-2">
             <legend className="fs-label">{t('home.style')}</legend>
             <div className="flex flex-wrap gap-1.5" role="radiogroup">
@@ -190,17 +156,12 @@ export function Home({ openSettings }: { openSettings: () => void }) {
                 <Settings2 size={13} aria-hidden /> {t('home.modelSettings')}
               </button>
             </div>
-            <select id="model" className="fs-input" value={modelId ?? ''} onChange={(e) => setModel(e.target.value)} disabled={!models.data?.models.length}>
-              {!models.data?.models.length && <option value="">{t('home.connectFirst')}</option>}
-              {models.data?.models.map((m) => <option key={m.provider + m.id} value={`${m.provider}/${m.id}`}>{m.providerName} · {m.name}{m.recommended ? t('home.recommended') : ''}</option>)}
-            </select>
-            {via && (via.mismatch
-              ? <p className="mt-2 flex items-center gap-1.5 text-[12.5px] text-seal" role="alert"><CircleAlert size={13} aria-hidden /> {via.mismatch}<button type="button" className="ml-1 text-accent-ink hover:underline" onClick={openSettings}>{t('home.toSettings')}</button></p>
-              : <p className="mt-2 text-[12px] text-ink-3">{via.parts.join(' · ')}<button type="button" className="ml-2 text-ink-2 underline-offset-2 hover:text-ink hover:underline" onClick={openSettings}>{t('home.change')}</button></p>)}
+            <ModelPicker models={models.data?.models || []} value={modelId} onChange={setModel} onAdd={addModel} onManage={openSettings} disabled={!models.data} />
+            {via && <p className="mt-2 text-[12px] text-ink-3">{via}</p>}
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line bg-paper-2/50 px-5 py-3.5">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-b-2xl border-t border-line bg-paper-2/50 px-5 py-3.5">
           {noModel ? (
             <p className="text-[12.5px] text-ink-2">{t('home.noModelA')}<button className="text-accent-ink underline-offset-2 hover:underline" onClick={openSettings}>{t('home.noModelLink')}</button>{t('home.noModelB')}</p>
           ) : error ? (
@@ -210,7 +171,7 @@ export function Home({ openSettings }: { openSettings: () => void }) {
           ) : (
             <p className="text-[12px] text-ink-3"><kbd className="fs-kbd">⌘</kbd> <kbd className="fs-kbd">↵</kbd> {t('home.startKey')}</p>
           )}
-          <button className="fs-btn fs-btn-accent fs-btn-lg" disabled={!go_} onClick={start}>
+          <button className="fs-btn fs-btn-accent fs-btn-lg" disabled={!ready} onClick={start}>
             {busy && <Loader2 size={16} className="animate-spin" aria-hidden />}
             {busy ? t('home.creating') : t('home.create')}
             {!busy && <ArrowRight size={16} aria-hidden />}

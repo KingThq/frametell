@@ -2,15 +2,17 @@
 // the desktop app the preload script exposes the same methods as `window.studioBridge` over IPC.
 import { t } from '../i18n';
 import type {
-  EnvCheck, LoggedEvent, ModelInfo, NewProjectInput, PageTiming, ProjectSummary, PublicSettings, SettingsPatch, StyleInfo, Timeline, UserRef, Voice,
+  EnvCheck, LoggedEvent, ModelInfo, NewProjectInput, PageTiming, ProjectSummary, ProviderSpec, PublicSettings, SettingsPatch, StyleInfo, Timeline, UserRef, Voice,
 } from '@frametell/core/types';
 
-export type { EnvCheck, LoggedEvent, ModelInfo, NewProjectInput, PageTiming, ProjectSummary, PublicSettings, SettingsPatch, StyleInfo, Timeline, UserRef, Voice };
+export type { EnvCheck, LoggedEvent, ModelInfo, NewProjectInput, PageTiming, ProjectSummary, ProviderSpec, PublicSettings, SettingsPatch, StyleInfo, Timeline, UserRef, Voice };
 export type ProjectView = ProjectSummary & { previewBase: string };
 
 export interface StudioClient {
   settings(): Promise<PublicSettings>;
   updateSettings(patch: SettingsPatch): Promise<PublicSettings>;
+  /** the providers Studio offers, in the order it shows them */
+  providers(): Promise<ProviderSpec[]>;
   env(): Promise<EnvCheck[]>;
   styles(): Promise<StyleInfo[]>;
   models(): Promise<{ models: ModelInfo[]; default?: ModelInfo }>;
@@ -54,6 +56,7 @@ async function call<T>(method: string, url: string, body?: unknown): Promise<T> 
 export const httpClient: StudioClient = {
   settings: () => call('GET', '/api/settings'),
   updateSettings: (patch) => call('PUT', '/api/settings', patch),
+  providers: () => call<ProviderSpec[]>('GET', '/api/providers'),
   env: () => call('GET', '/api/env'),
   styles: () => call('GET', '/api/styles'),
   models: () => call('GET', '/api/models'),
