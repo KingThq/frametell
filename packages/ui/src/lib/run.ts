@@ -39,6 +39,8 @@ export interface PageView {
   thumb?: string;
   lastText?: string;
   tools: number;
+  /** what it is writing right now, while the model streams it: 「已写 212 行」 */
+  progress?: string;
   startedAt?: number;
   endedAt?: number;
 }
@@ -68,7 +70,8 @@ export interface RunView {
   /** set from a change request on a finished film until the redraw starts: the director is deciding which pages to redo */
   revising?: number;
   /** what the director (or a page agent) is doing right now, in plain words, and since when */
-  activity?: { text: string; at: number };
+  /** `updated`: the latest streamed progress (a long silence after thinking means the answer is being written) */
+  activity?: { text: string; at: number; detail?: string; updated?: number };
   /** when the run (or its latest continuation) started, for elapsed time */
   startedAt?: number;
   /** the last moment anything happened (for "working…" indicators) */
@@ -118,6 +121,21 @@ export function reduce(v: RunView, e: LoggedEvent): RunView {
     case 'agent': {
       const ev = e.event;
       const who = isPage(e.session) ? `${pageName(e.session.slice(5))} · ` : '';
+      if (ev.type === 'progress') {
+        // a response still being written: say what, how far it has got, and show the line it is on
+        const doing = ev.what === 'thinking' ? '在想'
+          : ev.what === 'writing' ? (who ? '在写画面' : '在写')
+          : ev.what === 'text' ? '在写回复'
+          : `${(() => { const d = describeTool(ev.name ?? '', JSON.stringify({ path: ev.path ?? '' })); return who && /第 \d+ 页|文件$/.test(d) ? (ev.name === 'edit' ? '在改画面' : '在写画面') : d.replace(/^(读|写|修改|画)/, '在$1'); })()}${ev.lines ? ` · 已写 ${ev.lines} 行` : ''}`;
+        const text = who + doing;
+        const base = (x?: string) => x?.replace(/ · 已写 \d+ 行$/, '');
+        r.activity = { text, at: base(r.activity?.text) === base(text) ? r.activity!.at : at, detail: ev.what === 'tool' ? ev.tail : undefined, updated: at };
+        if (isPage(e.session) && ev.what === 'tool' && ev.lines) {
+          const id = e.session.slice(5);
+          if (r.pages[id]) r.pages = { ...r.pages, [id]: { ...r.pages[id], progress: `已写 ${ev.lines} 行` } };
+        }
+        return r;
+      }
       if (ev.type === 'tool_start') {
         const said = describeTool(ev.name, ev.summary);
         // inside a page session, writing code is drawing the page whatever the path summary kept
@@ -129,7 +147,7 @@ export function reduce(v: RunView, e: LoggedEvent): RunView {
         const id = e.session.slice(5);
         const p = r.pages[id] ? { ...r.pages[id] } : newPage(id, r);
         if (ev.type === 'text' && !/^(DONE|FLAGGED)\b/i.test(ev.text.trim())) p.lastText = ev.text;   // keep the description, not the check-loop reply
-        if (ev.type === 'tool_start') p.tools += 1;
+        if (ev.type === 'tool_start') { p.tools += 1; p.progress = undefined; }
         r.pages = { ...r.pages, [id]: p };
         return r;
       }
@@ -168,6 +186,9 @@ export function reduce(v: RunView, e: LoggedEvent): RunView {
       if (e.thumb) p.thumb = e.thumb;
       if (e.status === 'drawing' && !p.startedAt) p.startedAt = at;
       if (['ok', 'flagged', 'failed'].includes(e.status)) p.endedAt = at;
+      // the check round: first the pictures are taken, then the page agent looks at them
+      if (e.status === 'checking') r.activity = { text: `${pageName(e.id)} · ${e.sheet ? '在看自检截图' : '在截图自检'}${p.round > 1 ? `（第 ${p.round} 遍）` : ''}`, at };
+      p.progress = undefined;
       r.pages = { ...r.pages, [e.id]: p };
       if (!r.pageOrder.includes(e.id)) r.pageOrder = [...r.pageOrder, e.id].sort();
       return r;

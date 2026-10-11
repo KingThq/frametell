@@ -84,7 +84,8 @@ lint 结果：
 ${lint}
 
 附图是本页在这些页内时刻的截图（从左到右、从上到下）：${times.map((x) => x.local.toFixed(1) + 's').join('、')}。
-对照清单认真看图。有问题就改好 pages 文件再停下；没有问题只回复 DONE；有意保留的问题回复 FLAGGED: 原因。`;
+对照清单认真看图。有问题就改好 pages 文件再停下；没有问题只回复 DONE；有意保留的问题回复 FLAGGED: 原因。
+改的时候用 edit 只改出问题的那几处（字号、位置、时间点），**不要用 write 重写整个文件**——整页重写要几分钟，一处 edit 只要几秒；改完不用再读一遍文件。`;
 }
 
 export function reviewPrompt(issues: LintIssue[], flagged: string[]) {
@@ -92,5 +93,5 @@ export function reviewPrompt(issues: LintIssue[], flagged: string[]) {
 ${issues.length ? '全片 lint 结果：\n' + issues.map((i) => `- ${i.page} ${i.local}s：${i.msg}`).join('\n') : 'lint 没有发现问题。'}
 ${flagged.length ? '\n这些页自检后仍有问题：' + flagged.join('；') : ''}
 
-只修跨页的问题和明显的缺陷（风格不统一、某页明显空、文字出界或重叠），最多改 2 页；小瑕疵不改。改完停下，用一句大白话告诉用户改了哪一页、看起来有什么不同（比如「第 5 页的番茄钟在后半段会闪一下，已经修好」），不要用 lint、determinism、p05 这类术语；没有要改的就回复 DONE。`;
+用 edit 改局部，不要重写整个页面文件。只修跨页的问题和明显的缺陷（风格不统一、某页明显空、文字出界或重叠），最多改 2 页；小瑕疵不改。改完停下，用一句大白话告诉用户改了哪一页、看起来有什么不同（比如「第 5 页的番茄钟在后半段会闪一下，已经修好」），不要用 lint、determinism、p05 这类术语；没有要改的就回复 DONE。`;
 }

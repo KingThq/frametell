@@ -24,7 +24,25 @@ export function piRuntime(models: MutableModels, model: Model<Api>, opts: { thin
       });
       const ref = resume || path.join(o.cwd, '.studio', 'sessions', `${o.name}.json`);
       let turns = 0, usage = emptyUsage(), lastText = '', stop: TurnResult['stopReason'] = 'done';
+      // the response as it streams: one progress event a second at most, so a long write is visible while it is written
+      let lastProgress = 0;
+      const progress = (ev: any) => {
+        if (ev.type === 'thinking_end') { lastProgress = Date.now(); o.onEvent?.({ type: 'progress', what: 'writing', chars: 0 }); return; }
+        const now = Date.now();
+        if (now - lastProgress < 900) return;
+        lastProgress = now;
+        const block = ev.partial?.content?.[ev.contentIndex];
+        if (ev.type === 'toolcall_delta' && block?.type === 'toolCall') {
+          const a = block.arguments || {};
+          const body = String(a.content ?? a.new_string ?? a.command ?? '');
+          const tail = body.split('\n').map((l: string) => l.trim()).filter(Boolean).pop()?.slice(0, 90);
+          o.onEvent?.({ type: 'progress', what: 'tool', name: block.name, path: a.path ?? a.file_path, lines: body ? body.split('\n').length : 0, chars: body.length, tail });
+        } else if (ev.type === 'thinking_delta' || ev.type === 'text_delta') {
+          o.onEvent?.({ type: 'progress', what: ev.type === 'thinking_delta' ? 'thinking' : 'text', chars: String(block?.thinking ?? block?.text ?? '').length });
+        }
+      };
       agent.subscribe((e) => {
+        if (e.type === 'message_update') { progress((e as any).assistantMessageEvent); return; }
         if (e.type === 'turn_end') {
           turns++;
           const u = (e.message as any)?.usage;

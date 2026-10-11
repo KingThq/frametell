@@ -9,7 +9,14 @@ export type RuntimeEvent =
   | { type: 'tool_start'; id: string; name: string; summary: string }
   | { type: 'tool_end'; id: string; name: string; ok: boolean; summary?: string }
   | { type: 'turn'; usage: TokenUsage }
-  | { type: 'retry'; message: string };
+  | { type: 'retry'; message: string }
+  /**
+   * What the model is producing right now, before it is done (streamed, about once a second; never logged): a tool call
+   * being written (which file, how many lines so far, the latest line), or how much it has thought or said. `writing`:
+   * the thinking is over and the answer is being written, but the provider sends it only once it is complete (Gemini
+   * sends a tool call whole), so there is nothing to show of it yet.
+   */
+  | { type: 'progress'; what: 'tool' | 'thinking' | 'text' | 'writing'; name?: string; path?: string; lines?: number; chars: number; tail?: string };
 
 /** A message the orchestrator sends into a session: text plus optional images (lint report + contact sheet). */
 export interface StageInput { text: string; images?: string[] }

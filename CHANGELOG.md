@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Live progress while a response is still being written: the status line says what is being written and how far it has got (「第 1 页 · 在写画面 · 已写 212 行」) with the line it is on, and the page list shows it too. Progress is streamed from the Pi runtime about once a second and never written to the log. Providers that hand a tool call over only when it is whole (Gemini) show the phase instead — 「在想」, then 「在写画面」 once the thinking goes quiet — and check rounds say 「在截图自检」 / 「在看自检截图」.
 - Page canvas: each page card offers 「引用」 on hover, to hand that page to the director without opening it.
 - Composer: a reference tray above the message. Hand the director exactly what you mean — a page (「改这一页」), a narration line or a frame from the workbench (「引用」), or files and images you attach, paste (⌘V) or drop. References show as chips with thumbnails; image and frame chips open full size; Backspace in an empty box removes the last one; the page you are looking at is offered as a one-click chip.
 - Agent: references reach the director as a `<references>` block ahead of the message, with film times and project paths it can open (frames and images with its read tool). Attached documents are parsed to Markdown under `refs/`.
@@ -31,7 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- A revised page is changed with targeted edits: the page agent is handed the current code and told not to rewrite the file (a one-line change had taken a 10k-token, three-minute rewrite).
+- Pages are fixed with targeted edits: a revised page's agent is handed the current code, and every check round (and the film review) asks for edits instead of rewriting the file. On the sample film a one-page change had spent 5½ of its 7 minutes on three whole-file rewrites of ~10k tokens each.
 - Revisions are faster and cheaper. Each change is planned in a fresh, small session that is handed the storyboard, the script and the code of the pages the request names (instead of resuming the session that made the whole film and reading files one round trip at a time), and a revised page gets two check rounds instead of three. On the sample film a one-page change went from about 8 minutes plus a render to under a minute to preview; deciding what to change went from 43 s to 16 s.
 - Export renders incrementally. The video is cut into segments that follow the pages, each cached under a key of what draws it (the pages on screen in it with their timing, the episode's settings, the engine); an export renders only the segments whose key changed, each worker drawing its list in one browser. On a 53-second film: a cold export takes as long as before, an export after changing one page renders 6 of 20 segments (video 29.6 s → 9.1 s).
 - Film view: a quieter page lane — page names sit beneath the pictures instead of over them, the page on screen is lit with a fine outline while the others rest a step back, the playhead is a thin line inside the current page, and only pages that need a look carry a mark.

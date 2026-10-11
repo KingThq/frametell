@@ -109,7 +109,7 @@ function Approval({ sb, project, active }: { sb: Storyboard; project: ProjectVie
 
 const PAGE_STATE: Record<PageView['status'], { text: (p?: PageView) => string; icon: React.ReactNode; tone: string }> = {
   queued: { text: () => '排队', icon: <CircleDashed size={14} />, tone: 'text-ink-3' },
-  drawing: { text: () => '正在画', icon: <Loader2 size={14} className="animate-spin" />, tone: 'text-accent-ink' },
+  drawing: { text: (p) => `正在画${p?.progress ? ` · ${p.progress}` : ''}`, icon: <Loader2 size={14} className="animate-spin" />, tone: 'text-accent-ink' },
   checking: { text: (p) => `自己检查${p?.round ? `（第 ${p.round} 遍）` : ''}`, icon: <Loader2 size={14} className="animate-spin" />, tone: 'text-accent-ink' },
   ok: { text: () => '画好了', icon: <Check size={14} />, tone: 'text-jade' },
   flagged: { text: () => '画好了，有一处要你看看', icon: <TriangleAlert size={14} />, tone: 'text-seal' },
@@ -250,17 +250,26 @@ function WorkChapter({ b, live }: { b: Extract<Block, { kind: 'work' }>; live: b
 function LiveLine({ run }: { run: RunView }) {
   const now = useNow(true);
   const a = run.activity;
-  const text = a?.text ?? (run.revising ? '在看要改哪几页' : run.current ? STAGE_DOING[run.current] : '准备中');
-  const since = a?.at ?? run.revising ?? (run.current ? run.stages[run.current].startedAt : undefined);
+  // thinking that has gone quiet, with nothing done yet: the model is writing an answer it hands over only when whole
+  const writing = !!a?.updated && /在想$/.test(a.text) && now - a.updated > 4000;
+  const text = writing ? a!.text.replace(/在想$/, a!.text.includes('页 · ') ? '在写画面' : '在写') : a?.text ?? (run.revising ? '在看要改哪几页' : run.current ? STAGE_DOING[run.current] : '准备中');
+  const since = writing ? a!.updated : a?.at ?? run.revising ?? (run.current ? run.stages[run.current].startedAt : undefined);
   const secs = since ? Math.max(0, Math.round((now - since) / 1000)) : 0;
   return (
-    <div className="flex items-center gap-2.5 animate-fade" role="status">
+    <div className="flex items-start gap-2.5 animate-fade" role="status">
       <span className="relative flex h-5 w-5 shrink-0 items-center justify-center" aria-hidden>
         <span className="absolute inset-0 rounded-full bg-accent/40 motion-safe:animate-halo" />
         <span className="relative flex h-5 w-5 items-center justify-center rounded-full bg-paper ring-1 ring-accent/50"><Crest size={11} /></span>
       </span>
-      <span className="fs-shimmer min-w-0 truncate text-[13px]">{text}…</span>
-      {secs > 2 && <span className="shrink-0 text-[12px] text-ink-3 tabular">{secs < 60 ? `${secs} 秒` : clock(secs * 1000)}</span>}
+      <span className="min-w-0 flex-1">
+        <span className="flex items-baseline gap-2.5">
+          <span className="fs-shimmer min-w-0 truncate text-[13px]">{text}…</span>
+          {secs > 2 && <span className="shrink-0 text-[12px] text-ink-3 tabular">{secs < 60 ? `${secs} 秒` : clock(secs * 1000)}</span>}
+        </span>
+        {/* the line it is writing right now, so a long write is seen growing */}
+        {/在写(画面)?$/.test(text) && !a?.detail && secs > 8 && <span className="mt-0.5 block text-[11.5px] text-ink-3">模型会一次写完再交出来，写好前看不到内容</span>}
+        {a?.detail && <code key={a.detail} className="mt-1 block truncate font-mono text-[11.5px] leading-5 text-ink-3 animate-fade">{a.detail}</code>}
+      </span>
     </div>
   );
 }

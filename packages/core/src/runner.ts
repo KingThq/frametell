@@ -124,10 +124,18 @@ class Runner {
   }
 
   private emit = (e: StudioEvent) => {
+    // live progress of a response being written goes to whoever is watching, not into the log: it is only "now"
+    if (e.type === 'agent' && e.event.type === 'progress') {
+      const live = { ...e, seq: this.seq + ++this.tick / 1e4, at: Date.now() } as Logged;
+      for (const fn of this.subs) fn(live);
+      return;
+    }
+    this.tick = 0;
     const logged = { ...e, seq: ++this.seq, at: Date.now() } as Logged;
     fs.appendFileSync(this.log, JSON.stringify(logged) + '\n');
     for (const fn of this.subs) fn(logged);
   };
+  private tick = 0;
 
   /** events after `since` (replayed from disk), then live ones */
   subscribe(fn: (e: Logged) => void, since = 0) {
