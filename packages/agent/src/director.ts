@@ -45,6 +45,18 @@ interface State {
 /** components every page of a style can use, registered before the page sessions start */
 const STYLE_EXTRAS: Record<string, string[]> = { 'warm-story': ['engine/lib/warm.js'] };
 
+/** the part of a crash that says what broke: the error and the page's own lines, not Node's internals */
+export function crashText(raw: string, id: string): string {
+  const lines = raw.split('\n').map((l) => l.trim()).filter(Boolean);
+  const err = lines.find((l) => /(Error|error):/.test(l) && !/^node:internal/.test(l))?.replace(/^page\.evaluate:\s*/, '') ?? lines[0] ?? raw;
+  const at = lines.filter((l) => l.includes(`pages/${id}.js`) || /engine\/(runtime|lib)\//.test(l)).map((l) => l.replace(/^.*?((pages|engine)\/[^\s)]+).*$/, '$1')).slice(0, 4);
+  return [err.replace(/ at file:\/\/\S+/, ''), ...at.map((a) => `  at ${a}`)].join('\n').slice(0, 800);
+}
+
+const crashPrompt = (id: string, crash: string) => `pages/${id}.js 运行时报错，还没法截图检查：
+${crash}
+先修好这个错误：多半是调用了不存在的函数或参数不对，用法以「本片的组件与范例」为准，不要猜引擎的 API。用 edit 改需要改的地方，修好后停下。`;
+
 /**
  * A page that already works, changed: the current code is handed over, and the change is made with targeted edits.
  * Rewriting a 300-line page to change one thing is minutes of output (seen: 10k tokens, 3 minutes, for a title).
@@ -58,7 +70,7 @@ ${code}
 \`\`\`
 用 edit 只改需要改的地方（可以多次 edit），**不要用 write 重写整个文件**；改完不用再读一遍文件，检查截图会告诉你效果。`;
 
-const MAX = { storyboardFix: 2, planTurns: 30, pageTurns: 40, pageRounds: 3, revisionRounds: 2, reviewRounds: 2 };
+const MAX = { pagesAtOnce: 10, storyboardFix: 2, planTurns: 30, pageTurns: 40, pageRounds: 3, revisionRounds: 2, reviewRounds: 2 };
 
 export class Director {
   readonly project: Project;
@@ -111,7 +123,7 @@ export class Director {
   private async session(name: string, system: string, maxTurns: number, resume?: string): Promise<AgentSession> {
     return this.o.runtime.open({ name, system, cwd: this.o.dir, maxTurns, signal: this.o.signal, onEvent: (event) => {
       this.emit({ type: 'agent', session: name, event });
-      if (event.type === 'turn') this.countTurn(event.usage);
+      if (event.type === 'turn') { this.countTurn(event.usage); if (name.startsWith('page-')) this.firstTurn?.(); }
     } }, resume);
   }
   private async send(s: AgentSession, text: string, images?: string[]) {
@@ -222,7 +234,18 @@ export class Director {
     for (const p of todo) this.setPage(p.id, { status: 'queued', rounds: 0, issues: [] });
     const queue = [...todo];
     const worker = async () => { for (let p = queue.shift(); p; p = queue.shift()) await this.page(sb, p); };
-    await Promise.all(Array.from({ length: Math.min(this.o.concurrency ?? 3, todo.length) }, worker));
+    // Up to 10 pages at once. Every page session opens with the same long system prompt (the style's component pack).
+    // Claude bills writing that prompt to its cache: there the first page goes alone until its first answer is back, so
+    // the others find it cached instead of each paying to write it. Providers whose caching costs nothing to fill
+    // (Gemini, OpenAI) start every page at once.
+    const n = Math.min(this.o.concurrency ?? MAX.pagesAtOnce, MAX.pagesAtOnce, todo.length);
+    const m = this.o.runtime.model;
+    const paysToCache = m.provider === 'anthropic' || /claude/i.test(m.id);
+    const warm = new Promise<void>((ok) => { this.firstTurn = ok; setTimeout(ok, 90_000); });
+    const first = worker();
+    if (n > 1 && paysToCache) await Promise.race([warm, first]);   // a first page that fails early does not hold the rest back
+    await Promise.all([first, ...Array.from({ length: n - 1 }, worker)]);
+    this.firstTurn = undefined;
     const bad = Object.entries(this.state.pages).filter(([, s]) => s.status === 'failed').map(([id]) => id);
     this.emit({ type: 'stage', stage: 'pages', status: bad.length ? 'failed' : 'done', detail: bad.length ? `失败：${bad.join('、')}` : undefined });
     if (bad.length) throw new Error(`这些页没有画出来：${bad.join('、')}`);
@@ -258,9 +281,21 @@ export class Director {
       st.ref = s.ref;
       await this.commit(`${id}：初稿`);
       let issues: LintIssue[] = [];
-      for (let round = 1; round <= (fix ? MAX.revisionRounds : MAX.pageRounds); round++) {   // a revision starts from a checked page
+      const rounds = fix ? MAX.revisionRounds : MAX.pageRounds;   // a revision starts from a checked page
+      for (let round = 1; round <= rounds + 1; round++) {
         st.status = 'checking'; st.rounds = round; this.setPage(id, st);
-        issues = this.project.lint([id]);
+        // a page whose code throws cannot be checked; that is the first thing to fix, so it goes back to its agent
+        // (one more round than usual is allowed for it) instead of failing the page
+        let crash: string | undefined;
+        try { issues = this.project.lint([id]); } catch (e) { crash = crashText((e as Error).message, id); }
+        if (crash) {
+          if (round > rounds) throw new Error(crash);
+          this.setPage(id, { ...st, issues: [crash] });
+          r = await this.send(s, crashPrompt(id, crash) + this.unseen(`page-${id}`));
+          await this.commit(`${id}：修运行错误`);
+          continue;
+        }
+        if (round > rounds) break;
         const times = this.sheetTimes(sb, t);
         const sheet = this.project.snap(`${id}-r${round}`, times.map((x) => x.t), [id]);
         this.setPage(id, { ...st, issues: issues.map((i) => i.msg) }, { sheet });
@@ -272,7 +307,7 @@ export class Director {
         if (r.stopReason === 'max_turns') break;
       }
       if (st.status !== 'ok' && st.status !== 'flagged') {
-        issues = this.project.lint([id]);
+        try { issues = this.project.lint([id]); } catch (e) { throw new Error(crashText((e as Error).message, id)); }
         st.status = issues.length ? 'flagged' : 'ok';
         st.issues = issues.map((i) => `${i.local}s：${i.msg}`);
       }
@@ -374,6 +409,8 @@ export class Director {
   }
   /** said just before the film is ready again (a revision's time line) */
   private beforeReady?: () => void;
+  /** resolves the wait for the first page's first answer (the shared prompt is cached by then) */
+  private firstTurn?: () => void;
 
   /** the planner's half of a revision: which pages, and what to change on each (written to .studio/revision.json) */
   private async planRevision(request: string, sb: Storyboard, named: string[]) {
