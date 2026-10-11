@@ -15,6 +15,21 @@
 
 > **状态：** 开发中。进度见 [路线图](docs/ROADMAP.md)，架构见 [ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 
+## 看看效果
+
+下面两条片子都是画说从头做到尾的：分镜、口播、配音、每一页画面和渲染。点图片观看（有声音）。
+
+<table>
+  <tr>
+    <td width="50%"><a href="docs/media/uncertainty.mp4"><img src="docs/media/uncertainty.jpg" alt="《测不准原理》的几帧画面，黑板风格"></a></td>
+    <td width="50%"><a href="docs/media/pomodoro.mp4"><img src="docs/media/pomodoro.jpg" alt="《番茄工作法》的几帧画面，暖调插画风格"></a></td>
+  </tr>
+  <tr>
+    <td><b>测不准原理</b> · 67 秒，<code>chalkboard</code> 黑板风格。只给了一句话「讲讲量子力学测不准原理」，模型是 DeepSeek。</td>
+    <td><b>番茄工作法</b> · 55 秒，<code>warm-story</code> 暖调插画风格。素材是一页笔记，模型是 Gemini 3.7 Flash（经 Relay）。</td>
+  </tr>
+</table>
+
 ## 为什么用画说
 
 - **先拍板，再动手。** 分镜确认之前一页都不画。哪一页不对，指着它说改什么就行。

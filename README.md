@@ -15,6 +15,21 @@ It's built for knowledge creators who explain history, science, technology, inve
 
 > **Status:** in active development. See the [roadmap](docs/ROADMAP.md) and [architecture](docs/ARCHITECTURE.md).
 
+## See it
+
+Two films Frametell made end to end: storyboard, narration, voice, every page and the render. Click a picture to watch (with sound).
+
+<table>
+  <tr>
+    <td width="50%"><a href="docs/media/uncertainty.mp4"><img src="docs/media/uncertainty.jpg" alt="Frames from 测不准原理, a chalkboard-style film about Heisenberg's uncertainty principle"></a></td>
+    <td width="50%"><a href="docs/media/pomodoro.mp4"><img src="docs/media/pomodoro.jpg" alt="Frames from 番茄工作法, a warm illustrated film about the Pomodoro Technique"></a></td>
+  </tr>
+  <tr>
+    <td><b>测不准原理</b> · Uncertainty principle, 67 s, <code>chalkboard</code>. Made from one sentence (「讲讲量子力学测不准原理」) with DeepSeek.</td>
+    <td><b>番茄工作法</b> · The Pomodoro Technique, 55 s, <code>warm-story</code>. Made from a one-page note with Gemini 3.7 Flash through Relay.</td>
+  </tr>
+</table>
+
 ## Why Frametell
 
 - **You approve the plan first.** Nothing gets drawn until you've signed off on the storyboard. If a page is wrong, point at it and say what to change.
