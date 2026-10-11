@@ -91,10 +91,12 @@ function VoiceDetail({ v, c }: { v: (typeof VOICES)[number]; c: Ctx }) {
       <header className="flex items-start gap-3.5 border-b border-line pb-5 pl-7 pr-14 pt-6">
         <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-line bg-paper"><ProviderLogo id={v.id} size={24} /></span>
         <div className="min-w-0 flex-1">
-          <h3 className="text-[17px] font-semibold leading-tight text-ink">{t(`settings.voice.${v.id}` as MessageKey)}</h3>
+          <h3 className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[17px] font-semibold leading-tight text-ink">
+            {t(`settings.voice.${v.id}` as MessageKey)}
+            <span className={`inline-flex items-center gap-1.5 text-[12px] font-normal ${on ? 'text-jade' : 'text-ink-3'}`}><span className={`h-1.5 w-1.5 rounded-full ${on ? 'bg-jade' : 'bg-line-2'}`} aria-hidden />{on ? t('providers.connected') : t('providers.notConnected')}</span>
+          </h3>
           <p className="mt-1 text-[12.5px] text-ink-3">{t(`settings.voice.${v.id}Blurb` as MessageKey)}</p>
         </div>
-        <span className={`mt-1 inline-flex shrink-0 items-center gap-1.5 text-[12px] ${on ? 'text-jade' : 'text-ink-3'}`}><span className={`h-1.5 w-1.5 rounded-full ${on ? 'bg-jade' : 'bg-line-2'}`} aria-hidden />{on ? t('providers.connected') : t('providers.notConnected')}</span>
       </header>
       <div className="space-y-4 px-7 py-6">
         <SecretField id={`tts-${v.id}`} label={t('providers.key')} saved={c.s.tts[v.key]} hint={v.hint} onSave={(x) => c.patch({ tts: { [v.key]: x } })} />

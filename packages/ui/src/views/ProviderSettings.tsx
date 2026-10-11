@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { ArrowUpRight, Check, CircleAlert, Loader2, Plus, Star, Trash2, X } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { ArrowUpRight, Check, CircleAlert, Loader2, Plus, Search, Star, Trash2, X } from 'lucide-react';
 import type { ModelInfo, PublicSettings, SettingsPatch } from '../lib/client';
 import { t, type MessageKey } from '../i18n';
 import { ProviderLogo } from '../components/ProviderLogo';
@@ -11,6 +11,7 @@ export interface ProviderView {
   id: string;
   name: string;
   group: 'recommended' | 'global' | 'china' | 'local' | 'custom';
+  site?: string;
   keyUrl?: string;
   keyHint?: string;
   local?: boolean;
@@ -111,8 +112,22 @@ export function ProviderDetail({ p, s, models, loading, patch, onClose, onRemove
   patch: (x: SettingsPatch) => Promise<void>; onClose?: () => void; onRemoveCustom?: () => void;
 }) {
   const [adding, setAdding] = useState('');
+  const [q, setQ] = useState('');
+  const [vendor, setVendor] = useState<string>();
+  const [more, setMore] = useState(false);
   const added = s.models?.[p.id] ?? [];
   const mine = models.filter((m) => m.provider === p.id);
+  // a long list (OpenRouter lists hundreds): search it, narrow it to one maker by the id's prefix, show it 40 at a time
+  const vendors = useMemo(() => {
+    const n = new Map<string, number>();
+    for (const m of mine) { const v = m.id.includes('/') ? m.id.split('/')[0] : ''; if (v) n.set(v, (n.get(v) ?? 0) + 1); }
+    return [...n.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
+  }, [mine.length, p.id]);
+  const query = q.trim().toLowerCase();
+  const shown = mine.filter((m) => (!vendor || m.id.startsWith(vendor + '/')) && (!query || `${m.name} ${m.id}`.toLowerCase().includes(query)));
+  const PAGE = 40;
+  const visible = more ? shown : shown.slice(0, PAGE);
+  useEffect(() => { setQ(''); setVendor(undefined); setMore(false); }, [p.id]);
   const isOn = connected(s, p);
   const def = s.defaults.model;
   const addModel = async () => {
@@ -127,15 +142,18 @@ export function ProviderDetail({ p, s, models, loading, patch, onClose, onRemove
       <header className="flex items-start gap-3.5 border-b border-line pb-5 pl-7 pr-14 pt-6">
         <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-line bg-paper"><ProviderLogo id={p.id} name={p.name} size={24} /></span>
         <div className="min-w-0 flex-1">
-          <h3 className="flex items-center gap-2 text-[17px] font-semibold leading-tight text-ink">
+          <h3 className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[17px] font-semibold leading-tight text-ink">
             {providerName(p)}
             {p.group === 'recommended' && <span className="rounded-md bg-accent-soft px-1.5 text-[11px] font-medium leading-5 text-accent-ink">{t('providers.recommended')}</span>}
+            <span className={`inline-flex items-center gap-1.5 text-[12px] font-normal ${isOn ? 'text-jade' : 'text-ink-3'}`}>
+              <span className={`h-1.5 w-1.5 rounded-full ${isOn ? 'bg-jade' : 'bg-line-2'}`} aria-hidden />{isOn ? t('providers.connected') : t('providers.notConnected')}
+            </span>
           </h3>
-          <p className="mt-1 truncate text-[12.5px] text-ink-3">{blurb(p)}</p>
+          <p className="mt-1 flex min-w-0 items-baseline gap-2 text-[12.5px] text-ink-3">
+            <span className="truncate">{blurb(p)}</span>
+            {p.site && <a href={p.site} target="_blank" rel="noreferrer" className="inline-flex shrink-0 items-center gap-0.5 text-ink-2 underline-offset-2 hover:text-accent-ink hover:underline" title={t('providers.site', { name: providerName(p) })}>{new URL(p.site).host.replace(/^www\./, '')}<ArrowUpRight size={12} aria-hidden /></a>}
+          </p>
         </div>
-        <span className={`mt-1 inline-flex shrink-0 items-center gap-1.5 text-[12px] ${isOn ? 'text-jade' : 'text-ink-3'}`}>
-          <span className={`h-1.5 w-1.5 rounded-full ${isOn ? 'bg-jade' : 'bg-line-2'}`} aria-hidden />{isOn ? t('providers.connected') : t('providers.notConnected')}
-        </span>
         {onClose && <button type="button" className="fs-icon-btn -mr-2 -mt-1" onClick={onClose} aria-label={t('providers.close')}><X size={16} /></button>}
       </header>
 
@@ -149,7 +167,7 @@ export function ProviderDetail({ p, s, models, loading, patch, onClose, onRemove
           ) : (
             <KeyInput id={p.id} label={t('providers.key')} saved={s.keys[p.id]} hint={p.keyHint} onSave={(v) => patch({ keys: { [p.id]: v } })} />
           )}
-          {p.keyUrl && !isOn && <a href={p.keyUrl} target="_blank" rel="noreferrer" className="-mt-1 inline-flex items-center gap-1 text-[12.5px] text-accent-ink hover:underline">{t('providers.getKey', { name: providerName(p) })}<ArrowUpRight size={13} aria-hidden /></a>}
+          {p.keyUrl && <a href={p.keyUrl} target="_blank" rel="noreferrer" className="-mt-1 inline-flex items-center gap-1 text-[12.5px] text-accent-ink hover:underline">{t('providers.getKey', { name: providerName(p) })}<ArrowUpRight size={13} aria-hidden /></a>}
           {p.group !== 'custom' && <UrlInput id={p.id} saved={s.baseUrls?.[p.id] ?? ''} placeholder={p.baseUrl} onSave={(v) => patch({ baseUrls: { [p.id]: v } })} />}
         </section>
 
@@ -158,11 +176,35 @@ export function ProviderDetail({ p, s, models, loading, patch, onClose, onRemove
             <h4 id={`models-${p.id}`} className="text-[13px] font-semibold text-ink">{t('providers.models')}{mine.length > 0 && <span className="ml-1.5 font-normal text-ink-3 tabular">{mine.length}</span>}</h4>
             {loading && <span className="flex items-center gap-1.5 text-[12px] text-ink-3"><Loader2 size={12} className="animate-spin" aria-hidden />{t('providers.loadingModels')}</span>}
           </div>
+          {isOn && mine.length > 8 && (
+            <div className="mb-2.5 space-y-2">
+              <label className="flex h-9 items-center gap-2 rounded-[10px] border border-line bg-surface px-3 transition-[border-color,box-shadow] focus-within:border-accent focus-within:ring-4 focus-within:ring-accent/15">
+                <Search size={14} className="shrink-0 text-ink-3" aria-hidden />
+                <span className="sr-only">{t('providers.filter')}</span>
+                <input value={q} onChange={(e) => { setQ(e.target.value); setMore(false); }} placeholder={t('providers.filterHint', { n: mine.length })} spellCheck={false} autoComplete="off" className="h-full w-full bg-transparent text-[13px] text-ink outline-none placeholder:text-ink-3" />
+                {q && <button type="button" className="text-ink-3 hover:text-ink" onClick={() => setQ('')} aria-label={t('providers.clearFilter')}><X size={13} /></button>}
+              </label>
+              {vendors.length > 1 && (
+                <div className="flex flex-wrap gap-1.5" role="group" aria-label={t('providers.byMaker')}>
+                  {[undefined, ...vendors.map(([v]) => v)].map((v) => {
+                    const on = vendor === v;
+                    const n = v ? vendors.find(([x]) => x === v)![1] : mine.length;
+                    return (
+                      <button key={v ?? '*'} type="button" aria-pressed={on} onClick={() => { setVendor(v); setMore(false); }}
+                        className={`inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[12px] transition-colors ${on ? 'border-accent/60 bg-accent-soft text-accent-ink' : 'border-line text-ink-2 hover:border-line-2 hover:text-ink'}`}>
+                        {v ?? t('providers.allMakers')}<span className="tabular opacity-60">{n}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
           {!isOn ? (
             <p className="rounded-xl border border-dashed border-line-2 px-4 py-6 text-center text-[12.5px] leading-relaxed text-ink-3">{p.local ? t('providers.enableFirst') : t('providers.keyFirst', { name: providerName(p) })}</p>
           ) : (
             <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line">
-              {mine.map((m) => {
+              {visible.map((m) => {
                 const key = `${m.provider}/${m.id}`, isDef = def === key;
                 return (
                   <li key={m.id} className="group flex items-center gap-3 px-3.5 py-2.5">
@@ -183,7 +225,11 @@ export function ProviderDetail({ p, s, models, loading, patch, onClose, onRemove
                   </li>
                 );
               })}
+              {shown.length > visible.length && (
+                <li><button type="button" onClick={() => setMore(true)} className="w-full px-4 py-2.5 text-center text-[12.5px] text-ink-2 transition-colors hover:bg-ink/[0.04] hover:text-ink">{t('providers.showMore', { n: shown.length - visible.length })}</button></li>
+              )}
               {!mine.length && !loading && <li className="px-4 py-5 text-center text-[12.5px] text-ink-3">{t('providers.noModels')}</li>}
+              {mine.length > 0 && !shown.length && <li className="px-4 py-5 text-center text-[12.5px] text-ink-3">{t('providers.noMatch')}</li>}
               <li className="flex items-center gap-2 bg-paper-2/60 px-2.5 py-2">
                 <Plus size={14} className="ml-1 shrink-0 text-ink-3" aria-hidden />
                 <label htmlFor={`add-${p.id}`} className="sr-only">{t('providers.addModel')}</label>

@@ -2,7 +2,6 @@ import { useId } from 'react';
 import claude from '../assets/providers/claude.svg';
 import gemini from '../assets/providers/gemini.svg';
 import deepseek from '../assets/providers/deepseek.svg';
-import kimi from '../assets/providers/kimi.svg';
 import zhipu from '../assets/providers/zhipu.svg';
 import qwen from '../assets/providers/qwen.svg';
 import minimax from '../assets/providers/minimax.svg';
@@ -11,6 +10,7 @@ import doubao from '../assets/providers/doubao.svg';
 import hunyuan from '../assets/providers/hunyuan.svg';
 import volcengine from '../assets/providers/volcengine.svg';
 import openai from '../assets/providers/openai.svg?raw';
+import kimi from '../assets/providers/kimi.svg?raw';
 import grok from '../assets/providers/grok.svg?raw';
 import openrouter from '../assets/providers/openrouter.svg?raw';
 import xiaomi from '../assets/providers/xiaomi.svg?raw';
@@ -21,10 +21,11 @@ import elevenlabs from '../assets/providers/elevenlabs.svg?raw';
 // drawn inline in the text colour, so they read on either theme. A provider without a mark gets its initial.
 
 const COLOR: Record<string, string> = {
-  anthropic: claude, google: gemini, deepseek, 'moonshotai-cn': kimi, zhipu, qwen, 'minimax-cn': minimax, siliconflow,
+  anthropic: claude, google: gemini, deepseek, zhipu, qwen, 'minimax-cn': minimax, siliconflow,
   'volcengine-ark': doubao, hunyuan, volcengine,
 };
-const MONO: Record<string, string> = { openai, xai: grok, openrouter, xiaomi, ollama, elevenlabs };
+// drawn inline: one-colour marks, and Kimi, whose letter is drawn in the text colour beside its blue dot
+const MONO: Record<string, string> = { 'moonshotai-cn': kimi, openai, xai: grok, openrouter, xiaomi, ollama, elevenlabs };
 
 /** the Relay crest: a disc cut by a lightning stroke, ink half and caramel half */
 function RelayMark({ size }: { size: number }) {
