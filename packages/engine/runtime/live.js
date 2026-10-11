@@ -3,8 +3,12 @@
   const { s, h, col, gen, rrect, clamp, ease, Builder } = PV;
   const B = Builder.prototype;
 
-  /** Eased progress of lt through [a, a + dur]. */
-  PV.K = (lt, a, dur = 0.6, e = ease.inOut) => e(clamp((lt - a) / dur));
+  /** Eased progress of lt through [a, a + dur]; the easing is a function or its name ('out', 'inOut', 'expo', …). */
+  PV.K = (lt, a, dur = 0.6, e = ease.inOut) => {
+    const f = typeof e === 'function' ? e : ease[e];
+    if (typeof f !== 'function') throw new TypeError(`PV.K(lt, at, dur, easing): easing must be a function or one of ${Object.keys(ease).map((k) => `'${k}'`).join(', ')} — got ${JSON.stringify(e)}`);
+    return f(clamp((lt - a) / dur));
+  };
   /** softmax(z / T) → probabilities. */
   PV.softmax = (z, T = 1) => {
     const m = Math.max(...z.map((v) => v / T));
@@ -47,7 +51,7 @@
     const id = this.page.id;
     this.tick((lt) => {
       let items;
-      try { items = fn(lt, R); } catch (e) { throw new Error(`liveRough @${id} lt=${lt.toFixed(3)}: ${e.message}`); }
+      try { items = fn(lt, R); } catch (e) { e.message = `liveRough @${id} lt=${lt.toFixed(3)}: ${e.message}`; throw e; }   // keep the stack: it points into the page
       g.textContent = '';
       if (items) paint(g, items);
     });

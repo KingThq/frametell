@@ -3,7 +3,9 @@
 // Per page it also checks the settled state (body fills the content area, text doesn't dominate) and, with
 // --determinism, that a frame renders identically whether reached from the start or from elsewhere on the timeline.
 // node engine/tools/lint.mjs [--only p01,p02] [--step 0.5] [--min-font 24] [--determinism] [--json]  → prints issues; exit 0.
-import { openStage, loadEpisode, closeStage } from './lib.mjs';
+import fs from 'fs';
+import path from 'path';
+import { openStage, loadEpisode, closeStage, EP, PORTRAIT } from './lib.mjs';
 const arg = (k, d) => { const i = process.argv.indexOf('--' + k); return i > 0 ? process.argv[i + 1] : d; };
 const only = arg('only', null), step = +arg('step', 0.5), minFont = +arg('min-font', 24), asJson = process.argv.includes('--json'), determinism = process.argv.includes('--determinism');
 const { L, META } = loadEpisode();
@@ -26,6 +28,41 @@ const inkAt = (id, t) => page.evaluate(({ id, t }) => {
   }
   return n;
 }, { id, t });
+// before any frame is drawn: every P.x( / PV.x( a page calls must exist on the live engine, and be a function when it is
+// called — a wrong guess at the API is caught here with the right name, instead of as a crash somewhere mid-page
+const apiIssues = await page.evaluate((ids) => {
+  const out = [];
+  const inst = ENGINE.pages.find((x) => x.B)?.B;
+  const names = (o) => { const n = new Set(); for (let x = o; x && x !== Object.prototype; x = Object.getPrototypeOf(x)) for (const k of Object.getOwnPropertyNames(x)) n.add(k); return [...n]; };
+  const pNames = inst ? names(inst) : [], pvNames = Object.keys(window.PV || {});
+  const dist = (a, b) => { const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]); for (let j = 1; j <= b.length; j++) d[0][j] = j; for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1].toLowerCase() === b[j - 1].toLowerCase() ? 0 : 1)); return d[a.length][b.length]; };
+  const near = (n, list) => list.map((k) => [k, dist(n, k)]).filter(([, d]) => d <= Math.max(2, n.length / 3)).sort((a, b) => a[1] - b[1]).slice(0, 2).map(([k]) => k);
+  for (const id of ids) {
+    const src = ENGINE.source(id);
+    if (!src || !inst) continue;
+    const P = /^\s*(?:function\s*\w*\s*)?\(?\s*(\w+)/.exec(src)?.[1] || 'P';
+    const line = (i) => src.slice(0, i).split('\n').length;
+    const seen = new Set();
+    for (const m of src.matchAll(new RegExp(`\\b(${P}|PV)\\.(\\w+)\\s*(\\()?`, 'g'))) {
+      const [, obj, name, call] = m, key = obj + name + !!call;
+      if (seen.has(key)) continue; seen.add(key);
+      const isP = obj !== 'PV', target = isP ? inst : window.PV, has = name in target;
+      const label = `${isP ? 'P' : 'PV'}.${name}`;
+      if (!has) {
+        const hint = [...near(name, isP ? pNames : pvNames).map((k) => `${isP ? 'P' : 'PV'}.${k}`), ...((isP ? pvNames : pNames).includes(name) ? [`${isP ? 'PV' : 'P'}.${name}`] : [])];
+        out.push({ page: id, line: line(m.index), msg: `unknown API: ${label} does not exist${hint.length ? ` — did you mean ${hint.join(' or ')}?` : ' — use only the components listed for this film'}` });
+      } else if (call && typeof target[name] !== 'function') {
+        const keys = target[name] && typeof target[name] === 'object' ? Object.keys(target[name]).slice(0, 6) : [];
+        out.push({ page: id, line: line(m.index), msg: `wrong API use: ${label} is not a function${keys.length ? ` — it holds ${keys.map((k) => `${label}.${k}`).join(', ')}` : ''}` });
+      }
+    }
+  }
+  return out;
+}, pages.map((p) => p.id));
+// the visual's lines → the file's: the visual starts on the line that registers it
+const fileLine = (id, rel) => { try { const src = fs.readFileSync(path.join(EP, PORTRAIT ? 'pages-portrait' : 'pages', id + '.js'), 'utf8'); const at = src.split('\n').findIndex((l) => /ENGINE\.visual\s*\(/.test(l)); return at >= 0 ? at + rel : rel; } catch { return rel; } };
+for (const a of apiIssues) { const p = pages.find((x) => x.id === a.page); issues.push({ page: a.page, t: +p.start.toFixed(1), local: 0, msg: `${a.msg} — at pages/${a.page}.js:${fileLine(a.page, a.line)}` }); }
+
 for (const [i, p] of pages.entries()) {
   // page turns cross-fade: the incoming page must already show something, and the outgoing one must not have cleared
   // itself, or the viewer sees empty paper between pages
@@ -126,6 +163,13 @@ for (const [i, p] of pages.entries()) {
     }, { t, minFont });
     for (const f of found) issues.push({ page: p.id, t: +t.toFixed(1), local: +(t - p.start).toFixed(1), msg: f });
   }
+}
+// a page whose code threw (loading, building or at some moment): the error first, with where it happened
+const thrown = await page.evaluate(() => ENGINE.errors);
+for (const x of thrown) {
+  const p = pages.find((q) => q.id === x.page);
+  if (!p) continue;
+  issues.unshift({ page: x.page, t: x.t ?? +p.start.toFixed(1), local: x.local ?? 0, msg: `runtime error (${x.phase}): ${x.message}${x.at.length ? ` — at ${x.at.join(', ')}` : ''}` });
 }
 await closeStage(browser);
 // collapse repeats of the same message on a page into one line with a time range

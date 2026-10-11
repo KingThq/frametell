@@ -28,6 +28,9 @@ for (const { a: f0, b: f1, out } of jobs) {
   await new Promise((r) => ff.on('close', r));
   if (ff.exitCode) { code = ff.exitCode; break; }
 }
+// a page whose code threw draws a placeholder: never let that into a film
+const thrown = await page.evaluate(() => ENGINE.errors);
+if (thrown.length) { for (const x of thrown) console.error(`✗ ${x.page} 运行报错（${x.phase}）：${x.message}${x.at.length ? ` — at ${x.at.join(', ')}` : ''}`); code = code || 2; }
 // browser.close() can hang after Chrome has already gone (seen with system Chrome): the chunk is written, so never wait on it
 await closeStage(browser);
 process.exit(code);

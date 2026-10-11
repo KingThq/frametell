@@ -308,6 +308,9 @@ export class Director {
       }
       if (st.status !== 'ok' && st.status !== 'flagged') {
         try { issues = this.project.lint([id]); } catch (e) { throw new Error(crashText((e as Error).message, id)); }
+        // still throwing, or calling what the engine does not have: the page is not drawn, whatever else it shows
+        const broken = issues.filter((i) => /^(runtime error|unknown API|wrong API use)/.test(i.msg));
+        if (broken.length) throw new Error(broken.map((i) => i.msg).join('\n'));
         st.status = issues.length ? 'flagged' : 'ok';
         st.issues = issues.map((i) => `${i.local}s：${i.msg}`);
       }

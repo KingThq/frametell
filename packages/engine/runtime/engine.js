@@ -2,6 +2,24 @@
 (function () {
   const { h, clamp, lerp, smooth, ease, Builder, applyAct } = PV;
   const visuals = {};
+  // A page's own error stays on that page: it shows a placeholder and the rest of the film still builds and plays.
+  // Every error is recorded once per page (where in the page's code it happened) for the tools to report; the live
+  // preview simply keeps working while a page is being drawn.
+  const errors = [];
+  // a page file that does not even load (a syntax error) never registers its visual: remember why, by page
+  const loadErrors = {};
+  addEventListener('error', (ev) => { const m = /pages(-portrait)?\/(p\w+)\.js/.exec(ev.filename || ''); if (m) loadErrors[m[2]] = Object.assign(new Error(ev.message), { stack: `${ev.message}\n    at pages/${m[2]}.js:${ev.lineno}:${ev.colno}` }); });
+  function fail(p, phase, e, t) {
+    if (!errors.some((x) => x.page === p.pg.id)) {
+      const at = String(e?.stack || '').split('\n').map((l) => /pages(-portrait)?\/p\w+\.js:\d+:\d+|engine\/(runtime|lib)\/[\w.-]+:\d+:\d+|runtime\/[\w.-]+:\d+:\d+/.exec(l)?.[0]).filter(Boolean).slice(0, 4);
+      errors.push({ page: p.pg.id, phase, t: t == null ? null : +t.toFixed(2), local: t == null ? null : +(t - p.pg.start).toFixed(2), message: String(e?.message || e), at });
+      console.error(`page ${p.pg.id} ${phase}${t == null ? '' : ` @${t.toFixed(2)}s`}: ${e?.message || e}`);
+    }
+    if (!p.placeholder) {
+      p.placeholder = h('div', 'page-placeholder', `<b></b><span>…</span>`, p.root);
+      p.placeholder.querySelector('b').textContent = p.pg.section || p.pg.title || p.pg.id;
+    }
+  }
   let layout, pages = [], frame, stage, chrome, subs;
 
   function visual(id, fn) { visuals[id] = fn; }
@@ -67,6 +85,7 @@
     stage = document.getElementById('stage');
     stage.innerHTML = '';
     pages = [];
+    errors.length = 0;
     for (const el of frame.querySelectorAll('.chrome, .subs')) el.remove();
     layout = TIMING.layout(SCRIPT.PAGES, { ...(SCRIPT.META || {}), voice: SCRIPT.VOICE });
     const only = opts.only ? new Set(opts.only) : null;
@@ -79,12 +98,12 @@
       const B = new Builder(pg, cam);
       B.hud = new Builder(pg, hud, B.sh);
       const obj = { pg, root, cam, hud, sh: B.sh, B, vis: 0 };
+      pages.push(obj);
       if (!only || only.has(pg.id)) {
         const fn = visuals[pg.id];
-        if (fn) fn(B, pg);
-        else B.title(pg.title);
+        try { if (loadErrors[pg.id]) throw loadErrors[pg.id]; if (fn) fn(B, pg); else B.title(pg.title); }
+        catch (e) { cam.innerHTML = ''; hud.innerHTML = ''; obj.sh.acts.length = 0; obj.sh.ticks.length = 0; fail(obj, 'build', e); }
       }
-      pages.push(obj);
     }
     chrome = (SCRIPT.META || {}).chrome === true ? buildChrome(frame) : null;   // META.chrome: true → series header (META.course · META.no | section)
     if (opts.subs) { subs = h('div', 'subs', '<span></span>', frame); }
@@ -115,13 +134,19 @@
       p.cam.style.transform = c.s === 1 && c.x === cx0 && c.y === cy0 ? '' : `translate(${(cx0 - c.x * c.s).toFixed(2)}px, ${(cy0 - c.y * c.s).toFixed(2)}px) scale(${c.s.toFixed(4)})`;
       // while the camera is pushed in, a paper band fades in behind the fixed title so content can slide under it
       p.hud.style.setProperty('--band', clamp((c.s - 1) * 10).toFixed(3));
-      for (const a of p.sh.acts) applyAct(a, lt);
-      for (const fn of p.sh.ticks) fn(lt, t);
+      try {
+        for (const a of p.sh.acts) applyAct(a, lt);
+        for (const fn of p.sh.ticks) fn(lt, t);
+        if (p.broken) { p.broken = false; p.cam.style.visibility = ''; if (p.placeholder) p.placeholder.style.display = 'none'; }
+      } catch (e) {
+        fail(p, 'render', e, t);
+        p.broken = true; p.cam.style.visibility = 'hidden'; p.placeholder.style.display = '';
+      }
     }
     if (chrome) updateChrome(t);
     updateSubs(t);
     for (const fn of window.FRAME_HOOKS || []) fn(t, layout);   // extras can draw things that live across pages (a host character)
   }
 
-  window.ENGINE = { visual, init, renderAt, get layout() { return layout; }, get pages() { return pages; } };
+  window.ENGINE = { visual, init, renderAt, get layout() { return layout; }, get pages() { return pages; }, get errors() { return errors; }, source: (id) => visuals[id]?.toString() };
 })();
