@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- A revised page is changed with targeted edits: the page agent is handed the current code and told not to rewrite the file (a one-line change had taken a 10k-token, three-minute rewrite).
 - Revisions are faster and cheaper. Each change is planned in a fresh, small session that is handed the storyboard, the script and the code of the pages the request names (instead of resuming the session that made the whole film and reading files one round trip at a time), and a revised page gets two check rounds instead of three. On the sample film a one-page change went from about 8 minutes plus a render to under a minute to preview; deciding what to change went from 43 s to 16 s.
 - Export renders incrementally. The video is cut into segments that follow the pages, each cached under a key of what draws it (the pages on screen in it with their timing, the episode's settings, the engine); an export renders only the segments whose key changed, each worker drawing its list in one browser. On a 53-second film: a cold export takes as long as before, an export after changing one page renders 6 of 20 segments (video 29.6 s → 9.1 s).
 - Film view: a quieter page lane — page names sit beneath the pictures instead of over them, the page on screen is lit with a fine outline while the others rest a step back, the playhead is a thin line inside the current page, and only pages that need a look carry a mark.

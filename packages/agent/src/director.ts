@@ -45,6 +45,19 @@ interface State {
 /** components every page of a style can use, registered before the page sessions start */
 const STYLE_EXTRAS: Record<string, string[]> = { 'warm-story': ['engine/lib/warm.js'] };
 
+/**
+ * A page that already works, changed: the current code is handed over, and the change is made with targeted edits.
+ * Rewriting a 300-line page to change one thing is minutes of output (seen: 10k tokens, 3 minutes, for a title).
+ */
+const revisionNote = (id: string, fix: string, code: string) => `
+
+这一页是**修改**：成片已经做好，用户要求改这一页。修改说明：${fix}
+下面是现在的 pages/${id}.js，已经给你了，不用再读：
+\`\`\`js
+${code}
+\`\`\`
+用 edit 只改需要改的地方（可以多次 edit），**不要用 write 重写整个文件**；改完不用再读一遍文件，检查截图会告诉你效果。`;
+
 const MAX = { storyboardFix: 2, planTurns: 30, pageTurns: 40, pageRounds: 3, revisionRounds: 2, reviewRounds: 2 };
 
 export class Director {
@@ -239,7 +252,7 @@ export class Director {
     try {
       const s = await this.session(`page-${id}`, pageSystem(this.o.style, STYLE_EXTRAS[this.o.style] ?? []), MAX.pageTurns);
       const fix = this.state.revision?.[id];
-      let r = await this.send(s, pagePrompt(sb, id, t) + (fix ? `\n\n这一页是**修改**：成片已经做好，用户要求改这一页。修改说明：${fix}\n先读现有的 pages/${id}.js，在它的基础上改，不要推倒重来。` : '') + this.unseen(`page-${id}`));
+      let r = await this.send(s, pagePrompt(sb, id, t) + (fix ? revisionNote(id, fix, this.project.read(`pages/${id}.js`)) : '') + this.unseen(`page-${id}`));
       if (!this.project.exists(`pages/${id}.js`)) r = await this.send(s, `还没有 pages/${id}.js，请写出来再停下。`);
       if (!this.project.exists(`pages/${id}.js`)) throw new Error(r.error || '没有写出页面文件');
       st.ref = s.ref;
