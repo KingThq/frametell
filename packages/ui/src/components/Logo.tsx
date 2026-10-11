@@ -23,7 +23,7 @@ export function Crest({ size = 24, className = '' }: { size?: number; className?
   );
 }
 
-/** mark + name in the interface language: 画说 in Chinese, FRAMETELL otherwise */
+/** mark + name in the interface language: 画说 in Chinese, Frametell otherwise (never in capitals) */
 export function Wordmark({ compact = false }: { compact?: boolean }) {
   const { locale } = useT();
   return (
@@ -31,7 +31,7 @@ export function Wordmark({ compact = false }: { compact?: boolean }) {
       <Crest size={20} />
       {!compact && (locale === 'zh'
         ? <span className="font-display text-[17px] font-bold leading-none tracking-[0.06em] text-ink">画说</span>
-        : <span className="text-[13px] font-semibold leading-none tracking-[0.24em] text-ink">FRAMETELL</span>)}
+        : <span className="text-[15px] font-semibold leading-none tracking-[-0.01em] text-ink">Frametell</span>)}
     </span>
   );
 }
