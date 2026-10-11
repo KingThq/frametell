@@ -127,9 +127,12 @@ for (const [i, p] of pages.entries()) {
           x0 = Math.min(x0, r.left); y0 = Math.min(y0, r.top); x1 = Math.max(x1, r.right); y1 = Math.max(y1, r.bottom); txt += ch.textContent;
         }
         if (x1 < 0) continue;
+        // LaTeX or other markup written into plain text shows as code (\\lambda): characters, or P.tex for a formula
+        const raw = el.closest('.katex') ? null : /\\[A-Za-z]{2,}/.exec(el.textContent);
+        if (raw) boxes.raw = (boxes.raw || []).concat(`raw markup on screen: "${raw[0]}" in "${el.textContent.trim().slice(0, 40)}" — write the character (λ, ≈, ², →) instead, or use P.tex for a formula`);
         boxes.push({ x0: x0 - frame.left, y0: y0 - frame.top, x1: x1 - frame.left, y1: y1 - frame.top, txt: txt.replace(/ /g, ' ').slice(0, 24) });
       }
-      const out = [];
+      const out = [...(boxes.raw || [])];
       for (const b of boxes) {
         if (b.x0 < 40 || b.x1 > 1880 || b.y0 < 30 || b.y1 > 1060) out.push(`off-canvas/edge: "${b.txt}" box ${b.x0|0},${b.y0|0}–${b.x1|0},${b.y1|0}`);
         else if (b.y1 > 905) out.push(`subtitle band (y>905): "${b.txt}" bottom ${b.y1|0}`);
