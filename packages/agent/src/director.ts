@@ -312,6 +312,7 @@ export class Director {
 
   /** drawn and checked: the live preview is the film. Rendering an mp4 waits for an export */
   private ready() {
+    this.beforeReady?.(); this.beforeReady = undefined;
     this.state.stage = 'done'; this.save();
     this.emit({ type: 'ready', duration: this.project.timeline().duration });
   }
@@ -338,15 +339,50 @@ export class Director {
    * waits for the next export.
    */
   async revise(request: string) {
-    this.emit({ type: 'note', text: '收到，我先看看要改哪几页' });
+    const t0 = Date.now();
+    const sb = this.project.storyboard();
+    const named = sb.pages.filter((p, i) => new RegExp(`\\b${p.id}\\b|第\\s*${i + 1}\\s*页`).test(request)).map((p) => p.id);
+    // a change to the picture of the page(s) it names needs no planning: it goes straight to those pages' agents.
+    // Anything that may touch the words (narration, subtitles, timing), or names no page, is planned first
+    const words = /口播|文案|台词|配音|字幕|旁白|这句|句子|念|讲|说的|时长|节奏/;
+    const direct = named.length > 0 && named.length <= 2 && !words.test(request.replace(/<references>[\s\S]*?<\/references>/, ''));
+    let plan: { pages: { id: string; note: string }[] } | undefined = direct ? { pages: named.map((id) => ({ id, note: request })) } : undefined;
+    if (!plan) {
+      this.emit({ type: 'note', text: '收到，我先看看要改哪几页' });
+      await this.planRevision(request, sb, named);
+      try { plan = JSON.parse(this.project.read('.studio/revision.json')); } catch { this.fail('pages', '导演没有写出修改计划（.studio/revision.json）'); }
+    }
+    const tPlan = Date.now();
+    const ids = plan!.pages.map((p) => p.id).filter((id) => sb.pages.some((p) => p.id === id));
+    if (!ids.length) this.fail('pages', '修改计划里没有可以改的页');
+    const which = ids.map((id) => `第 ${sb.pages.findIndex((p) => p.id === id) + 1} 页`).join('、');
+    this.emit({ type: 'note', text: direct ? `直接改${which}的画面，其余的保持不变` : `要重画${which}，其余的保持不变` });
+    this.serverMeta();
+    if (this.o.tts && this.o.voice) await narrate(this.o.dir, { tts: this.o.tts, voice: this.o.voice, signal: this.o.signal });   // cached pages cost nothing
+    this.state.revision = Object.fromEntries(plan!.pages.map((p) => [p.id, p.note]));
+    this.state.exported = false;
+    for (const id of ids) this.state.pages[id] = { status: 'queued', rounds: 0, issues: [] };
+    this.state.stage = 'pages'; this.save();
+    const tDraw = Date.now();
+    await this.pages(ids);
+    this.state.revision = undefined; this.save();
+    const tPages = Date.now();
+    // where the time went, in one line, so a slow step is seen (and can be fixed) instead of only felt
+    const sec = (ms: number) => `${Math.max(1, Math.round(ms / 1000))} 秒`;
+    this.beforeReady = () => this.emit({ type: 'note', text: `这次改了 ${sec(Date.now() - t0)}：${direct ? '' : `想怎么改 ${sec(tPlan - t0)} · `}${tDraw - tPlan > 1500 ? `配音 ${sec(tDraw - tPlan)} · ` : ''}画和自检 ${sec(tPages - tDraw)} · 全片检查 ${sec(Date.now() - tPages)}` });
+    await this.review();
+  }
+  /** said just before the film is ready again (a revision's time line) */
+  private beforeReady?: () => void;
+
+  /** the planner's half of a revision: which pages, and what to change on each (written to .studio/revision.json) */
+  private async planRevision(request: string, sb: Storyboard, named: string[]) {
     // a fresh, small session per change: resuming the planner would carry the whole making of the film (slow, and every
     // token of it re-read); the files hold everything this decision needs
     const s = await this.session('reviser', plannerSystem(this.o.style), MAX.planTurns);
     fs.rmSync(this.project.file('.studio/revision.json'), { force: true });   // last change's plan is not this one's
-    const sb = this.project.storyboard();
     // hand over what the decision needs up front (the script, and the code of the pages the request names) — reading
     // them file by file costs a model round trip each
-    const named = sb.pages.filter((p, i) => new RegExp(`\\b${p.id}\\b|第\\s*${i + 1}\\s*页`).test(request)).map((p) => p.id);
     const code = named.map((id) => `pages/${id}.js：\n\`\`\`js\n${this.project.read(`pages/${id}.js`)}\n\`\`\``).join('\n\n');
     await this.send(s, `成片已经做好。用户对成片的修改意见：
 ${request}
@@ -362,20 +398,6 @@ script.js：
 ${this.project.read('script.js')}
 \`\`\`${code ? `\n\n${code}` : ''}`);
     await s.close();
-    let plan: { pages: { id: string; note: string }[] };
-    try { plan = JSON.parse(this.project.read('.studio/revision.json')); } catch { this.fail('pages', '导演没有写出修改计划（.studio/revision.json）'); }
-    const ids = plan.pages.map((p) => p.id).filter((id) => sb.pages.some((p) => p.id === id));
-    if (!ids.length) this.fail('pages', '修改计划里没有可以改的页');
-    this.emit({ type: 'note', text: `要重画 ${ids.map((id) => `第 ${sb.pages.findIndex((p) => p.id === id) + 1} 页`).join('、')}，其余的保持不变` });
-    this.serverMeta();
-    if (this.o.tts && this.o.voice) await narrate(this.o.dir, { tts: this.o.tts, voice: this.o.voice, signal: this.o.signal });   // cached pages cost nothing
-    this.state.revision = Object.fromEntries(plan.pages.map((p) => [p.id, p.note]));
-    this.state.exported = false;
-    for (const id of ids) this.state.pages[id] = { status: 'queued', rounds: 0, issues: [] };
-    this.state.stage = 'pages'; this.save();
-    await this.pages(ids);
-    this.state.revision = undefined; this.save();
-    await this.review();
   }
 
   /** Whole run. `approve` is called with the storyboard and resolves with optional feedback (the user's edits). */
