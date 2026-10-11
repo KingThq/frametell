@@ -97,7 +97,10 @@ class Runner {
       const last = lines.length ? (JSON.parse(lines[lines.length - 1]) as Logged) : undefined;
       this.status = last?.type === 'approval' ? 'awaiting_approval' : this.stateStage() === 'done' ? 'done' : lines.length ? 'stopped' : 'idle';
       // an export cut short by the app closing: the film is still there to preview, the export can simply run again
-      if (this.status === 'done' && last?.type === 'stage' && last.stage === 'render' && last.status === 'start' && !heldElsewhere(this.id)) {
+      // (the last export began and never ended: any render line may come after its start)
+      const renders = lines.map((l) => JSON.parse(l) as Logged).filter((e) => e.type === 'stage' && e.stage === 'render');
+      const cut = renders.at(-1)?.type === 'stage' && (renders.at(-1) as Extract<Logged, { type: 'stage' }>).status === 'start';
+      if (this.status === 'done' && cut && !heldElsewhere(this.id)) {
         this.emit({ type: 'stage', stage: 'render', status: 'failed', detail: tr('导出被打断了，可以重新导出', 'The export was interrupted. You can export again.') });
       }
       // a run that was in progress when its process went away (app closed, crash): say so in the log, so every client

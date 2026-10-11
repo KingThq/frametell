@@ -61,6 +61,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- An export cut short by its process ending (the app quit or was killed) is recognised however far it had got, and shows as interrupted with a way to export again, instead of 「正在导出」 counting up forever.
 - A project stopped loading (black player, grey thumbnails) once five or six Studio tabs were open: each tab's live event stream held one of the six connections a browser gives a host. A hidden tab now lets its stream go and picks up from its last event when shown again; nine open tabs load as fast as one.
 - A page whose code throws is no longer marked 「没画出来」 at its first check: the error and where it happened (the page's line, the engine function) go back to its agent to fix, with one extra round for it; the page fails only if it still throws after that.
 - Settings: the connection status sits beside the provider's name instead of under the close button; Kimi's mark is drawn in the text colour so it shows on a light background.
