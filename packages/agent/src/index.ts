@@ -4,5 +4,4 @@ export { STYLES, type Brief } from './prompts.js';
 export type { StudioEvent, Stage, PageStatus, UserRef } from './events.js';
 export type { AgentRuntime, AgentSession, RuntimeEvent, TokenUsage, TurnResult } from './runtime/types.js';
 export { piRuntime } from './runtime/pi.js';
-export { claudeRuntime, type ClaudeRuntimeOptions } from './runtime/claude.js';
-export { codexRuntime, type CodexRuntimeOptions } from './runtime/codex.js';
+// parked runtimes (Claude Agent SDK, Codex): not loaded with the package; import '@frametell/agent/runtime/claude' or '/codex'

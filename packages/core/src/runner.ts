@@ -66,7 +66,7 @@ async function buildRuntime(meta: ProjectMeta): Promise<{ runtime: AgentRuntime;
   const info = catalog.info(model);
   const prices = { ...info.cost, currency: info.currency };
   // Every project runs on Pi, which works with any provider. The Claude Agent SDK and Codex runtimes are parked: their
-  // code stays in packages/agent (claudeRuntime, codexRuntime) but Studio does not offer them — two more agent loops to
+  // code stays in packages/agent (@frametell/agent/runtime/claude, /codex) but Studio does not offer them — two more agent loops to
   // keep in step was not worth it yet. To bring one back, branch on meta.runtime here, e.g.:
   //   if (meta.runtime === 'claude-agent-sdk') return { runtime: claudeRuntime({ apiKey, baseUrl, model: id }), prices };
   //   if (meta.runtime === 'codex') return { runtime: codexRuntime({ apiKey, baseUrl, model: id }), prices };
