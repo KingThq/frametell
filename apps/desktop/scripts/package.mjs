@@ -6,7 +6,8 @@
 //   3. renders the app icon from docs/brand/frametell-app-icon.svg;
 //   4. puts a redistributable ffmpeg in Resources/bin (pinned, checksummed, and refused if it has nonfree parts);
 //   5. runs electron-builder on it → release/Frametell-<version>-<arch>.dmg (or, with --dir, just the .app).
-// The app is not signed yet: macOS asks the first time it is opened (right-click → Open).
+// The app is signed ad hoc only, not with a Developer ID: macOS asks the first time it is opened (System Settings →
+// Privacy & Security → 仍要打开 / Open Anyway).
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -150,6 +151,8 @@ const config = {
   files: ['**/*', '!node_modules{,/**}'],
   extraResources: [{ from: path.join(APP, 'node_modules'), to: 'app/node_modules', filter: ['**/*', '!**/*.map', '!**/*.d.ts', '!.bin{,/**}', '!.package-lock.json'] }, { from: bin, to: 'bin' }],
   mac: { category: 'public.app-category.video', icon: path.join(build, 'icon.icns'), target: process.argv.includes('--dir') ? ['dir'] : ['dmg'], identity: null },
+  // no Developer ID yet: signed ad hoc after packing (see adhoc-sign.cjs), or a downloaded copy reports itself damaged
+  afterPack: path.join(DESKTOP, 'scripts', 'adhoc-sign.cjs'),
   dmg: { title: 'Frametell ${version}' },
   win: { target: ['nsis'], icon: path.join(build, 'icon.png') },
   artifactName: 'Frametell-${version}-${arch}.${ext}',
