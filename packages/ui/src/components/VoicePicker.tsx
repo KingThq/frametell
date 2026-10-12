@@ -75,6 +75,9 @@ export function AddVoice({ needsKey, onAdded }: { needsKey: boolean; onAdded: (v
   const [err, setErr] = useState<string>();
   const first = useRef<HTMLInputElement>(null);
   useEffect(() => { if (open) requestAnimationFrame(() => first.current?.focus()); }, [open, keyed]);
+  // a hosted service speaks its own voices with its keys; one added by id is the account's, so it needs the account's
+  // own Volcengine key (the settings show it, masked, once given)
+  useEffect(() => { if (open && hosted) void client.settings().then((s) => setKeyed(!!s.tts.volcengine), () => setKeyed(false)); }, [open]);
 
   const saveKey = async () => {
     if (!key.trim() || busy) return;
@@ -142,7 +145,7 @@ export function AddVoice({ needsKey, onAdded }: { needsKey: boolean; onAdded: (v
 
 /**
  * The voices as a listbox: search when there are many, 「我的音色」 first, then each service's, with a sample button on
- * every row; at its foot, adding a voice by id (where Studio holds the keys: not on a hosted service).
+ * every row; at its foot, adding a voice by id (on a hosted service, with the account's own Volcengine key).
  */
 export function VoiceList({ id, voices, value, onChoose, unconfigured = [], silent = true, onAdded, onEscape, p, autoFocus = true, listClass = 'max-h-[320px]' }: {
   id: string; voices: Voice[]; value?: string | null; onChoose: (v: Voice | null) => void; unconfigured?: readonly Voice['provider'][];
@@ -178,7 +181,7 @@ export function VoiceList({ id, voices, value, onChoose, unconfigured = [], sile
     else if (e.key === 'Escape' && onEscape) { e.preventDefault(); onEscape(); }
   };
   const row = (idx: number) => `mx-1.5 flex cursor-pointer items-center gap-3 rounded-lg py-1.5 pl-1.5 pr-2.5 ${hi === idx ? 'bg-ink/[0.06]' : ''}`;
-  const canAdd = !!client.addVoice && !hosted && !!onAdded;
+  const canAdd = !!client.addVoice && !!onAdded;
 
   let i = -1;
   return (

@@ -17,7 +17,7 @@ export interface StudioClient {
   styles(): Promise<StyleInfo[]>;
   models(): Promise<{ models: ModelInfo[]; default?: ModelInfo }>;
   voices(): Promise<{ voices: Voice[]; configured: { volcengine: boolean; elevenlabs: boolean } }>;
-  /** add a Volcengine voice by its id to 「我的音色」, checked by speaking a sample; absent on a hosted service */
+  /** add a Volcengine voice by its id to 「我的音色」, checked by speaking a sample (on a hosted service, with the account's own key) */
   addVoice?(input: { id: string; name?: string }): Promise<Voice>;
   projects(): Promise<ProjectView[]>;
   project(id: string): Promise<ProjectView>;
@@ -52,6 +52,8 @@ export interface Hosted {
   /** the signed-in account, shown in the top bar */
   email?: string;
   signOut(): void;
+  /** the account's credits, shown in the top bar and linking to where they are managed; absent: no billing */
+  credits?: { read(): Promise<{ available: number; perMinute: number } | null>; url: string };
 }
 
 class HttpError extends Error { constructor(msg: string, readonly status: number) { super(msg); } }
