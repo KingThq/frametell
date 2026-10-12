@@ -69,22 +69,34 @@ export class Projects {
   }
 }
 
-async function buildRuntime(meta: ProjectMeta, cfg: Config): Promise<{ runtime: AgentRuntime; prices: { input: number; output: number; cacheRead: number; cacheWrite: number; currency: 'CNY' | 'USD' } }> {
+type Prices = { input: number; output: number; cacheRead: number; cacheWrite: number; currency: 'CNY' | 'USD' };
+
+/** the director's runtime, and the pages' when the film draws them with another model */
+async function buildRuntime(meta: ProjectMeta, cfg: Config): Promise<{ runtime: AgentRuntime; prices: Prices; pages?: { runtime: AgentRuntime; prices: Prices } }> {
   applyProxy(cfg.proxy);
   // the user's own base URL per provider and the model ids they typed in are applied by the catalog
   const catalog = await createCatalog({ keys: Object.entries(cfg.keys).map(([providerId, apiKey]) => ({ providerId, apiKey })), custom: cfg.custom, baseUrls: cfg.baseUrls, models: cfg.models });
-  const [provider, ...rest] = meta.model.split('/');
-  const id = rest.join('/');
-  const model = catalog.get(provider, id);
-  if (!model) throw new Error(tr(`模型 ${meta.model} 不可用：检查设置里的 key`, `Model ${meta.model} is not available: check its key in Settings`));
-  const info = catalog.info(model);
-  const prices = { ...info.cost, currency: info.currency };
+  const one = (ref: string) => {
+    const [provider, ...rest] = ref.split('/');
+    const model = catalog.get(provider, rest.join('/'));
+    if (!model) throw new Error(tr(`模型 ${ref} 不可用：检查设置里的 key`, `Model ${ref} is not available: check its key in Settings`));
+    const info = catalog.info(model);
+    return { model, info, prices: { ...info.cost, currency: info.currency } as Prices };
+  };
+  const { model, prices } = one(meta.model);
+  let pages: { runtime: AgentRuntime; prices: Prices } | undefined;
+  if (meta.pageModel && meta.pageModel !== meta.model) {
+    const p = one(meta.pageModel);
+    // the page agents check their own frames: a model that cannot see would draw blind
+    if (!p.info.vision) throw new Error(tr(`画页模型 ${meta.pageModel} 不能看图，换一个能看图的`, `The page model ${meta.pageModel} can't see images; choose one that can`));
+    pages = { runtime: piRuntime(catalog.models, p.model), prices: p.prices };
+  }
   // Every project runs on Pi, which works with any provider. The Claude Agent SDK and Codex runtimes are parked: their
   // code stays in packages/agent (@frametell/agent/runtime/claude, /codex) but Studio does not offer them — two more agent loops to
   // keep in step was not worth it yet. To bring one back, branch on meta.runtime here, e.g.:
   //   if (meta.runtime === 'claude-agent-sdk') return { runtime: claudeRuntime({ apiKey, baseUrl, model: id }), prices };
   //   if (meta.runtime === 'codex') return { runtime: codexRuntime({ apiKey, baseUrl, model: id }), prices };
-  return { runtime: piRuntime(catalog.models, model), prices };
+  return { runtime: piRuntime(catalog.models, model), prices, pages };
 }
 
 /** the film's narrator as the director takes it; no tts when the film has no voice, or its service has no key */
@@ -226,10 +238,10 @@ class Runner {
       // reported but does not stop the run
       const { files } = await prepareMaterials(path.join(dir, 'materials'), meta.lang ?? 'zh');
       for (const f of files) if (f.kind === 'document' && !f.parsedTo) this.emit({ type: 'error', message: tr(`资料 ${f.name} 读不了：${f.warning}`, `Couldn't read ${f.name}: ${f.warning}`) });
-      const { runtime, prices } = await buildRuntime(meta, cfg);
+      const { runtime, prices, pages } = await buildRuntime(meta, cfg);
       const { tts, voice, provider } = voiceFor(meta, cfg);
       director = new Director({
-        dir, runtime, style: meta.style, prices, tts, voice, concurrency: cfg.defaults.concurrency,
+        dir, runtime, pages, style: meta.style, prices, tts, voice, concurrency: cfg.defaults.concurrency,
         brief: { durationSec: meta.durationSec, topic: meta.topic, notes: meta.notes, lang: meta.lang ?? 'zh', replyLang: this.replyLang ?? resolveLocale(cfg.locale), voice: provider },
         emit: this.emit, signal: this.abort.signal, renderer: this.renderer, review: this.review,
       });

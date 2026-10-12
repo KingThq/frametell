@@ -56,6 +56,7 @@ export function Home({ openSettings }: { openSettings: (section?: string) => voi
   const [lang, setLang] = useState<'zh' | 'en'>();
   const [style, setStyle] = useState<string>();
   const [model, setModel] = useState<string>();
+  const [pageModel, setPageModel] = useState<string | null>();   // null: the director's
   // null: no voice; undefined: the default one
   const [voice, setVoice] = useState<string | null>();
   const [busy, setBusy] = useState(false);
@@ -65,6 +66,11 @@ export function Home({ openSettings }: { openSettings: (section?: string) => voi
 
   const noModel = models.data && !models.data.models.length;
   const modelId = model ?? settings.data?.defaults.model ?? (models.data?.default ? `${models.data.default.provider}/${models.data.default.id}` : undefined);
+  // the pages' model: only ones that can see (the page agents check their own frames); unset, the director's
+  const seeing = (models.data?.models || []).filter((m) => m.vision);
+  const savedPages = settings.data?.defaults.pageModel;
+  const pagesId = (pageModel === null ? undefined : pageModel ?? (savedPages && seeing.some((m) => `${m.provider}/${m.id}` === savedPages) ? savedPages : undefined)) || undefined;
+  const pagesOwn = !!pagesId && pagesId !== modelId;
   const styleId = style ?? settings.data?.defaults.style ?? 'warm-story';
   const filmLang = lang ?? locale;
   // only voices that speak the film's language: Volcengine's are Chinese voices (lang 'zh'), so an English film (the
@@ -93,7 +99,11 @@ export function Home({ openSettings }: { openSettings: (section?: string) => voi
     setBusy(true); setError(undefined);
     try {
       const v = voiceList.find((x) => x.id === voiceId);
-      const p = await client.createProject({ durationSec: duration, lang: filmLang, style: styleId, model: modelId, notes: topic.trim() || undefined, voice: v ? { provider: v.provider, id: v.id, name: v.name } : voiceId === null ? null : undefined }, files);
+      // the two models are remembered for the next film
+      if (!hosted && (modelId !== settings.data?.defaults.model || (pagesOwn ? pagesId : '') !== (savedPages ?? ''))) {
+        await client.updateSettings({ defaults: { model: modelId, pageModel: pagesOwn ? pagesId : '' } }).catch(() => {});
+      }
+      const p = await client.createProject({ durationSec: duration, lang: filmLang, style: styleId, model: modelId, pageModel: pagesOwn ? pagesId : '', notes: topic.trim() || undefined, voice: v ? { provider: v.provider, id: v.id, name: v.name } : voiceId === null ? null : undefined }, files);
       go(`#/p/${p.id}`);
     } catch (e) { setError((e as Error).message); setBusy(false); }
   };
@@ -184,8 +194,23 @@ export function Home({ openSettings }: { openSettings: (section?: string) => voi
                 <Settings2 size={13} aria-hidden /> {t('home.modelSettings')}
               </button>
             </div>
-            <ModelPicker models={models.data?.models || []} value={modelId} onChange={setModel} onAdd={addModel} onManage={openSettings} disabled={!models.data} />
-            {via && <p className="mt-2 text-[12px] text-ink-3">{via}</p>}
+            <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2">
+              <div>
+                <p className="mb-1.5 flex items-baseline justify-between gap-2 text-[12px]"><span className="font-medium text-ink-2">{t('home.director')}</span><span className="truncate text-ink-3">{t('home.directorDoes')}</span></p>
+                <ModelPicker models={models.data?.models || []} value={modelId} onChange={setModel} onAdd={addModel} onManage={openSettings} disabled={!models.data} />
+              </div>
+              <div>
+                <p className="mb-1.5 flex items-baseline justify-between gap-2 text-[12px]">
+                  <label htmlFor="page-model" className="font-medium text-ink-2">{t('home.pages')}</label>
+                  {pagesOwn
+                    ? <button type="button" onClick={() => setPageModel(null)} className="truncate text-accent-ink hover:underline">{t('home.pagesSame')}</button>
+                    : <span className="truncate text-ink-3">{t('home.pagesDoes')}</span>}
+                </p>
+                <ModelPicker id="page-model" models={seeing} value={pagesId ?? modelId} onChange={(k) => setPageModel(k === modelId ? null : k)} onManage={openSettings} disabled={!models.data} />
+              </div>
+            </div>
+            <p className="mt-2 text-[12px] leading-relaxed text-ink-3">{pagesOwn ? t('home.pagesHint') : t('home.pagesSameHint')}</p>
+            {via && <p className="mt-1 text-[12px] text-ink-3">{via}</p>}
           </div>}
         </div>
 

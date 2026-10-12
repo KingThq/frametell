@@ -6,6 +6,8 @@ const en: typeof zh = {
   costDetails: 'Cost details',
   costHeading: 'Spent on this video',
   model: 'Model',
+  director: 'Director',
+  pages: 'Pages',
   input: 'Read',
   output: 'Written',
   cacheHit: 'Cache hits',

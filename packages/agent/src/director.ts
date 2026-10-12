@@ -20,6 +20,12 @@ export interface DirectorOptions {
   voice?: { speaker: string; rate?: number; instruction?: string };
   /** model price per million tokens, for the running cost */
   prices?: Prices;
+  /**
+   * the model that draws the pages and checks the whole film, when it is not the director's: the pages are ~90% of a
+   * film's tokens, so this is where a faster, cheaper model pays; the director (storyboard, script, planning a
+   * change) keeps the stronger one
+   */
+  pages?: { runtime: AgentRuntime; prices?: Prices };
   /** page sessions running at once */
   concurrency?: number;
   emit?: (e: StudioEvent) => void;
@@ -50,6 +56,17 @@ interface State {
   revision?: Record<string, string>;
   /** the change to the finished film being made, until it is done: "Continue" after a failure picks it up again */
   change?: string;
+  /** what the film has cost so far, in the director's currency: each turn at the price of the model that took it */
+  spent?: number;
+}
+
+/** a USD↔CNY rate for adding up a film whose two models are priced in different currencies (rare; an estimate) */
+const CNY_PER_USD = 7.2;
+/** what `u` costs at `p`, in `currency` */
+function priced(u: TokenUsage, p: Prices | undefined, currency: Prices['currency']): number {
+  if (!p) return 0;
+  const a = (u.input * p.input + u.output * p.output + u.cacheRead * p.cacheRead + u.cacheWrite * p.cacheWrite) / 1e6;
+  return p.currency === currency ? a : currency === 'CNY' ? a * CNY_PER_USD : a / CNY_PER_USD;
 }
 
 /** components every page of a style can use, registered before the page sessions start */
@@ -131,21 +148,28 @@ export class Director {
     this.commits = this.commits.then(async () => { const id = await this.project.commit(message); if (id) this.emit({ type: 'commit', id, message }); });
     return this.commits;
   }
-  cost(u: TokenUsage = this.state.usage) {
-    const p = this.o.prices;
-    if (!p) return { amount: 0, currency: 'USD' as const };
-    return { amount: (u.input * p.input + u.output * p.output + u.cacheRead * p.cacheRead + u.cacheWrite * p.cacheWrite) / 1e6, currency: p.currency };
+  cost() {
+    const currency = this.o.prices?.currency ?? 'USD';
+    // films from before per-model pricing kept only their tokens: priced at the director's model
+    return { amount: this.state.spent ?? priced(this.state.usage, this.o.prices, currency), currency };
   }
   /** usage is counted per model turn as it happens, so the running cost is live even inside a long exchange */
-  private countTurn(u: TokenUsage) {
+  private countTurn(u: TokenUsage, prices?: Prices) {
+    const { amount, currency } = this.cost();
+    this.state.spent = amount + priced(u, prices, currency);
     this.state.usage = addUsage(this.state.usage, u);
     this.save();
     this.emit({ type: 'cost', usage: this.state.usage, ...this.cost() });
   }
+  /** the page model draws the pages and checks the whole film; the director's takes everything else */
+  private model(name: string) {
+    return this.o.pages && (name.startsWith('page-') || name === 'review') ? this.o.pages : { runtime: this.o.runtime, prices: this.o.prices };
+  }
   private async session(name: string, system: string, maxTurns: number, resume?: string, signal = this.o.signal): Promise<AgentSession> {
-    return this.o.runtime.open({ name, system, cwd: this.o.dir, maxTurns, signal, onEvent: (event) => {
+    const { runtime, prices } = this.model(name);
+    return runtime.open({ name, system, cwd: this.o.dir, maxTurns, signal, onEvent: (event) => {
       this.emit({ type: 'agent', session: name, event });
-      if (event.type === 'turn') { this.countTurn(event.usage); if (name.startsWith('page-')) this.firstTurn?.(); }
+      if (event.type === 'turn') { this.countTurn(event.usage, prices); if (name.startsWith('page-')) this.firstTurn?.(); }
     } }, resume);
   }
   private async send(s: AgentSession, text: string, images?: string[], thinking?: Thinking) {
@@ -291,7 +315,7 @@ export class Director {
     // the others find it cached instead of each paying to write it. Providers whose caching costs nothing to fill
     // (Gemini, OpenAI) start every page at once.
     const n = Math.min(this.o.concurrency ?? MAX.pagesAtOnce, MAX.pagesAtOnce, todo.length);
-    const m = this.o.runtime.model;
+    const m = this.model('page-').runtime.model;
     const paysToCache = m.provider === 'anthropic' || /claude/i.test(m.id);
     const warm = new Promise<void>((ok) => { this.firstTurn = ok; setTimeout(ok, 90_000); });
     const first = worker();

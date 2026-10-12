@@ -32,7 +32,8 @@ function CostChip({ run, project }: { run: RunView; project: ProjectView }) {
           <p className="text-[12px] text-ink-3">{t('workbench.costHeading')}</p>
           <p className="mt-0.5 font-mono text-[22px] text-ink tabular">{money(run.cost)}</p>
           <dl className="mt-3 space-y-1.5 border-t border-line pt-3 text-[12.5px]">
-            <div className="flex justify-between gap-3"><dt className="text-ink-3">{t('workbench.model')}</dt><dd className="truncate text-ink-2">{project.model.split('/').pop()}</dd></div>
+            <div className="flex justify-between gap-3"><dt className="text-ink-3">{t(project.pageModel ? 'workbench.director' : 'workbench.model')}</dt><dd className="truncate text-ink-2">{project.model.split('/').pop()}</dd></div>
+            {project.pageModel && <div className="flex justify-between gap-3"><dt className="text-ink-3">{t('workbench.pages')}</dt><dd className="truncate text-ink-2">{project.pageModel.split('/').pop()}</dd></div>}
             {u && <div className="flex justify-between gap-3"><dt className="text-ink-3">{t('workbench.input')}</dt><dd className="font-mono text-ink-2 tabular">{fmtK(seen)} token</dd></div>}
             {u && <div className="flex justify-between gap-3"><dt className="text-ink-3">{t('workbench.output')}</dt><dd className="font-mono text-ink-2 tabular">{fmtK(u.output)} token</dd></div>}
             {u && seen > 0 && <div className="flex justify-between gap-3"><dt className="text-ink-3">{t('workbench.cacheHit')}</dt><dd className="font-mono text-ink-2 tabular">{Math.round((100 * u.cacheRead) / seen)}%</dd></div>}

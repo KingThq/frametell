@@ -5,6 +5,8 @@ export default {
   costDetails: '花费明细',
   costHeading: '这条视频已花费',
   model: '模型',
+  director: '导演模型',
+  pages: '画页模型',
   input: '读入',
   output: '写出',
   cacheHit: '缓存命中',

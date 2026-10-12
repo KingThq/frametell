@@ -35,6 +35,7 @@ export interface Config {
   locale?: LocalePref;
   defaults: {
     model?: string;          // "provider/model-id"
+    pageModel?: string;      // the pages' model, when not the director's
     runtime: RuntimeId;
     style: string;
     durationSec: number;

@@ -22,7 +22,10 @@ export interface ProjectMeta {
   updatedAt: string;
   style: string;
   durationSec: number;
+  /** the director's model (storyboard, script, planning changes), "provider/model-id" */
   model: string;
+  /** the model that draws the pages and checks the film; absent: the director's */
+  pageModel?: string;
   runtime: RuntimeId;
   voice?: VoiceChoice;
   subtitles: boolean;
@@ -40,6 +43,8 @@ export interface NewProjectInput {
   style?: string;
   durationSec?: number;
   model?: string;
+  /** the page model; absent: the saved default; '' or the director's own: the director's */
+  pageModel?: string;
   runtime?: RuntimeId;
   /** null: a film with no voice; absent: the default voice */
   voice?: VoiceChoice | null;
@@ -64,7 +69,7 @@ export interface PublicSettings {
   /** voices the user added by id (「我的音色」) */
   myVoices: VoiceChoice[];
   locale: LocalePref;
-  defaults: { model?: string; runtime: RuntimeId; style: string; durationSec: number; voice?: VoiceChoice; subtitles: boolean; concurrency: number };
+  defaults: { model?: string; pageModel?: string; runtime: RuntimeId; style: string; durationSec: number; voice?: VoiceChoice; subtitles: boolean; concurrency: number };
 }
 export interface SettingsPatch {
   keys?: Record<string, string>;
