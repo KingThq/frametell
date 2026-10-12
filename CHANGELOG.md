@@ -7,9 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-11
+
 ### Added
 
+- A film can have no voice. The voice picker leads with "No voice"; it is the default when no voice service is connected, so a film can be made without one. The director then writes the storyboard so the picture tells the story on its own (key words and numbers on screen) and the narration as captions that read well alone. Subtitles stay your choice: a film can be just animation.
+- With a Volcengine voice, the narration has a tone on every page (curious in the hook, slower and firmer on a key page, calm at the close), and its own on the rare line that turns: a question to the viewer, a punchline, a quote.
 - The panel can run hosted: a `studioBridge` that sets `hosted` (Frametell Cloud) gets the account and a sign-out in the top bar instead of Settings, no model picker (the service chooses), and only the voices the service can speak with. Home also takes `?topic=` to start with an idea typed elsewhere.
+
+### Changed
+
+- English films no longer offer Volcengine's voices, which speak only Chinese. Since a film's language follows the panel's, the English panel doesn't show them by default, and its Settings list ElevenLabs first.
 
 ## [0.1.2] - 2026-10-11
 
@@ -94,7 +102,8 @@ The first release of 画说 · Frametell: a local, open-source studio that turns
 - The npm packages are not published yet; install from source (see the README).
 - The Claude Agent SDK and Codex runtimes are in the code but not offered; every film runs on the built-in agent, which works with any provider.
 
-[Unreleased]: https://github.com/sitor-ai/frametell/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/sitor-ai/frametell/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/sitor-ai/frametell/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/sitor-ai/frametell/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/sitor-ai/frametell/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/sitor-ai/frametell/releases/tag/v0.1.0
