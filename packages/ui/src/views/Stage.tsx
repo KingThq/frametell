@@ -84,7 +84,8 @@ function Film({ run, project, ids, tl, subs, playKey, onFocus }: { run: RunView;
     const src = subs ? cut.path : cut.noSubs;
     screen = <video ref={video} key={`${src}-${playKey ?? 0}`} controls autoPlay={!!playKey} onTimeUpdate={(e) => setVt(e.currentTarget.currentTime)} className="h-full w-full rounded-xl bg-black object-contain" src={client.fileUrl(project, relPath(src, project.id))} />;
   } else if (okCount > 0) {
-    screen = <iframe ref={frame} key={ids.map((x) => `${run.pages[x]?.status ?? ''}${run.pages[x]?.round ?? ''}`).join('|')} title={tr('stage.previewTitle')} src={client.fileUrl(project, 'index.html')} sandbox="allow-scripts" className="h-full w-full rounded-xl border-0 bg-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent" />;
+    // reloaded when a page changes, and when the film is ready again (a new voice changes no page, only the narration)
+    screen = <iframe ref={frame} key={ids.map((x) => `${run.pages[x]?.status ?? ''}${run.pages[x]?.round ?? ''}`).join('|') + (run.ready?.at ?? '')} title={tr('stage.previewTitle')} src={client.fileUrl(project, 'index.html')} sandbox="allow-scripts" className="h-full w-full rounded-xl border-0 bg-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent" />;
   } else {
     const current = STAGES.find((s) => run.stages[s].status === 'running');
     screen = (

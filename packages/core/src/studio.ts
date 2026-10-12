@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createCatalog, PROVIDERS, type ProviderSpec } from '@frametell/models';
-import { bundledSample, elevenLabsTts, listElevenLabsVoices, volcengineTts, VOLCENGINE_VOICES } from '@frametell/voice';
+import { bundledSample, elevenLabsTts, listElevenLabsVoices, volcengineTts, VoiceNotFound, VOLCENGINE_VOICES } from '@frametell/voice';
 import { Project, STYLES, type Renderer, type Timeline } from '@frametell/agent';
 import { linkProject } from '@frametell/engine/tools/project.mjs';
 import { DATA_DIR, configFile, patchConfig, publicConfig, type ConfigStore } from './config.js';
@@ -69,8 +69,10 @@ export class Studio {
 
   async voices(): Promise<{ voices: Voice[]; configured: { volcengine: boolean; elevenlabs: boolean } }> {
     const cfg = this.config.load();
-    // the built-in voices are listed without a key: their samples ship with Studio, so they can be heard before connecting
-    const voices: Voice[] = [...VOLCENGINE_VOICES];
+    // the user's own voices first, then the built-in ones, listed without a key: their samples ship with Studio, so
+    // they can be heard before connecting
+    const mine: Voice[] = (cfg.myVoices ?? []).map((v) => ({ provider: v.provider, id: v.id, name: v.name || v.id, mine: true }));
+    const voices: Voice[] = [...mine, ...VOLCENGINE_VOICES.filter((v) => !mine.some((m) => m.id === v.id))];
     if (cfg.tts.elevenlabs) { try { voices.push(...(await listElevenLabsVoices(cfg.tts.elevenlabs))); } catch {} }
     return { voices, configured: { volcengine: !!cfg.tts.volcengine, elevenlabs: !!cfg.tts.elevenlabs } };
   }
@@ -96,6 +98,29 @@ export class Studio {
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(file, audio);
     return file;
+  }
+
+  /**
+   * Add a Volcengine voice by its id (「我的音色」): it is checked by speaking the preview sentence with the user's key,
+   * which also finds the resource it belongs to (TTS 2.0, 1.0, a cloned voice) and leaves its sample ready to hear.
+   */
+  async addVoice(input: { id: string; name?: string }): Promise<Voice> {
+    const id = input.id.trim();
+    if (!/^[\w.-]{2,120}$/.test(id)) throw new Error(tr('音色 ID 只能包含字母、数字、下划线、点和短横线', 'A voice ID has only letters, digits, _ . and -'));
+    const cfg = this.config.load();
+    if (!cfg.tts.volcengine) throw new Error(tr('先填上火山引擎的 API Key，才能用音色 ID', 'Add your Volcengine API key first to use a voice ID'));
+    const preset = VOLCENGINE_VOICES.find((v) => v.id === id);
+    const name = input.name?.trim().slice(0, 40) || preset?.name || id;
+    try { await this.voicePreview('volcengine', id); }
+    catch (e) {
+      if (e instanceof VoiceNotFound) throw new Error(tr(`没找到音色「${id}」：检查一下 ID 有没有抄错，以及这个音色在你的火山账号里开通了没有`, `Voice "${id}" wasn't found: check the ID, and that the voice is enabled for your Volcengine account`));
+      if (/\b(401|403)\b|unauthori|invalid.*key|auth/i.test((e as Error).message)) throw new Error(tr('火山引擎的 API Key 不对，或者没有开通语音合成', 'The Volcengine API key was refused, or speech synthesis isn\'t enabled for it'));
+      throw e;
+    }
+    const next = this.config.load();
+    next.myVoices = [{ provider: 'volcengine', id, name }, ...(next.myVoices ?? []).filter((v) => v.id !== id)];
+    this.config.save(next);
+    return { provider: 'volcengine', id, name, mine: true };
   }
 
   // ── projects ──

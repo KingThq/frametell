@@ -19,6 +19,9 @@ const en: typeof zh = {
     elevenlabs: 'ElevenLabs',
     volcengineBlurb: 'Doubao speech synthesis, Chinese voices',
     elevenlabsBlurb: 'Voices in many languages, including your own voice library',
+    mineDesc: 'Any voice from the Volcengine library, or one you cloned (S_…), by its ID. They lead every voice list.',
+    rename: 'Rename {id}',
+    remove: 'Remove {name}',
   },
   net: {
     title: 'Network proxy',

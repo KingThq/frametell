@@ -43,16 +43,19 @@ export function cleanRefs(refs: unknown): UserRef[] {
     if (x.kind === 'line') return typeof x.page === 'string' && typeof x.text === 'string' && Number.isFinite(x.at);
     if (x.kind === 'frame') return typeof x.page === 'string' && typeof x.path === 'string' && safe(x.path) && Number.isFinite(x.at);
     if (x.kind === 'file') return typeof x.path === 'string' && safe(x.path);
+    if (x.kind === 'voice') return (x.provider === 'volcengine' || x.provider === 'elevenlabs') && typeof x.id === 'string' && /^[\w.-]{1,120}$/.test(x.id) && typeof x.name === 'string';
     return false;
   });
 }
 
 /** the message as the director reads it: the references first, then what the user wrote */
 export function withRefs(text: string, refs: UserRef[]): string {
+  refs = refs.filter((r) => r.kind !== 'voice');   // the server switches the voice itself; the director needs no word of it
   if (!refs.length) return text;
   const lines = refs.map((r) => {
     if (r.kind === 'page') return `<page id="${esc(r.page)}" file="pages/${esc(r.page)}.js">${esc(r.label)}</page>`;
     if (r.kind === 'line') return `<line page="${esc(r.page)}" at="${mmss(r.at)}">${esc(r.text)}</line>`;
+    if (r.kind === 'voice') return '';
     if (r.kind === 'frame') return `<frame page="${esc(r.page)}" at="${mmss(r.at)}" image="${esc(r.path)}">the film at this moment${r.text ? `, while the narration says “${esc(r.text)}”` : ''}; open the image with read</frame>`;
     return `<file path="${esc(r.path)}"${r.image ? ' image="true"' : ''}>${esc(r.label)}${r.image ? '; open the image with read' : ''}</file>`;
   });

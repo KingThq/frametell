@@ -95,7 +95,19 @@ const en: typeof zh = {
     send: 'Send',
     sendHint: '↵ Send',
     sendHintNewline: '↵ Send · ⇧↵ New line',
+    voiceTo: 'Switch to {name}',
+    voiceSend: 'Sending narrates the whole film again · pictures stay',
+    voiceSendEarly: 'Once sent, the narration uses this voice',
     drop: 'Drop to attach images or documents',
+  },
+  film: {
+    open: 'This film: voice and more',
+    title: 'This film',
+    voice: 'Voice',
+    loading: 'Loading voices…',
+    costAfter: 'A new voice narrates the whole film again; the pictures are not redrawn. Going back to a voice used before costs nothing.',
+    costBefore: 'Nothing is narrated yet, so switching costs nothing extra.',
+    services: 'Voice services',
   },
 };
 

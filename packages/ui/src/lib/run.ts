@@ -77,6 +77,8 @@ export interface RunView {
    *  `page`: the page session doing it; `thinking` / `writing`: thinking, or writing an answer that shows only when whole;
    *  `base`: the text without its line count, so a growing count keeps the same start time */
   activity?: { text: string; at: number; detail?: string; updated?: number; page?: string; thinking?: boolean; writing?: boolean; base?: string };
+  /** the narrator the user switched to, after the one the film was made with (project.voice) */
+  voice?: Ev<'voice'>['voice'];
   /** when the run (or its latest continuation) started, for elapsed time */
   startedAt?: number;
   /** the last moment anything happened (for "working…" indicators) */
@@ -190,6 +192,7 @@ function step(v: RunView, e: LoggedEvent): RunView {
       }
       return r;
     }
+    case 'voice': r.voice = e.voice; return r;
     case 'storyboard_check': {
       const reds = e.issues.filter((i) => i.level === 'red').length;
       push({ kind: 'check', key, round: e.round, reds, yellows: e.issues.length - reds, messages: e.issues.map((i) => t('run.issue', { where: i.page ?? t('run.wholeFilm'), msg: i.msg })), at });
@@ -218,7 +221,8 @@ function step(v: RunView, e: LoggedEvent): RunView {
     case 'error': r.error = e.message; push({ kind: 'error', key, message: e.message, at }); return r;
     case 'user':
       if (r.awaitingApproval) r.awaitingApproval = false;   // at the storyboard, saying something is the change request
-      else if ((r.ready || r.video) && !r.current && !r.exporting) { r.revising = at; r.startedAt = at; }   // after the film, a change request: its own round
+      // after the film, a change request: its own round (a switch of voice alone is not planned: it narrates right away)
+      else if ((r.ready || r.video) && !r.current && !r.exporting && (e.text || e.refs?.some((x) => x.kind !== 'voice'))) { r.revising = at; r.startedAt = at; }
       push({ kind: 'user', key, text: e.text, refs: e.refs, at }); return r;
     case 'note': push({ kind: 'note', key, text: e.text, at }); return r;
     case 'paused': {

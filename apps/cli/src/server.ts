@@ -60,6 +60,7 @@ export function createServer(studio = new Studio(), opts: { token?: string } = {
   app.get('/api/styles', (c) => c.json(studio.styles()));
   app.get('/api/models', async (c) => c.json(await studio.models()));
   app.get('/api/voices', async (c) => c.json(await studio.voices()));
+  app.post('/api/voices', async (c) => c.json(await studio.addVoice(await c.req.json())));
   app.get('/api/voices/:provider/:id/preview', async (c) => sendFile(c, await studio.voicePreview(c.req.param('provider') as 'volcengine' | 'elevenlabs', c.req.param('id'))));
 
   app.get('/api/projects', (c) => c.json(studio.projects().map((p) => ({ ...p, previewBase: previewBase(p.id) }))));

@@ -70,7 +70,10 @@ export function Home({ openSettings }: { openSettings: (section?: string) => voi
   // only voices that speak the film's language: Volcengine's are Chinese voices (lang 'zh'), so an English film (the
   // default in English) never offers them; ElevenLabs' speak many (no lang). Hosted: only the voices the service can use
   const voiceList = (voices.data?.voices || []).filter((v) => (!v.lang || v.lang === filmLang) && (!hosted || voices.data?.configured[v.provider]));
-  const defaultVoice = voiceList.find((v) => v.id === settings.data?.defaults.voice?.id) ?? voiceList[0];
+  // the saved default, unless it doesn't speak the film's language (an ElevenLabs default for a Chinese film, on a
+  // service whose default is English): then the first voice made for that language
+  const saved = voiceList.find((v) => v.id === settings.data?.defaults.voice?.id);
+  const defaultVoice = (saved && (saved.lang === filmLang || !voiceList.some((v) => v.lang === filmLang)) ? saved : voiceList.find((v) => v.lang === filmLang) ?? saved) ?? voiceList[0];
   // no voice to offer means none; until the list loads, undefined (the server's default)
   const voiceId = voice !== undefined ? voice : voices.data ? defaultVoice?.id ?? null : undefined;
   const picked = voiceList.find((v) => v.id === voiceId);
@@ -154,7 +157,7 @@ export function Home({ openSettings }: { openSettings: (section?: string) => voi
           </div>
           <div>
             <label htmlFor="voice" className="fs-label">{t('home.voice.label')}</label>
-            <VoicePicker voices={voiceList} value={voiceId} onChange={setVoice} unconfigured={voices.data && !hosted ? (['volcengine', 'elevenlabs'] as const).filter((p) => !voices.data!.configured[p]) : []} />
+            <VoicePicker voices={voiceList} value={voiceId} onChange={setVoice} onAdded={() => voices.reload()} unconfigured={voices.data && !hosted ? (['volcengine', 'elevenlabs'] as const).filter((p) => !voices.data!.configured[p]) : []} />
             {voiceNoKey && picked && (
               <p className="mt-1.5 text-[12px] text-ink-2">
                 {t('home.voice.needKey', { service: picked.provider === 'volcengine' ? t('home.voice.volcengine') : 'ElevenLabs' })}

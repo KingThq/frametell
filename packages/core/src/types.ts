@@ -11,7 +11,7 @@ export type Locale = 'zh' | 'en';
 export type LocalePref = 'auto' | Locale;
 export type RunStatus = 'idle' | 'running' | 'awaiting_approval' | 'done' | 'failed' | 'stopped';
 export interface VoiceChoice { provider: 'volcengine' | 'elevenlabs'; id: string; name?: string }
-export interface Voice { provider: 'volcengine' | 'elevenlabs'; id: string; name: string; gender?: 'female' | 'male'; lang?: string; previewUrl?: string }
+export interface Voice { provider: 'volcengine' | 'elevenlabs'; id: string; name: string; gender?: 'female' | 'male'; lang?: string; previewUrl?: string; /** added by the user by its id (「我的音色」) */ mine?: boolean }
 export interface StyleInfo { id: string; name: string; summary: string }
 export interface EnvCheck { id: 'chrome' | 'ffmpeg' | 'git' | 'node'; ok: boolean; detail: string; fix?: string }
 
@@ -61,6 +61,8 @@ export interface PublicSettings {
   /** the proxy, password masked; '' when none */
   proxy: string;
   tts: { volcengine: string; elevenlabs: string };
+  /** voices the user added by id (「我的音色」) */
+  myVoices: VoiceChoice[];
   locale: LocalePref;
   defaults: { model?: string; runtime: RuntimeId; style: string; durationSec: number; voice?: VoiceChoice; subtitles: boolean; concurrency: number };
 }
@@ -75,6 +77,8 @@ export interface SettingsPatch {
   /** '' removes the proxy */
   proxy?: string;
   tts?: { volcengine?: string; elevenlabs?: string };
+  /** 「我的音色」 renamed or with some removed (the whole list); a voice is added with addVoice, which checks it */
+  myVoices?: VoiceChoice[];
   locale?: LocalePref;
   defaults?: Partial<PublicSettings['defaults']>;
 }

@@ -29,6 +29,8 @@ export interface Config {
   /** HTTP proxy for every outbound request, e.g. http://127.0.0.1:7890 */
   proxy?: string;
   tts: { volcengine?: string; elevenlabs?: string };
+  /** voices the user added by id (「我的音色」), checked when added */
+  myVoices?: VoiceChoice[];
   /** interface language; absent = follow the system */
   locale?: LocalePref;
   defaults: {
@@ -93,6 +95,7 @@ export function publicConfig(c: Config): PublicSettings {
     models: c.models,
     proxy: maskProxy(c.proxy),
     tts: { volcengine: mask(c.tts.volcengine), elevenlabs: mask(c.tts.elevenlabs) },
+    myVoices: c.myVoices ?? [],
     locale: c.locale || 'auto',
     defaults: c.defaults,
   };
@@ -126,6 +129,13 @@ export function patchConfig(c: Config, patch: SettingsPatch): Config {
     }
     next.custom = patch.custom.map((c) => ({ id: c.id, name: c.name.trim(), protocol: c.protocol, baseUrl: c.baseUrl.trim().replace(/\/+$/, ''), models: c.models || [], discover: c.protocol === 'openai' }));
     for (const k of Object.keys(next.keys)) if (k.startsWith('custom-') && !next.custom.some((c) => c.id === k)) delete next.keys[k];   // a removed endpoint takes its key along
+  }
+  // renaming or removing in 「我的音色」: only voices already there (adding one checks it first: Studio.addVoice)
+  if (patch.myVoices) {
+    next.myVoices = patch.myVoices.flatMap((v) => {
+      const had = (c.myVoices ?? []).find((x) => x.provider === v.provider && x.id === v.id);
+      return had ? [{ ...had, name: v.name?.trim().slice(0, 40) || had.name }] : [];
+    });
   }
   if (patch.defaults) next.defaults = { ...next.defaults, ...patch.defaults };
   return next;

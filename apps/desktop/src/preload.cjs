@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('studioBridge', {
   styles: () => call('styles'),
   models: () => call('models'),
   voices: () => call('voices'),
+  addVoice: (input) => call('addVoice', input),
   projects: async () => (await call('projects')).map(withBase),
   project: async (id) => withBase(await call('project', id)),
   createProject: async (input, files) => {

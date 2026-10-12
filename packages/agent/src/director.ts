@@ -100,6 +100,11 @@ export class Director {
 
   get stage() { return this.state.stage; }
 
+  /** a new narrator, mid-run: whatever is narrated from now on uses it (what was narrated already: revoice) */
+  setVoice(tts: TtsProvider | undefined, voice: DirectorOptions['voice'], provider?: Brief['voice']) {
+    this.o.tts = tts; this.o.voice = voice; this.o.brief.voice = provider;
+  }
+
   /** a note from the user mid-run: sessions read it the next time they are spoken to */
   message(text: string) {
     (this.state.notes ??= []).push(text.trim());
@@ -246,6 +251,29 @@ export class Director {
     await this.commit(this.say('配音', 'Voice'));
     this.state.stage = 'pages'; this.save();
     this.emit({ type: 'stage', stage: 'narrate', status: 'done', detail: `${r.duration.toFixed(1)}s${r.warnings.length ? '；' + r.warnings.join('；') : ''}` });
+  }
+
+  /** the narration on disk was spoken by another voice than the film's (or the film had none until now) */
+  voiceStale(): boolean {
+    if (!this.o.tts || !this.o.voice) return false;
+    let spoken: string | undefined;
+    try { spoken = /"speaker":"([^"]*)"/.exec(this.project.read('voice.js'))?.[1]; } catch { /* never narrated */ }
+    return spoken !== this.o.voice.speaker;
+  }
+
+  /**
+   * The film's narration spoken again in its (new) voice. Pages keep their pictures: they follow the lines' times,
+   * which the new takes give them. Takes are cached by voice, so going back to a voice used before costs nothing.
+   */
+  async revoice() {
+    if (!this.voiceStale()) return;
+    this.emit({ type: 'stage', stage: 'narrate', status: 'start' });
+    this.serverMeta();
+    const r = await narrate(this.o.dir, { tts: this.o.tts!, voice: this.o.voice, signal: this.o.signal, onProgress: (e) => this.emit({ type: 'narrate', ...e }) });
+    await this.commit(this.say('换配音', 'New voice'));
+    this.state.exported = false; this.save();
+    this.emit({ type: 'stage', stage: 'narrate', status: 'done', detail: `${r.duration.toFixed(1)}s${r.warnings.length ? '；' + r.warnings.join('；') : ''}` });
+    if (this.state.stage === 'done') this.emit({ type: 'ready', duration: (await this.project.timeline()).duration });
   }
 
   // ── ④ pages ──────────────────────────────────────────────────────────────────────────────────
@@ -493,10 +521,14 @@ ${this.project.read('script.js')}
   async run(approve: (sb: Storyboard) => Promise<string | undefined> = async () => undefined) {
     // a change that stopped while it was still being planned: the film is done, so only the change has anything left to do
     if (this.state.stage === 'done' && this.state.change) return this.revise(this.state.change);
+    // a switch of voice that stopped before the film was narrated again: finish it
+    if (this.state.stage === 'done' && this.voiceStale()) return this.revoice();
     if (this.state.stage === 'storyboard') await this.storyboard();
     if (this.state.stage === 'approval') await this.script(await approve(this.project.storyboard()));
     if (this.state.stage === 'script') await this.script();
     if (this.state.stage === 'narrate') await this.narrate();
+    // the voice was changed after the narration was made (while paused): narrate again before going on
+    if ((this.state.stage === 'pages' || this.state.stage === 'review') && this.voiceStale()) await this.revoice();
     if (this.state.stage === 'pages') await this.pages();
     if (this.state.stage === 'review') await this.review();
     if (this.state.stage === 'render') await this.ready();   // a run saved before exports were separate: it is ready to preview

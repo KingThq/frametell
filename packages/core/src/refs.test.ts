@@ -36,3 +36,13 @@ test('attached files land in refs/, and unsupported ones are refused', async () 
   assert.ok(r.kind === 'file' && r.image && /^refs\/\d{14}-截图_1\.png$/.test(r.path) && fs.existsSync(path.join(dir, r.path)));
   await assert.rejects(attach(dir, 'x.exe', new Uint8Array([1])), /格式还不支持|isn't a supported format/);
 });
+
+test('a voice to switch to is applied by the server: kept when well formed, never put before the director', () => {
+  const voice = { kind: 'voice', label: '换成「云舟」', provider: 'volcengine', id: 'zh_male_m191_uranus_bigtts', name: '云舟' };
+  assert.equal(cleanRefs([voice]).length, 1);
+  assert.equal(cleanRefs([{ ...voice, id: '../x' }]).length, 0);
+  assert.equal(cleanRefs([{ ...voice, provider: 'azure' }]).length, 0);
+  const [v] = cleanRefs([voice]);
+  assert.equal(withRefs('语速再慢一点', [v]), '语速再慢一点');
+  assert.doesNotMatch(withRefs('这页', [v, { kind: 'page', page: 'p02', label: '第 2 页' }]), /voice|云舟/);
+});

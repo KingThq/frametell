@@ -97,5 +97,17 @@ export default {
     sendHint: '↵ 发送',
     sendHintNewline: '↵ 发送 · ⇧↵ 换行',
     drop: '松开就附上，图片、文档都可以',
+    voiceTo: '换成「{name}」',
+    voiceSend: '发送后整片重新配音 · 画面不变',
+    voiceSendEarly: '发送后，配音就用这个音色',
+  },
+  film: {
+    open: '本片设置：配音等',
+    title: '本片设置',
+    voice: '配音',
+    loading: '正在载入音色…',
+    costAfter: '换音色要把整片重新配一遍，画面不用重画；换回用过的音色不再花钱。',
+    costBefore: '还没开始配音，换音色不花额外的钱。',
+    services: '配音服务',
   },
 };

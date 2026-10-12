@@ -18,6 +18,9 @@ export default {
     elevenlabs: 'ElevenLabs',
     volcengineBlurb: '豆包语音合成，中文音色',
     elevenlabsBlurb: '多语言音色，可以用你自己的音色库',
+    mineDesc: '火山引擎音色库里的任何音色、你自己复刻的音色（S_ 开头），粘贴 ID 就能用。它们会出现在每个音色列表的最上面。',
+    rename: '给 {id} 改名',
+    remove: '移除 {name}',
   },
   net: {
     title: '网络代理',

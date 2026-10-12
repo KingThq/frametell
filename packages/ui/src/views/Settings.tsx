@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, AudioLines, Boxes, Check, CircleAlert, Globe, KeyRound, Monitor, SlidersHorizontal, X, type LucideIcon } from 'lucide-react';
+import { ArrowLeft, AudioLines, Boxes, Check, CircleAlert, Globe, KeyRound, Monitor, SlidersHorizontal, Trash2, X, type LucideIcon } from 'lucide-react';
 import { client, type ModelInfo, type PublicSettings, type SettingsPatch } from '../lib/client';
 import { useLoad } from '../lib/hooks';
 import { t, useT, type MessageKey, getLocale } from '../i18n';
 import { ProviderLogo } from '../components/ProviderLogo';
+import { AddVoice, PlayButton, usePreview } from '../components/VoicePicker';
 import { CustomForm, ProviderDetail, ProviderList, type ProviderView } from './ProviderSettings';
 
 // Settings: a centred dialog with the sections on the left. A section is one entry in SECTIONS — either a list with a
@@ -104,7 +105,40 @@ function VoiceDetail({ v, c }: { v: (typeof VOICES)[number]; c: Ctx }) {
         {!on && <a href={v.url} target="_blank" rel="noreferrer" className="inline-flex text-[12.5px] text-accent-ink hover:underline">{t('providers.getKey', { name: t(`settings.voice.${v.id}` as MessageKey) })} ↗</a>}
         <p className="text-[12.5px] leading-relaxed text-ink-3">{t('settings.voice.desc')}</p>
       </div>
+      {v.id === 'volcengine' && on && <MyVoices c={c} />}
     </div>
+  );
+}
+
+/** 「我的音色」: Volcengine voices added by id — heard, renamed, removed, and added here as well as from any voice list */
+function MyVoices({ c }: { c: Ctx }) {
+  const p = usePreview();
+  const mine = c.s.myVoices ?? [];
+  const rename = (id: string, name: string) => { if (name.trim() && name.trim() !== mine.find((x) => x.id === id)?.name) void c.patch({ myVoices: mine.map((x) => (x.id === id ? { ...x, name: name.trim() } : x)) }); };
+  return (
+    <section aria-labelledby="my-voices" className="border-t border-line px-7 py-6">
+      <h4 id="my-voices" className="text-[13px] font-semibold text-ink">{t('picker.mine')}</h4>
+      <p className="mt-1 text-[12.5px] leading-relaxed text-ink-3">{t('settings.voice.mineDesc')}</p>
+      <div className="mt-3 overflow-hidden rounded-xl border border-line bg-surface">
+        {mine.map((x) => (
+          <div key={x.id} className="flex items-center gap-3 border-b border-line px-3 py-2 last:border-b-0">
+            <PlayButton v={{ provider: x.provider, id: x.id, name: x.name || x.id }} p={p} size="sm" />
+            <div className="min-w-0 flex-1">
+              <label className="sr-only" htmlFor={`mv-${x.id}`}>{t('settings.voice.rename', { id: x.id })}</label>
+              <input id={`mv-${x.id}`} defaultValue={x.name || x.id} maxLength={40} onBlur={(e) => rename(x.id, e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                className="-ml-1.5 h-7 w-full rounded-md bg-transparent px-1.5 text-[13px] text-ink outline-none transition-colors hover:bg-ink/[0.04] focus:bg-paper focus:ring-2 focus:ring-accent/40" />
+              <p className="truncate px-0 font-mono text-[11px] text-ink-3" title={x.id}>{x.id}</p>
+            </div>
+            <button type="button" onClick={() => void c.patch({ myVoices: mine.filter((y) => y.id !== x.id) })} aria-label={t('settings.voice.remove', { name: x.name || x.id })} title={t('settings.voice.remove', { name: x.name || x.id })}
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-ink-3 transition-colors hover:bg-seal/10 hover:text-seal"><Trash2 size={13} aria-hidden /></button>
+          </div>
+        ))}
+        {p.failed && <p className="border-t border-line px-3.5 py-2 text-[12px] text-seal" role="alert">{t('home.voice.previewFailed')}</p>}
+        <div className={mine.length ? '' : '[&>button]:border-t-0 [&>form]:border-t-0'}>
+          <AddVoice needsKey={false} onAdded={() => void c.patch({})} />
+        </div>
+      </div>
+    </section>
   );
 }
 

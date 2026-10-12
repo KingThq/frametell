@@ -385,7 +385,7 @@ function NowBar({ run }: { run: RunView }) {
   );
 }
 
-export function Conversation({ run, project, onSelectPage, selected, onPlay }: { run: RunView; project: ProjectView; onSelectPage: (id: string) => void; selected?: string; onPlay: () => void }) {
+export function Conversation({ run, project, onSelectPage, selected, onPlay, openSettings }: { run: RunView; project: ProjectView; onSelectPage: (id: string) => void; selected?: string; onPlay: () => void; openSettings?: (section?: string) => void }) {
   const { locale } = useT();
   const box = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
@@ -411,7 +411,7 @@ export function Conversation({ run, project, onSelectPage, selected, onPlay }: {
               {project.materials.filter((m) => !/\.(md)$/.test(m) || !project.materials.some((o) => o !== m && o.startsWith(m.replace(/\.md$/, '')))).map((m) => <span key={m} className="max-w-[200px] truncate" title={m}>{m}</span>)}
               <span>{t('conversation.request.minutes', { n: Math.round(project.durationSec / 60) })}</span>
               <span>{STYLE_NAME[project.style] ?? project.style}</span>
-              {project.voice?.name && <span>{t('conversation.request.voice', { name: project.voice.name })}</span>}
+              {(run.voice ?? project.voice)?.name && <span>{t('conversation.request.voice', { name: (run.voice ?? project.voice)!.name! })}</span>}
             </p>
           </div>
           {list.map((b) => {
@@ -437,7 +437,7 @@ export function Conversation({ run, project, onSelectPage, selected, onPlay }: {
       </div>
       <div className="border-t border-line bg-paper-2">
         <NowBar run={run} />
-        <Composer run={run} project={project} viewing={viewing} />
+        <Composer run={run} project={project} viewing={viewing} openSettings={openSettings} />
       </div>
     </div>
   );

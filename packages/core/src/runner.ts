@@ -87,6 +87,14 @@ async function buildRuntime(meta: ProjectMeta, cfg: Config): Promise<{ runtime: 
   return { runtime: piRuntime(catalog.models, model), prices };
 }
 
+/** the film's narrator as the director takes it; no tts when the film has no voice, or its service has no key */
+function voiceFor(meta: ProjectMeta, cfg: Config) {
+  const key = meta.voice?.provider === 'elevenlabs' ? cfg.tts.elevenlabs : cfg.tts.volcengine;
+  const tts = meta.voice && key ? (meta.voice.provider === 'elevenlabs' ? elevenLabsTts(key) : volcengineTts(key)) : undefined;
+  const voice = meta.voice && tts ? { speaker: meta.voice.id, rate: 0, instruction: '像跟朋友分享一个实用的发现，语气轻松、真诚、自然，有轻重缓急' } : undefined;
+  return { tts, voice, provider: voice && meta.voice?.provider };
+}
+
 class Runner {
   private subs = new Set<(e: Logged) => void>();
   private seq = 0;
@@ -100,6 +108,8 @@ class Runner {
   /** an export is running; change requests that arrive meanwhile wait for it */
   private exporting = false;
   private afterExport: string[] = [];
+  /** the voice was switched while a task ran: narrate the film again once it ends */
+  private revoiceAfter = false;
   status: RunStatus = 'idle';
   private log: string;
   /** the language of the user's latest message, which the director answers in */
@@ -217,12 +227,10 @@ class Runner {
       const { files } = await prepareMaterials(path.join(dir, 'materials'), meta.lang ?? 'zh');
       for (const f of files) if (f.kind === 'document' && !f.parsedTo) this.emit({ type: 'error', message: tr(`资料 ${f.name} 读不了：${f.warning}`, `Couldn't read ${f.name}: ${f.warning}`) });
       const { runtime, prices } = await buildRuntime(meta, cfg);
-      const ttsKey = meta.voice?.provider === 'elevenlabs' ? cfg.tts.elevenlabs : cfg.tts.volcengine;
-      const tts = meta.voice && ttsKey ? (meta.voice.provider === 'elevenlabs' ? elevenLabsTts(ttsKey) : volcengineTts(ttsKey)) : undefined;
-      const voice = meta.voice && tts ? { speaker: meta.voice.id, rate: 0, instruction: '像跟朋友分享一个实用的发现，语气轻松、真诚、自然，有轻重缓急' } : undefined;
+      const { tts, voice, provider } = voiceFor(meta, cfg);
       director = new Director({
         dir, runtime, style: meta.style, prices, tts, voice, concurrency: cfg.defaults.concurrency,
-        brief: { durationSec: meta.durationSec, topic: meta.topic, notes: meta.notes, lang: meta.lang ?? 'zh', replyLang: this.replyLang ?? resolveLocale(cfg.locale), voice: voice && meta.voice?.provider },
+        brief: { durationSec: meta.durationSec, topic: meta.topic, notes: meta.notes, lang: meta.lang ?? 'zh', replyLang: this.replyLang ?? resolveLocale(cfg.locale), voice: provider },
         emit: this.emit, signal: this.abort.signal, renderer: this.renderer, review: this.review,
       });
     } catch (e) {
@@ -235,9 +243,14 @@ class Runner {
     this.director = director;
     this.exporting = !!o.exporting;
     for (const n of this.parked.splice(0)) director.message(n);
-    const next = () => { const w = this.afterExport.splice(0); if (w.length) void this.revise(w.join('\n')); };
+    // what waited for this task: a voice switched meanwhile (narrated again first), then changes asked during an export
+    const next = () => {
+      const w = o.exporting ? this.afterExport.splice(0) : [], revoice = this.revoiceAfter;
+      this.revoiceAfter = false;
+      if (revoice || w.length) void this.launch((d) => (revoice ? d.revoice() : Promise.resolve()).then(() => (w.length ? d.revise(w.join('\n')) : undefined)));
+    };
     task(director).finally(() => { release(); this.director = undefined; this.exporting = false; })
-      .then(() => { this.status = 'done'; writeMeta(this.dir, readMetaAt(this.dir)); if (o.exporting) next(); })
+      .then(() => { this.status = 'done'; writeMeta(this.dir, readMetaAt(this.dir)); next(); })
       .catch((e: Error) => {
         const stage = this.stateStage();
         // a failed or cancelled export leaves a finished film: say what happened to the export, nothing is paused
@@ -274,6 +287,11 @@ class Runner {
     // answer in the language the user writes in: the saved interface language can differ from the panel they type into
     this.replyLang = /[\u3400-\u9fff]/.test(said) ? 'zh' : /[a-z]{3}/i.test(said) ? 'en' : this.replyLang;
     const text = withRefs(said, refs);   // what the director reads: the references, then the words
+    const voice = refs.find((r): r is Extract<UserRef, { kind: 'voice' }> => r.kind === 'voice');
+    if (voice) {
+      const rest = !!said || refs.some((r) => r.kind !== 'voice');
+      if (this.switchVoice(voice, rest ? text : undefined) || !rest) return true;
+    }
     if (this.gate || this.status === 'awaiting_approval') return this.approve(text);
     if (this.status === 'running' && this.exporting) {
       this.afterExport.push(text);
@@ -289,5 +307,47 @@ class Runner {
     this.parked.push(text);
     this.emit({ type: 'note', text: tr('记下了，继续制作时会照这个来', 'Noted. I’ll follow this when work resumes.') });
     return true;
+  }
+
+  /**
+   * The film's narrator, switched. Nothing is redrawn: the narration is spoken again in the new voice (now on a
+   * finished film, after the current task while one runs, when narrating if it hasn't happened yet). Returns true when
+   * it also took care of `then`, the rest of the message (a change to the finished film, made after the new voice).
+   */
+  private switchVoice(v: Extract<UserRef, { kind: 'voice' }>, then?: string): boolean {
+    const meta = readMetaAt(this.dir), cfg = this.config.load();
+    const name = v.name || v.id;
+    // the same voice again: nothing to do, unless the narration on disk is still another's (a switch cut short)
+    let spoken: string | undefined;
+    try { spoken = /"speaker":"([^"]*)"/.exec(fs.readFileSync(path.join(this.dir, 'voice.js'), 'utf8'))?.[1]; } catch { /* not narrated yet */ }
+    if (meta.voice?.provider === v.provider && meta.voice.id === v.id && (!spoken || spoken === v.id || this.director)) {
+      this.emit({ type: 'note', text: tr(`这部片子用的已经是「${name}」了`, `This film already uses ${name}.`) });
+      return false;
+    }
+    if (!(v.provider === 'elevenlabs' ? cfg.tts.elevenlabs : cfg.tts.volcengine)) {
+      this.emit({ type: 'error', message: tr(`「${name}」需要先在设置里连接${v.provider === 'elevenlabs' ? ' ElevenLabs' : '火山引擎'}`, `${name} needs ${v.provider === 'elevenlabs' ? 'ElevenLabs' : 'Volcengine'} connected in Settings first.`) });
+      return false;
+    }
+    meta.voice = { provider: v.provider, id: v.id, name };
+    writeMeta(this.dir, meta);
+    this.emit({ type: 'voice', voice: meta.voice });
+    const { tts, voice, provider } = voiceFor(meta, cfg);
+    const stage = this.director?.stage ?? this.stateStage();
+    const early = !stage || ['storyboard', 'approval', 'script'].includes(stage);
+    if (this.director) {
+      this.director.setVoice(tts, voice, provider);
+      if (!early) this.revoiceAfter = true;
+      this.emit({ type: 'note', text: early ? tr(`好，配音会用「${name}」`, `OK, the narration will use ${name}.`)
+        : this.exporting ? tr(`好，导出完就用「${name}」重新配音`, `OK. Once the export is done, I’ll narrate it again with ${name}.`)
+        : tr(`好，这一步做完就用「${name}」重新配音`, `OK. Once this step is done, I’ll narrate it again with ${name}.`) });
+      return false;
+    }
+    if (this.status === 'done' || stage === 'done') {
+      this.emit({ type: 'note', text: tr(`用「${name}」把整部片子重新配一遍，画面不用重画`, `Narrating the whole film again with ${name}; the pictures stay as they are.`) });
+      void this.launch((d) => d.revoice().then(() => (then ? d.revise(then) : undefined)));
+      return true;
+    }
+    this.emit({ type: 'note', text: early ? tr(`好，配音会用「${name}」`, `OK, the narration will use ${name}.`) : tr(`好，继续制作时先用「${name}」重新配音`, `OK. When work resumes, I’ll narrate it again with ${name} first.`) });
+    return false;
   }
 }

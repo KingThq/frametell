@@ -46,7 +46,7 @@ function CostChip({ run, project }: { run: RunView; project: ProjectView }) {
 const LEFT_KEY = 'fs.workbench.left', LEFT_DEFAULT = 420, LEFT_MIN = 320;
 const readLeft = () => { try { const n = Number(localStorage.getItem(LEFT_KEY)); return n > 0 ? n : LEFT_DEFAULT; } catch { return LEFT_DEFAULT; } };
 
-export function Workbench({ id, openSettings }: { id: string; openSettings: () => void }) {
+export function Workbench({ id, openSettings }: { id: string; openSettings: (section?: string) => void }) {
   const { t, locale } = useT();
   const project = useLoad(() => client.project(id), [id]);
   const { run, conn } = useRun(project.data);
@@ -111,7 +111,7 @@ export function Workbench({ id, openSettings }: { id: string; openSettings: () =
       {!p ? <div className="flex-1" /> : (
         <main ref={main} style={{ '--fs-left': `${width}px` } as React.CSSProperties} className={`relative grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[var(--fs-left)_minmax(0,1fr)] ${drag ? 'select-none [&_iframe]:pointer-events-none' : ''}`}>
           <aside className={`min-h-0 min-w-0 border-line bg-paper-2 lg:block lg:border-r ${pane === 'talk' ? 'block' : 'hidden'}`} aria-label={t('workbench.conversationAria')}>
-            <Conversation run={run} project={p} onSelectPage={(pid) => { setSelected(pid); setPane('stage'); }} selected={selected} onPlay={play} />
+            <Conversation run={run} project={p} onSelectPage={(pid) => { setSelected(pid); setPane('stage'); }} selected={selected} onPlay={play} openSettings={openSettings} />
           </aside>
           <section className={`min-h-0 min-w-0 lg:block ${pane === 'stage' ? 'block' : 'hidden'}`} aria-label={t('workbench.workbenchAria')}>
             <Stage run={run} project={p} selected={selected} onSelect={setSelected} playKey={playKey}

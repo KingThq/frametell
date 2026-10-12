@@ -17,6 +17,8 @@ export interface StudioClient {
   styles(): Promise<StyleInfo[]>;
   models(): Promise<{ models: ModelInfo[]; default?: ModelInfo }>;
   voices(): Promise<{ voices: Voice[]; configured: { volcengine: boolean; elevenlabs: boolean } }>;
+  /** add a Volcengine voice by its id to 「我的音色」, checked by speaking a sample; absent on a hosted service */
+  addVoice?(input: { id: string; name?: string }): Promise<Voice>;
   projects(): Promise<ProjectView[]>;
   project(id: string): Promise<ProjectView>;
   createProject(input: NewProjectInput, files: File[]): Promise<ProjectView>;
@@ -72,6 +74,7 @@ export const httpClient: StudioClient = {
   styles: () => call('GET', '/api/styles'),
   models: () => call('GET', '/api/models'),
   voices: () => call('GET', '/api/voices'),
+  addVoice: (input) => call('POST', '/api/voices', input),
   projects: () => call('GET', '/api/projects'),
   project: (id) => call('GET', `/api/projects/${id}`),
   createProject: (input, files) => {

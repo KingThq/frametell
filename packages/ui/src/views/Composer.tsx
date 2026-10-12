@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowUp, FileText, Film, Layers, Loader2, Paperclip, Plus, Quote, TriangleAlert, X } from 'lucide-react';
+import { ArrowUp, AudioLines, FileText, Film, Layers, Loader2, Paperclip, Plus, Quote, TriangleAlert, X } from 'lucide-react';
 import { client, type ProjectView } from '../lib/client';
 import { refKey, toSend, type Ref } from '../lib/refs';
 import { finished, type RunView } from '../lib/run';
 import { Lightbox, type LightItem } from './Lightbox';
+import { FilmSettings } from '../components/FilmSettings';
 import { useT } from '../i18n';
 
 // The message box to the director. Above the words sits a tray of references — the pages, lines and frames picked on
@@ -22,7 +23,7 @@ export function RefChip({ r, project, onRemove, onOpen, pending, error, name, pr
 }) {
   const { t } = useT();
   const img = preview ?? (r?.thumb ? client.fileUrl(project, r.thumb) : r?.kind === 'frame' ? client.fileUrl(project, r.path) : r?.kind === 'file' && r.image ? client.fileUrl(project, r.path) : undefined);
-  const Icon = error ? TriangleAlert : r?.kind === 'page' ? Layers : r?.kind === 'line' ? Quote : r?.kind === 'frame' ? Film : FileText;
+  const Icon = error ? TriangleAlert : r?.kind === 'page' ? Layers : r?.kind === 'line' ? Quote : r?.kind === 'frame' ? Film : r?.kind === 'voice' ? AudioLines : FileText;
   const label = r ? (r.kind === 'line' ? `${r.label}` : r.label) : name ?? '';
   const full = error ? t('conversation.composer.chipError', { name: name ?? '', error }) : r?.kind === 'line' ? t('conversation.composer.chipLine', { label: r.label, text: r.text }) : label;
   const Body = onOpen ? 'button' : 'span';
@@ -39,7 +40,7 @@ export function RefChip({ r, project, onRemove, onOpen, pending, error, name, pr
   );
 }
 
-export function Composer({ run, project, viewing }: { run: RunView; project: ProjectView; viewing?: Ref }) {
+export function Composer({ run, project, viewing, openSettings }: { run: RunView; project: ProjectView; viewing?: Ref; openSettings?: (section?: string) => void }) {
   const { t } = useT();
   const [text, setText] = useState('');
   const [items, setItems] = useState<Item[]>([]);
@@ -53,6 +54,7 @@ export function Composer({ run, project, viewing }: { run: RunView; project: Pro
 
   const add = (r: Ref) => setItems((cur) => {
     const k = refKey(r);
+    if (r.kind === 'voice') return [...cur.filter((x) => x.key !== k), { key: k, ref: r }];   // one voice: the latest choice
     if (cur.some((x) => x.key === k)) return cur;
     if (cur.length >= MAX_REFS) { setNote(t('conversation.composer.maxRefs', { n: MAX_REFS })); return cur; }
     return [...cur, { key: k, ref: r }];
@@ -101,6 +103,10 @@ export function Composer({ run, project, viewing }: { run: RunView; project: Pro
     if (src) setLight({ src, title: r?.label ?? x.name ?? '', caption: r?.kind === 'frame' ? r.text : undefined });
   };
   const suggest = viewing && !items.some((x) => x.key === refKey(viewing)) ? viewing : undefined;
+  // the narrator: the one the user last switched to, else the one the film was made with; a switch waiting in the tray
+  const voice = run.voice ?? project.voice;
+  const switchTo = items.find((x) => x.ref?.kind === 'voice')?.ref as Extract<Ref, { kind: 'voice' }> | undefined;
+  const narrated = run.stages.narrate.status === 'done';
 
   const placeholder = t(run.awaitingApproval ? 'conversation.composer.placeholder.approval'
     : finished(run) && !run.current ? (items.length ? 'conversation.composer.placeholder.finishedWithItems' : 'conversation.composer.placeholder.finished')
@@ -135,13 +141,19 @@ export function Composer({ run, project, viewing }: { run: RunView; project: Pro
         <div className="flex items-center gap-1.5 px-2 pb-2">
           <button type="button" className="fs-icon-btn" onClick={() => picker.current?.click()} aria-label={t('conversation.composer.attach')} title={t('conversation.composer.attachTitle')}><Paperclip size={15} /></button>
           <input ref={picker} type="file" multiple accept={ACCEPT} className="sr-only" tabIndex={-1} aria-hidden onChange={(e) => { upload([...(e.target.files || [])]); e.target.value = ''; }} />
+          <FilmSettings project={project} narrated={narrated} current={voice} pending={switchTo} openSettings={openSettings}
+            onPick={(v) => {
+              if (!v) setItems((cur) => cur.filter((x) => x.ref?.kind !== 'voice'));
+              else add({ kind: 'voice', label: t('conversation.composer.voiceTo', { name: v.name }), provider: v.provider, id: v.id, name: v.name });
+              focus();
+            }} />
           {suggest && (
             <button type="button" onClick={() => { add(suggest); focus(); }} title={t('conversation.composer.add', { label: suggest.label })}
               className="inline-flex h-7 min-w-0 items-center gap-1 rounded-lg border border-dashed border-line-2 px-2 text-[12px] text-ink-3 transition-colors hover:border-accent/60 hover:text-ink">
               <Plus size={12} aria-hidden /><span className="truncate">{suggest.label.split(/[「“]/)[0].trim()}</span>
             </button>
           )}
-          <span className="ml-auto truncate px-1 text-[11.5px] text-ink-3" role="status">{note ?? (pending ? t('conversation.composer.attaching') : suggest ? t('conversation.composer.sendHint') : t('conversation.composer.sendHintNewline'))}</span>
+          <span className="ml-auto truncate px-1 text-[11.5px] text-ink-3" role="status">{note ?? (pending ? t('conversation.composer.attaching') : switchTo ? t(narrated ? 'conversation.composer.voiceSend' : 'conversation.composer.voiceSendEarly') : suggest ? t('conversation.composer.sendHint') : t('conversation.composer.sendHintNewline'))}</span>
           <button type="submit" disabled={!canSend} aria-label={t('conversation.composer.send')} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-accent text-accent-fg transition-[opacity,transform] duration-150 disabled:opacity-30 active:scale-95">
             {busy ? <Loader2 size={15} className="animate-spin" aria-hidden /> : <ArrowUp size={16} strokeWidth={2.5} aria-hidden />}
           </button>
