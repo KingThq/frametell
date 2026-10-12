@@ -21,20 +21,45 @@ function useTimeline(id: string, key: string) {
   return tl;
 }
 
-/** time reported by an embedded engine player (postMessage studio:time) */
-function usePlayerTime(frame: React.RefObject<HTMLIFrameElement | null>, version = '') {
+/**
+ * An embedded engine player that keeps its place when the film changes under it. A page redrawn while the preview was
+ * open used to reload it: it flashed and went back to the start. Now the new version loads behind the one on screen, at
+ * the moment that one shows, and takes its place once it has drawn (studio:ready); while the preview plays, the new
+ * version waits for a pause. `frame` is the player on screen; `frames(props)` renders the players.
+ */
+function useLivePlayer(version: string, url: string, from = 0) {
+  const frame = useRef<HTMLIFrameElement>(null);
+  const behind = useRef<HTMLIFrameElement>(null);
+  // on screen first, then the version loading behind it (if any); `from` is where each boots
+  const [docs, setDocs] = useState<{ v: string; from?: number }[]>([{ v: version }]);
   const [st, setSt] = useState({ t: 0, playing: false, ready: false });
-  useEffect(() => setSt({ t: 0, playing: false, ready: false }), [version]);   // a reloaded player starts over
+  const [drawn, setDrawn] = useState('');   // the version behind that has drawn
+  const boot = useRef<number>(undefined);   // where the first player boots; fixed once it is on screen
+  const latest = docs[docs.length - 1].v;
+  useEffect(() => {
+    if (version === latest || st.playing) return;
+    setDocs((d) => [d[0], { v: version, from: st.t }]);   // a version still loading behind is replaced by the newer one
+  }, [version, latest, st.playing]);
+  useEffect(() => {
+    if (drawn !== docs[1]?.v || st.playing) return;
+    seekFrame(behind.current, st.t, false);   // where the viewer is now (they may have moved while it loaded)
+    setDocs((d) => d.slice(-1));
+  }, [drawn, docs, st.playing]);
   useEffect(() => {
     const on = (e: MessageEvent) => {
-      if (e.source !== frame.current?.contentWindow) return;
-      if (e.data?.type === 'studio:time') setSt((s) => ({ ...s, t: e.data.t, playing: !!e.data.playing }));
-      else if (e.data?.type === 'studio:ready') setSt((s) => ({ ...s, ready: true }));
+      if (e.source === frame.current?.contentWindow) {
+        if (e.data?.type === 'studio:time') setSt((s) => ({ ...s, t: e.data.t, playing: !!e.data.playing }));
+        else if (e.data?.type === 'studio:ready') setSt((s) => ({ ...s, ready: true }));
+      } else if (e.source && e.source === behind.current?.contentWindow && e.data?.type === 'studio:ready') setDrawn(behind.current?.dataset.v ?? '');
     };
     addEventListener('message', on);
     return () => removeEventListener('message', on);
-  }, [frame]);
-  return st;
+  }, []);
+  const frames = ({ className, ...props }: React.IframeHTMLAttributes<HTMLIFrameElement>) => (boot.current ??= from, docs.map((d, i) => (
+    <iframe key={d.v} ref={i === 0 ? frame : behind} data-v={d.v} src={`${url}?from=${(d.from ?? boot.current!).toFixed(2)}`} sandbox="allow-scripts" {...props} tabIndex={i === 0 ? undefined : -1} aria-hidden={i > 0 || undefined}
+      className={`${className ?? ''} ${i > 0 ? '!absolute inset-0 pointer-events-none !opacity-0' : ''}`} />
+  )));
+  return { frame, frames, ...st };
 }
 const seekFrame = (frame: HTMLIFrameElement | null, t: number, play = true) => frame?.contentWindow?.postMessage({ type: 'studio:seek', t, play }, '*');
 
@@ -71,9 +96,10 @@ function linesOf(id: string, tl: Timeline | null, run: RunView): { text: string;
 function Film({ run, project, ids, tl, subs, playKey, onFocus }: { run: RunView; project: ProjectView; ids: string[]; tl: Timeline | null; subs: boolean; playKey?: number; onFocus: (id: string) => void }) {
   useT();
   const video = useRef<HTMLVideoElement>(null);
-  const frame = useRef<HTMLIFrameElement>(null);
   const [vt, setVt] = useState(0);
-  const ft = usePlayerTime(frame).t;
+  // the player picks up a page when it changes, and the film when it is ready again (a new voice changes no page, only the narration)
+  const live = useLivePlayer(ids.map((x) => `${run.pages[x]?.status ?? ''}${run.pages[x]?.round ?? ''}`).join('|') + (run.ready?.at ?? ''), client.fileUrl(project, 'index.html'));
+  const frame = live.frame, ft = live.t;
   const okCount = ids.filter((id) => ['ok', 'flagged'].includes(run.pages[id]?.status)).length;
   const cut = film(run);
   const t = cut ? vt : ft;
@@ -84,8 +110,7 @@ function Film({ run, project, ids, tl, subs, playKey, onFocus }: { run: RunView;
     const src = subs ? cut.path : cut.noSubs;
     screen = <video ref={video} key={`${src}-${playKey ?? 0}`} controls autoPlay={!!playKey} onTimeUpdate={(e) => setVt(e.currentTarget.currentTime)} className="h-full w-full rounded-xl bg-black object-contain" src={client.fileUrl(project, relPath(src, project.id))} />;
   } else if (okCount > 0) {
-    // reloaded when a page changes, and when the film is ready again (a new voice changes no page, only the narration)
-    screen = <iframe ref={frame} key={ids.map((x) => `${run.pages[x]?.status ?? ''}${run.pages[x]?.round ?? ''}`).join('|') + (run.ready?.at ?? '')} title={tr('stage.previewTitle')} src={client.fileUrl(project, 'index.html')} sandbox="allow-scripts" className="h-full w-full rounded-xl border-0 bg-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent" />;
+    screen = <div className="relative h-full w-full">{live.frames({ title: tr('stage.previewTitle'), className: 'h-full w-full rounded-xl border-0 bg-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent' })}</div>;
   } else {
     const current = STAGES.find((s) => run.stages[s].status === 'running');
     screen = (
@@ -215,12 +240,10 @@ function useFrames(project: ProjectView, times: number[], enabled: boolean, vers
 
 function Focus({ id, run, project, ids, tl, onFocus, onBack, onRef }: { id: string; run: RunView; project: ProjectView; ids: string[]; tl: Timeline | null; onFocus: (id: string) => void; onBack: () => void; onRef: (r: Ref) => void }) {
   useT();
-  const frame = useRef<HTMLIFrameElement>(null);
   const screenBox = useRef<HTMLDivElement>(null);
   const strip = useRef<HTMLDivElement>(null);
   const cueList = useRef<HTMLOListElement>(null);
   const version = ids.map((x) => `${run.pages[x]?.status ?? ''}${run.pages[x]?.round ?? ''}`).join('|') + (run.ready?.at ?? run.video?.path ?? '');
-  const { t, playing: running, ready } = usePlayerTime(frame, version);
   const [light, setLight] = useState<{ kind: 'frames' | 'sheet'; i: number } | null>(null);
   const i = ids.indexOf(id), p = run.pages[id], sb = run.storyboard?.pages.find((x) => x.id === id);
   const lines = linesOf(id, tl, run);
@@ -228,10 +251,10 @@ function Focus({ id, run, project, ids, tl, onFocus, onBack, onRef }: { id: stri
   const prev = ids[i - 1], next = ids[i + 1];
   const pt = tl?.pages.find((x) => x.id === id);
   const timed = lines.some((l) => l.abs != null);
-  // the player boots straight onto the page it opens on (past the cross-fade from the page before); later turns seek
-  const startAt = useRef(0);
-  const booted = useRef('');
-  if (pt && booted.current !== version) { booted.current = version; startAt.current = Math.min(pt.start + 0.6, pt.end - 0.1); }
+  // the player boots straight onto the page it opens on (past the cross-fade from the page before); later turns seek,
+  // and a new version of the film boots where the one on screen was
+  const live = useLivePlayer(version, client.fileUrl(project, 'index.html'), pt ? Math.min(pt.start + 0.6, pt.end - 0.1) : 0);
+  const { frame, t, playing: running, ready } = live;
   const poster = p?.thumb ? relPath(p.thumb, project.id) : tl?.posters?.[id];
   const moments = useMemo(() => (pt && timed ? lines.map((_, j) => momentOf(lines, j, pt.end)) : []), [pt?.start, pt?.end, lines.length, timed]);
   const frameAt = useFrames(project, moments, finished(run), version);
@@ -281,8 +304,8 @@ function Focus({ id, run, project, ids, tl, onFocus, onBack, onRef }: { id: stri
     <div ref={screenBox} className="group relative h-full w-full overflow-hidden rounded-xl bg-paper-2">
       {/* until the player has drawn this page, its picture stands in; the player then fades in already on it */}
       {!ready && poster && <img src={client.fileUrl(project, poster)} alt="" className="absolute inset-0 h-full w-full object-contain" />}
-      {pt && <iframe ref={frame} key={version} title={tr('stage.preview')} src={`${client.fileUrl(project, 'index.html')}?from=${startAt.current.toFixed(2)}`} sandbox="allow-scripts" allowFullScreen
-        className={`relative h-full w-full border-0 transition-opacity duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${ready ? 'opacity-100' : 'opacity-0'}`} />}
+      {pt && live.frames({ title: tr('stage.preview'), allowFullScreen: true,
+        className: `relative h-full w-full border-0 transition-opacity duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${ready ? 'opacity-100' : 'opacity-0'}` })}
       <button className="fs-lb-btn absolute right-3 top-3 opacity-0 transition-opacity duration-150 focus-visible:opacity-100 group-hover:opacity-100" onClick={() => void screenBox.current?.requestFullscreen?.()} aria-label={tr('stage.fullscreen')} title={tr('stage.fullscreen')}><Maximize2 size={15} /></button>
     </div>
   );

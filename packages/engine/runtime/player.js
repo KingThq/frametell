@@ -6,6 +6,10 @@
 
   window.PLAYER = function ({ from = 0, render }) {
     const dur = ENGINE.layout.duration;
+    // the player speaks the film's language (META.lang; a film made before it was set: Chinese if its title is)
+    const meta = (window.SCRIPT && SCRIPT.META) || {};
+    const en = meta.lang ? meta.lang === 'en' : !/[\u3400-\u9fff]/.test(meta.title || '');
+    const say = (zh, english) => (en ? english : zh);
     let t = Math.min(from, dur), playing = false, t0 = 0, wall = 0;
 
     // ── narration: one <audio> per line, aligned to the current time while playing ──
@@ -54,11 +58,11 @@
     document.head.appendChild(css);
     const bar = document.createElement('div');
     bar.id = 'pv-bar';
-    bar.innerHTML = '<button id="pv-play" title="Play / pause (Space)">▶</button><span id="pv-time"></span><input id="pv-seek" type="range" min="0" step="0.05"><button id="pv-fs" title="Full screen (F)">⛶</button>';
+    bar.innerHTML = `<button id="pv-play" title="${say('播放 / 暂停（空格）', 'Play / pause (Space)')}">▶</button><span id="pv-time"></span><input id="pv-seek" type="range" min="0" step="0.05"><button id="pv-fs" title="${say('全屏（F）', 'Full screen (F)')}">⛶</button>`;
     document.body.appendChild(bar);
     const hint = document.createElement('div');
     hint.id = 'pv-hint';
-    hint.innerHTML = '<span>Click the picture or press Space to play</span>';
+    hint.innerHTML = `<span>${say('点击画面或按空格播放', 'Click the picture or press Space to play')}</span>`;
     document.body.appendChild(hint);
     const $ = (id) => document.getElementById(id);
     const seek = $('pv-seek');
