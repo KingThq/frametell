@@ -12,6 +12,7 @@ const en: typeof zh = {
   useOn: (v) => `Use “${v.id}” on ${v.provider}`,
   noMatch: 'Nothing matches',
   noProvider: 'No provider connected yet',
+  providers: 'Providers',
   manage: 'Providers and models',
 };
 export default en;

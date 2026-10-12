@@ -4,8 +4,9 @@ import type { ModelInfo } from '../lib/client';
 import { t, type MessageKey } from '../i18n';
 import { ProviderLogo } from './ProviderLogo';
 
-// The model to make a film with: every model of every connected provider, grouped by provider, searchable; an id the
-// provider does not list can be typed in and used as it is.
+// The model to make a film with: pick a connected provider on the left, then one of its models on the right. The search
+// spans every provider (each shows how many of its models match) and moves to one that has a match; an id the provider
+// does not list can be typed in and used as it is.
 
 export const modelKey = (m: Pick<ModelInfo, 'provider' | 'id'>) => `${m.provider}/${m.id}`;
 /** a provider by the name Studio gives it (「Claude」, not Pi's 「Anthropic」); the user's own endpoints keep theirs */
@@ -24,6 +25,7 @@ export function ModelPicker({ id = 'model', models, value, onChange, onAdd, onMa
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
   const [hi, setHi] = useState(0);
+  const [cur, setCur] = useState<string>();
   const root = useRef<HTMLDivElement>(null);
   const search = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLDivElement>(null);
@@ -39,22 +41,27 @@ export function ModelPicker({ id = 'model', models, value, onChange, onAdd, onMa
     }
     return [...by.values()];
   }, [models, q]);
+  // the provider shown on the right: the one chosen, unless the search left it empty and another has a match
+  const chosen = groups.find((g) => g.provider === cur);
+  const active = chosen && (chosen.items.length || !q.trim() || !groups.some((g) => g.items.length)) ? chosen : groups.find((g) => g.items.length) || groups[0];
   const typed = q.trim();
   const exact = models.some((m) => m.id === typed || modelKey(m) === typed);
-  // a typed id no provider lists: offer it on each connected provider
-  const offers = onAdd && typed && !exact && /^[\w./:@-]+$/.test(typed) ? groups.map((g) => ({ provider: g.provider, name: g.name })) : [];
-  const flat = [...groups.flatMap((g) => g.items.map((m) => ({ kind: 'model' as const, m }))), ...offers.map((o) => ({ kind: 'add' as const, o }))];
+  // a typed id no provider lists: offer it on the provider shown
+  const offer = onAdd && active && typed && !exact && /^[\w./:@-]+$/.test(typed) ? { provider: active.provider, name: active.name } : undefined;
+  const flat = [...(active?.items || []).map((m) => ({ kind: 'model' as const, m })), ...(offer ? [{ kind: 'add' as const, o: offer }] : [])];
 
   useEffect(() => {
     if (!open) return;
-    setQ(''); setHi(Math.max(0, flat.findIndex((x) => x.kind === 'model' && modelKey(x.m) === value)));
+    setQ(''); setCur(picked?.provider || models[0]?.provider);
     requestAnimationFrame(() => search.current?.focus());
     const away = (e: MouseEvent) => { if (!root.current?.contains(e.target as Node)) setOpen(false); };
     addEventListener('mousedown', away);
     return () => removeEventListener('mousedown', away);
   }, [open]);
-  useEffect(() => { setHi(0); }, [q]);
+  // on opening or switching provider, light the model in use if it is there, else the first
+  useEffect(() => { setHi(Math.max(0, flat.findIndex((x) => x.kind === 'model' && modelKey(x.m) === value))); }, [q, active?.provider, open]);
   useEffect(() => { list.current?.querySelector<HTMLElement>(`[data-i="${hi}"]`)?.scrollIntoView({ block: 'nearest' }); }, [hi, open]);
+  useEffect(() => { list.current?.scrollTo({ top: 0 }); }, [active?.provider]);
 
   const choose = async (i: number) => {
     const x = flat[i];
@@ -62,6 +69,11 @@ export function ModelPicker({ id = 'model', models, value, onChange, onAdd, onMa
     if (x.kind === 'model') onChange(modelKey(x.m));
     else { await onAdd?.(x.o.provider, typed); onChange(`${x.o.provider}/${typed}`); }
     setOpen(false);
+  };
+  const step = (d: number) => {
+    const at = groups.findIndex((g) => g.provider === active?.provider);
+    const next = groups[(at + d + groups.length) % groups.length];
+    if (next) setCur(next.provider);
   };
 
   let i = -1;
@@ -80,6 +92,8 @@ export function ModelPicker({ id = 'model', models, value, onChange, onAdd, onMa
           onKeyDown={(e) => {
             if (e.key === 'ArrowDown') { e.preventDefault(); setHi((h) => Math.min(flat.length - 1, h + 1)); }
             else if (e.key === 'ArrowUp') { e.preventDefault(); setHi((h) => Math.max(0, h - 1)); }
+            else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !q) { e.preventDefault(); step(e.key === 'ArrowLeft' ? -1 : 1); }
+            else if (e.key === 'Tab' && groups.length > 1) { e.preventDefault(); step(e.shiftKey ? -1 : 1); }
             else if (e.key === 'Enter') { e.preventDefault(); void choose(hi); }
             else if (e.key === 'Escape') { e.preventDefault(); setOpen(false); root.current?.querySelector<HTMLButtonElement>('button')?.focus(); }
           }}>
@@ -90,47 +104,58 @@ export function ModelPicker({ id = 'model', models, value, onChange, onAdd, onMa
               className="h-10 w-full bg-transparent text-[13px] text-ink outline-none placeholder:text-ink-3"
               role="combobox" aria-expanded aria-controls={`${id}-list`} aria-activedescendant={flat.length ? `${id}-o${hi}` : undefined} />
           </label>
-          <div ref={list} id={`${id}-list`} role="listbox" className="max-h-[340px] overflow-y-auto overscroll-contain py-1.5">
-            {groups.map((g) => g.items.length > 0 && (
-              <div key={g.provider} role="group" aria-label={g.name}>
-                <div className="flex items-center gap-2 px-3 pb-1 pt-2.5 text-[11.5px] font-medium text-ink-3"><ProviderLogo id={g.provider} name={g.name} size={13} />{g.name}</div>
-                {g.items.map((m) => {
-                  i++;
-                  const idx = i, on = modelKey(m) === value;
+          <div className="flex flex-col sm:h-[320px] sm:flex-row">
+            {groups.length > 1 && (
+              <div role="tablist" aria-orientation="vertical" aria-label={t('picker.providers')}
+                className="flex shrink-0 gap-1 overflow-x-auto border-b border-line p-1.5 sm:w-44 sm:flex-col sm:overflow-y-auto sm:overflow-x-visible sm:border-b-0 sm:border-r">
+                {groups.map((g) => {
+                  const on = g.provider === active?.provider, empty = !!typed && !g.items.length;
                   return (
-                    <div key={m.id} id={`${id}-o${idx}`} data-i={idx} role="option" aria-selected={on} onMouseEnter={() => setHi(idx)} onMouseDown={(e) => e.preventDefault()} onClick={() => void choose(idx)}
-                      className={`mx-1.5 flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 ${hi === idx ? 'bg-ink/[0.06]' : ''}`}>
-                      <span className="min-w-0 flex-1">
-                        <span className="flex items-baseline gap-2">
-                          <span className="truncate text-[13px] text-ink">{m.name}</span>
-                          {m.recommended && <span className="shrink-0 rounded-[5px] bg-accent-soft px-1.5 text-[10.5px] leading-[17px] text-accent-ink">{t('picker.recommended')}</span>}
-                          {!m.vision && <span className="shrink-0 text-[11px] text-ink-3">{t('picker.noVision')}</span>}
-                        </span>
-                        {m.name !== m.id && <span className="block truncate font-mono text-[11px] text-ink-3">{m.id}</span>}
-                      </span>
-                      {on && <Check size={14} className="shrink-0 text-accent-ink" aria-hidden />}
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
-            {offers.length > 0 && (
-              <div role="group" aria-label={t('picker.useTyped')} className="mt-1 border-t border-line pt-1.5">
-                {offers.map((o) => {
-                  i++;
-                  const idx = i;
-                  return (
-                    <div key={o.provider} id={`${id}-o${idx}`} data-i={idx} role="option" aria-selected={false} onMouseEnter={() => setHi(idx)} onMouseDown={(e) => e.preventDefault()} onClick={() => void choose(idx)}
-                      className={`mx-1.5 flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] ${hi === idx ? 'bg-ink/[0.06]' : ''}`}>
-                      <Plus size={14} className="shrink-0 text-ink-3" aria-hidden />
-                      <span className="min-w-0 flex-1 truncate text-ink-2">{t('picker.useOn', { id: typed, provider: o.name })}</span>
-                      <ProviderLogo id={o.provider} name={o.name} size={14} />
-                    </div>
+                    <button key={g.provider} type="button" role="tab" aria-selected={on} tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => setCur(g.provider)}
+                      className={`flex shrink-0 items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[12.5px] transition-colors ${on ? 'bg-ink/[0.07] text-ink' : 'text-ink-2 hover:bg-ink/[0.04] hover:text-ink'} ${empty && !on ? 'opacity-45' : ''}`}>
+                      <ProviderLogo id={g.provider} name={g.name} size={14} />
+                      <span className="min-w-0 flex-1 truncate">{g.name}</span>
+                      {picked?.provider === g.provider && !typed && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" aria-hidden />}
+                      {typed && <span className="shrink-0 text-[11px] tabular-nums text-ink-3">{g.items.length}</span>}
+                    </button>
                   );
                 })}
               </div>
             )}
-            {!flat.length && <p className="px-4 py-6 text-center text-[12.5px] text-ink-3">{models.length ? t('picker.noMatch') : t('picker.noProvider')}</p>}
+            <div ref={list} id={`${id}-list`} role="listbox" aria-label={active?.name} className="max-h-[320px] min-w-0 flex-1 overflow-y-auto overscroll-contain py-1.5 sm:max-h-none">
+              {active?.items.map((m) => {
+                i++;
+                const idx = i, on = modelKey(m) === value;
+                return (
+                  <div key={m.id} id={`${id}-o${idx}`} data-i={idx} role="option" aria-selected={on} onMouseEnter={() => setHi(idx)} onMouseDown={(e) => e.preventDefault()} onClick={() => void choose(idx)}
+                    className={`mx-1.5 flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 ${hi === idx ? 'bg-ink/[0.06]' : ''}`}>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-baseline gap-2">
+                        <span className="truncate text-[13px] text-ink">{m.name}</span>
+                        {m.recommended && <span className="shrink-0 rounded-[5px] bg-accent-soft px-1.5 text-[10.5px] leading-[17px] text-accent-ink">{t('picker.recommended')}</span>}
+                        {!m.vision && <span className="shrink-0 text-[11px] text-ink-3">{t('picker.noVision')}</span>}
+                      </span>
+                      {m.name !== m.id && <span className="block truncate font-mono text-[11px] text-ink-3">{m.id}</span>}
+                    </span>
+                    {on && <Check size={14} className="shrink-0 text-accent-ink" aria-hidden />}
+                  </div>
+                );
+              })}
+              {offer && (() => {
+                i++;
+                const idx = i;
+                return (
+                  <div role="group" aria-label={t('picker.useTyped')} className={active?.items.length ? 'mt-1 border-t border-line pt-1.5' : ''}>
+                    <div id={`${id}-o${idx}`} data-i={idx} role="option" aria-selected={false} onMouseEnter={() => setHi(idx)} onMouseDown={(e) => e.preventDefault()} onClick={() => void choose(idx)}
+                      className={`mx-1.5 flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] ${hi === idx ? 'bg-ink/[0.06]' : ''}`}>
+                      <Plus size={14} className="shrink-0 text-ink-3" aria-hidden />
+                      <span className="min-w-0 flex-1 truncate text-ink-2">{t('picker.useOn', { id: typed, provider: offer.name })}</span>
+                    </div>
+                  </div>
+                );
+              })()}
+              {!flat.length && <p className="px-4 py-6 text-center text-[12.5px] text-ink-3">{models.length ? t('picker.noMatch') : t('picker.noProvider')}</p>}
+            </div>
           </div>
           {onManage && (
             <button type="button" onClick={() => { setOpen(false); onManage(); }} className="flex w-full items-center gap-2 border-t border-line px-3.5 py-2.5 text-left text-[12.5px] text-ink-2 transition-colors hover:bg-ink/[0.04] hover:text-ink">

@@ -11,5 +11,6 @@ export default {
   useOn: (v: { id: string; provider: string }) => `在 ${v.provider} 上使用「${v.id}」`,
   noMatch: '没有匹配的',
   noProvider: '还没有连接服务商',
+  providers: '服务商',
   manage: '管理服务商与模型',
 };
