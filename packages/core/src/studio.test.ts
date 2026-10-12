@@ -46,3 +46,27 @@ test('two Studios in one process do not see each other', () => {
     assert.equal(two.settings().keys.relay, undefined);
   } finally { for (const d of [a, b]) fs.rmSync(d, { recursive: true, force: true }); }
 });
+
+test('after a restart, a run cut short is picked up again, a paused one is left alone', async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'frametell-resume-'));
+  try {
+    const now = new Date().toISOString();
+    const make = (id: string, last: object) => {
+      const dir = path.join(dataDir, 'projects', id);
+      fs.mkdirSync(path.join(dir, '.studio'), { recursive: true });
+      fs.writeFileSync(path.join(dir, '.studio', 'project.json'), JSON.stringify({ id, title: id, style: 'whiteboard', durationSec: 60, model: 'nowhere/none', runtime: 'pi', subtitles: true, materials: [], createdAt: now, updatedAt: now }));
+      fs.writeFileSync(path.join(dir, '.studio', 'state.json'), JSON.stringify({ stage: 'pages' }));
+      fs.writeFileSync(path.join(dir, '.studio', 'events.jsonl'), [{ type: 'stage', stage: 'pages', status: 'start', seq: 1, at: 1 }, { ...last, seq: 2, at: 2 }].map((e) => JSON.stringify(e)).join('\n') + '\n');
+    };
+    make('2026-10-12-cut000000001', { type: 'agent', session: 'page-p01', event: { type: 'text', text: '…' } });
+    make('2026-10-12-paused0000001', { type: 'paused', reason: 'user', stage: 'pages' });
+    const studio = new Studio({ dataDir, config: memoryConfig() });
+    assert.deepEqual(studio.resumeInterrupted(), ['2026-10-12-cut000000001']);
+    // it tried to continue (and, with no model here, stopped with an error rather than staying silently paused)
+    await new Promise((r) => setTimeout(r, 200));
+    const log = fs.readFileSync(path.join(dataDir, 'projects', '2026-10-12-cut000000001', '.studio', 'events.jsonl'), 'utf8');
+    assert.match(log, /"reason":"interrupted"/);
+    assert.match(log, /"type":"error"/);
+    assert.deepEqual(studio.resumeInterrupted(), []);
+  } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
+});

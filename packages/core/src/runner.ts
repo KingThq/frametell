@@ -118,14 +118,19 @@ class Runner {
       const cut = renders.at(-1)?.type === 'stage' && (renders.at(-1) as Extract<Logged, { type: 'stage' }>).status === 'start';
       if (this.status === 'done' && cut && !heldElsewhere(this.dir)) {
         this.emit({ type: 'stage', stage: 'render', status: 'failed', detail: tr('导出被打断了，可以重新导出', 'The export was interrupted. You can export again.') });
+        this.interrupted = 'export';
       }
       // a run that was in progress when its process went away (app closed, crash): say so in the log, so every client
       // shows it as paused with a way to continue, instead of a stage that never ends
       if (this.status === 'stopped' && last && last.type !== 'paused' && !heldElsewhere(this.dir)) {
         this.emit({ type: 'paused', reason: 'interrupted', stage: this.stateStage() });
+        this.interrupted = 'run';
       }
     }
   }
+
+  /** what this process found cut short when it opened the project: a run in progress, or an export */
+  interrupted?: 'run' | 'export';
 
   private stateStage(): string | undefined {
     try { return JSON.parse(fs.readFileSync(studioFile(this.dir, 'state.json'), 'utf8')).stage; } catch { return undefined; }

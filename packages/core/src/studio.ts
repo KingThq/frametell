@@ -164,6 +164,22 @@ export class Studio {
   }
 
   start(id: string) { return this.store.runner(id).start(); }
+
+  /**
+   * Picks up what a restart cut short: runs continue, exports start again. For a service that restarts on every deploy;
+   * the desktop app and the CLI leave it to the person (the run shows as paused, with a way to continue).
+   * Returns the projects it resumed.
+   */
+  resumeInterrupted(): string[] {
+    const resumed: string[] = [];
+    for (const p of this.store.list()) {
+      const r = this.store.runner(p.id);
+      if (r.interrupted === 'run') { void r.start(); resumed.push(p.id); }
+      else if (r.interrupted === 'export' && r.export()) resumed.push(p.id);
+      r.interrupted = undefined;
+    }
+    return resumed;
+  }
   /** render the finished film to mp4; false when something is running or the film isn't finished */
   export(id: string) { return this.store.runner(id).export(); }
   approve(id: string, feedback?: string) { return this.store.runner(id).approve(feedback); }
