@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The preview keeps its place while the film is being made. A page that changed (drawn, checked, redrawn) used to reload the preview: it flashed and went back to the start. Now the new version loads behind the one on screen, at the moment you were watching, and takes its place once it is drawn; while the preview plays, it waits until you pause.
 - The preview's play hint and button tips are in the film's language. A Chinese film showed "Click the picture or press Space to play" in English.
+- Play on the "Your video is ready" card plays the film. Without an up-to-date mp4, the film is the live preview, and both Play buttons only switched to it without starting it.
+- A page check's findings are a warning, not an error, and read in the panel's language. A page drawn with a finding was marked in red, with the finding in English ("text-dominated page: …"); it is now amber, and a Chinese panel says it in Chinese.
 
 ## [0.2.1] - 2026-10-12
 

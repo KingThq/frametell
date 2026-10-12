@@ -14,6 +14,8 @@ module.exports = {
         primary: { DEFAULT: v('primary'), fg: v('primary-fg') },
         jade: { DEFAULT: v('jade'), soft: v('jade-soft') },
         seal: { DEFAULT: v('seal'), soft: v('seal-soft') },
+        // a warning: worth a look, not an error (a page drawn with a check it did not pass)
+        warn: { DEFAULT: v('warn'), soft: v('warn-soft') },
       },
       fontFamily: {
         sans: ['"Inter Variable"', 'Inter', '-apple-system', 'BlinkMacSystemFont', '"PingFang SC"', '"Hiragino Sans GB"', '"Noto Sans SC"', '"Microsoft YaHei"', 'sans-serif'],

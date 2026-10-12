@@ -8,6 +8,7 @@
   --fs-accent: 212 165 116; --fs-accent-ink: 156 106 58; --fs-accent-soft: 253 246 238; --fs-accent-fg: 44 33 24;
   --fs-jade: 62 142 94; --fs-jade-soft: 232 244 236;
   --fs-seal: 192 68 43; --fs-seal-soft: 252 236 232;
+  --fs-warn: 160 106 10; --fs-warn-soft: 251 243 222;
   --fs-shadow-sm: 0 1px 2px rgb(28 25 23 / 0.05), 0 1px 4px rgb(28 25 23 / 0.04);
   --fs-shadow-lg: 0 4px 10px rgb(28 25 23 / 0.05), 0 18px 48px rgb(28 25 23 / 0.12);
   --fs-ease: cubic-bezier(0.16, 1, 0.3, 1);
@@ -22,6 +23,7 @@
   --fs-accent: 224 184 138; --fs-accent-ink: 228 192 150; --fs-accent-soft: 46 36 27; --fs-accent-fg: 44 33 24;
   --fs-jade: 111 191 142; --fs-jade-soft: 22 38 29;
   --fs-seal: 226 118 94; --fs-seal-soft: 48 24 19;
+  --fs-warn: 232 186 84; --fs-warn-soft: 46 36 16;
   --fs-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.35);
   --fs-shadow-lg: 0 18px 48px rgb(0 0 0 / 0.55);
   color-scheme: dark;

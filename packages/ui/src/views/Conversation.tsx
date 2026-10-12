@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronRight, CircleDashed, Clapperboard, Download, Loader2, Pause, Play, TriangleAlert } from 'lucide-react';
 import { client, type ProjectView } from '../lib/client';
 import { clock, film, finished, money, relPath, STAGE_NAME, STAGES, type FeedItem, type PageView, type RunView, type Stage, type Storyboard, isWorking } from '../lib/run';
+import { issueText } from '../lib/lint';
 import { pageName, stepText, summarizeTools } from '../lib/describe';
 import { useNow } from '../lib/hooks';
 import { Crest } from '../components/Logo';
@@ -125,7 +126,8 @@ const PAGE_STATE: Record<PageView['status'], { text: (p?: PageView) => string; i
   drawing: { text: (p) => moment(p) ?? t('conversation.page.drawing', { progress: p?.progress }), icon: <Loader2 size={14} className="animate-spin" />, tone: 'text-accent-ink' },
   checking: { text: (p) => moment(p) ?? t('conversation.page.checking', { round: p?.round ?? 0 }), icon: <Loader2 size={14} className="animate-spin" />, tone: 'text-accent-ink' },
   ok: { text: () => t('conversation.page.ok'), icon: <Check size={14} />, tone: 'text-jade' },
-  flagged: { text: () => t('conversation.page.flagged'), icon: <TriangleAlert size={14} />, tone: 'text-seal' },
+  // drawn, with a check it did not pass: a warning to look at, not an error
+  flagged: { text: () => t('conversation.page.flagged'), icon: <TriangleAlert size={14} />, tone: 'text-warn' },
   failed: { text: () => t('conversation.page.failed'), icon: <TriangleAlert size={14} />, tone: 'text-seal' },
 };
 
@@ -146,7 +148,7 @@ function Pages({ run, onSelect, selected }: { run: RunView; onSelect: (id: strin
               <span className="min-w-0 flex-1 truncate text-[13px]">{section}</span>
               <span className={`shrink-0 text-[12px] ${st.tone}`}>{st.text(p)}</span>
             </button>
-            {p?.status === 'flagged' && p.issues[0] && <p className="ml-[54px] pb-1 text-[12px] leading-relaxed text-seal">{p.issues[0]}</p>}
+            {p?.status === 'flagged' && p.issues[0] && <p className="ml-[54px] pb-1 text-[12px] leading-relaxed text-warn">{issueText(p.issues[0])}</p>}
           </li>
         );
       })}
