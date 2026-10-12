@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, CircleAlert, FileText, Image as ImageIcon, Loader2, Lock, NotebookPen, Paperclip, Play, Settings2, Square, X } from 'lucide-react';
+import { ArrowRight, CircleAlert, FileText, Image as ImageIcon, Loader2, NotebookPen, Paperclip, Play, Settings2, Square, X } from 'lucide-react';
 import { client, hosted, type ProjectView, type PublicSettings, type Voice } from '../lib/client';
 import { go, useLoad, useVoices } from '../lib/hooks';
 import { STAGE_NAME, type Stage } from '../lib/run';
-import { STYLE_SWATCH, styleName, styleSummary } from '../lib/styles';
+import { STYLE_SWATCH, styleLabel } from '../lib/styles';
 import { intlTag, t, useT } from '../i18n';
 import { useCredits } from '../components/Credits';
 import { ModelPicker } from '../components/ModelPicker';
+import { StylePicker } from '../components/StylePicker';
 import { VoicePicker } from '../components/VoicePicker';
 
 const DURATIONS = [60, 120, 300, 600];
@@ -58,7 +59,8 @@ export function Home({ openSettings, prefsStamp }: { openSettings: (section?: st
   const credits = useCredits();
   const estimate = credits ? Math.ceil((duration / 60) * credits.perMinute) : 0;
   const [lang, setLang] = useState<'zh' | 'en'>();
-  const [style, setStyle] = useState<string>();
+  // ?style= starts with a style picked elsewhere (frametell.ai's style market)
+  const [style, setStyle] = useState<string | undefined>(() => new URLSearchParams(location.search).get('style') || undefined);
   const [model, setModel] = useState<string>();
   const [pageModel, setPageModel] = useState<string | null>();   // null: the director's
   // null: no voice; undefined: the default one
@@ -183,16 +185,8 @@ export function Home({ openSettings, prefsStamp }: { openSettings: (section?: st
           </div>
           <fieldset className="sm:col-span-2">
             <legend className="fs-label">{t('home.style')}</legend>
-            <div className="flex flex-wrap gap-1.5" role="radiogroup">
-              {(styles.data || []).map((s) => (
-                <button key={s.id} type="button" role="radio" aria-checked={styleId === s.id} className={`fs-chip ${lockedStyle(s.id) ? 'text-ink-3' : ''}`} onClick={() => setStyle(s.id)}>
-                  <span className={`flex -space-x-1 ${lockedStyle(s.id) ? 'opacity-60' : ''}`} aria-hidden>{(STYLE_SWATCH[s.id] || []).map((c) => <span key={c} className="h-3 w-3 rounded-full ring-1 ring-black/15" style={{ background: c }} />)}</span>
-                  {styleName(s.id) ?? s.name}
-                  {lockedStyle(s.id) && <><Lock size={11} className="text-ink-3" aria-hidden /><span className="sr-only">{t('home.styleMembers')}</span></>}
-                </button>
-              ))}
-            </div>
-            {current && <p className="mt-2 text-[12.5px] text-ink-3">{styleSummary(current.id) ?? current.summary}</p>}
+            <StylePicker styles={styles.data || []} value={styleId} onChange={setStyle} locked={lockedStyle} />
+            {current && <p className="mt-2.5 text-[12.5px] text-ink-3"><span className="font-medium text-ink-2">{styleLabel(current).name}</span> · {styleLabel(current).summary}</p>}
             {current && lockedStyle(current.id) && credits && (
               <p className="mt-1.5 text-[12.5px] text-accent-ink">{t('home.styleLocked')} <a className="underline underline-offset-2" href={credits.url} target="_top">{t('home.upgrade')}</a></p>
             )}
@@ -258,7 +252,7 @@ export function Home({ openSettings, prefsStamp }: { openSettings: (section?: st
               return (
                 <li key={p.id} className="flex items-center gap-4 py-3.5">
                   <a href={`#/p/${p.id}`} className="group flex min-w-0 flex-1 items-center gap-4 rounded-lg">
-                    <span className="flex -space-x-1" aria-hidden>{(STYLE_SWATCH[p.style] || STYLE_SWATCH.study).slice(0, 3).map((c) => <span key={c} className="h-3.5 w-3.5 rounded-full ring-1 ring-black/15" style={{ background: c }} />)}</span>
+                    <span className="flex -space-x-1" aria-hidden>{(STYLE_SWATCH[p.style] || styles.data?.find((x) => x.id === p.style)?.swatch || STYLE_SWATCH.study).slice(0, 3).map((c) => <span key={c} className="h-3.5 w-3.5 rounded-full ring-1 ring-black/15" style={{ background: c }} />)}</span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[14px] font-medium text-ink group-hover:underline group-hover:underline-offset-4">{p.title}</span>
                       <span className="mt-0.5 block text-[12px] text-ink-3">{t('home.about', { n: Math.round(p.durationSec / 60) })} · {ago(p.updatedAt)} · <span className={st.tone}>{st.label}</span></span>

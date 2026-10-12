@@ -8,6 +8,7 @@ import { Project, type LintIssue, type PageTiming, type Storyboard, type Rendere
 import { checkPrompt, langNote, voiceNote, pagePrompt, pageSystem, plannerSystem, replyNote, reviewPrompt, scriptPrompt, storyboardFixPrompt, storyboardPrompt, type Brief } from './prompts.js';
 import { addUsage, emptyUsage, type AgentRuntime, type AgentSession, type Thinking, type TokenUsage, type TurnResult } from './runtime/types.js';
 import type { PageStatus, Stage, StudioEvent } from './events.js';
+import { ENGINE_DIR } from '@frametell/engine/tools/project.mjs';
 
 export interface Prices { input: number; output: number; cacheRead: number; cacheWrite: number; currency: 'CNY' | 'USD' }
 
@@ -71,6 +72,10 @@ function priced(u: TokenUsage, p: Prices | undefined, currency: Prices['currency
 
 /** components every page of a style can use, registered before the page sessions start */
 const STYLE_EXTRAS: Record<string, string[]> = { 'warm-story': ['engine/lib/warm.js'] };
+/** a style's components: the ones listed above, or the style pack's own kit.js (a style installed beside the built-in
+ *  ones brings its components with it) */
+const styleExtras = (style: string): string[] =>
+  STYLE_EXTRAS[style] ?? (fs.existsSync(path.join(ENGINE_DIR, 'styles', style, 'kit.js')) ? [`engine/styles/${style}/kit.js`] : []);
 
 /** the part of a crash that says what broke: the error and the page's own lines, not Node's internals */
 export function crashText(raw: string, id: string): string {
@@ -250,13 +255,13 @@ export class Director {
 
   /** Style, voice, pacing and the style's components: owned by the server, re-applied after every agent edit. */
   private serverMeta() {
-    const extras = new Set<string>(STYLE_EXTRAS[this.o.style] ?? []);
+    const extras = new Set<string>(styleExtras(this.o.style));
     try {   // keep components the page agents registered (use-extra.mjs appends to META.extras)
       const m = /extras:\s*(\[[^\]\n]*\])/.exec(fs.readFileSync(this.project.file('script.js'), 'utf8'));
       if (m) for (const e of JSON.parse(m[1].replace(/'/g, '"'))) extras.add(e);
     } catch {}
     // a style component copied into extras/ by use-extra is the same file: load it once, from the engine
-    const base = new Set((STYLE_EXTRAS[this.o.style] ?? []).map((e) => path.basename(e)));
+    const base = new Set(styleExtras(this.o.style).map((e) => path.basename(e)));
     const list = [...extras].filter((e) => !(e.startsWith('extras/') && base.has(path.basename(e))));
     this.setMeta({ style: this.o.style, lang: this.o.brief.lang ?? 'zh', voice: this.o.voice, gap: 0.8, pace: { maxHold: 1.0, gap: 0.8 }, extras: list });
   }
@@ -362,7 +367,7 @@ export class Director {
     const st: PageState = { status: 'drawing', rounds: 0, issues: [] };
     this.setPage(id, st);
     try {
-      const s = await this.session(`page-${id}`, pageSystem(this.o.style, STYLE_EXTRAS[this.o.style] ?? [], this.o.brief.preferences), MAX.pageTurns);
+      const s = await this.session(`page-${id}`, pageSystem(this.o.style, styleExtras(this.o.style), this.o.brief.preferences), MAX.pageTurns);
       const fix = this.state.revision?.[id];
       // a revision's page already exists, so "is there a file" says nothing: what tells is whether the code changed
       // (seen: a revision whose edits never landed was checked, passed and shown as done, on the old page)
@@ -394,7 +399,16 @@ export class Director {
         }
         if (round > rounds) break;
         const times = this.sheetTimes(sb, t);
-        const sheet = await this.project.snap(`${id}-r${round}`, times.map((x) => x.t), [id]);
+        // a page can pass lint and still not build in the browser (seen: "h1.hide is not a function" logged to the
+        // console, then the screenshot timed out): that is a crash too, and goes back to its agent the same way
+        let sheet: string;
+        try { sheet = await this.project.snap(`${id}-r${round}`, times.map((x) => x.t), [id]); } catch (e) {
+          const crash = crashText((e as Error).message, id);
+          this.setPage(id, { ...st, issues: [crash] });
+          r = await this.send(s, crashPrompt(id, crash) + this.unseen(`page-${id}`), undefined, PAGE_THINKING);
+          await this.commit(this.say(`${id}：修运行错误`, `${id}: fix a runtime error`));
+          continue;
+        }
         this.setPage(id, { ...st, issues: issues.map((i) => i.msg) }, { sheet });
         r = await this.send(s, checkPrompt(round, issues, times, unchanged() ? fix : undefined) + this.unseen(`page-${id}`), [sheet], PAGE_THINKING);
         await this.commit(this.say(`${id}：第 ${round} 轮修改`, `${id}: check round ${round}`));
@@ -447,7 +461,7 @@ export class Director {
     const limit = defectsOnly ? new AbortController() : undefined;
     const timer = limit && setTimeout(() => limit.abort(), MAX.reviewDefectsMs);
     const signal = limit ? AbortSignal.any([limit.signal, ...(this.o.signal ? [this.o.signal] : [])]) : this.o.signal;
-    const s = await this.session('review', pageSystem(this.o.style, STYLE_EXTRAS[this.o.style] ?? [], this.o.brief.preferences), MAX.pageTurns, undefined, signal);
+    const s = await this.session('review', pageSystem(this.o.style, styleExtras(this.o.style), this.o.brief.preferences), MAX.pageTurns, undefined, signal);
     let timedOut = false;
     try {
       for (let round = 1; round <= (defectsOnly ? 1 : MAX.reviewRounds); round++) {

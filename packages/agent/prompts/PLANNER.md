@@ -28,7 +28,7 @@ The audience is ordinary people who want to understand one thing. Follow the str
 ```json
 {
   "title": "", "summary": "one sentence saying what this film explains", "durationSec": 60,
-  "style": "style id (chosen by the server; copy it as is)", "cast": "none | hands | silhouette",
+  "style": "style id (chosen by the server; copy it as is)", "cast": "none | hands | silhouette | characters (only when the style's grammar card draws characters)",
   "pages": [{
     "id": "p01", "section": "Theme: the point in one line", "say": "what this page says (2–3 sentences)", "core": true,
     "beats": [
@@ -43,7 +43,7 @@ The audience is ordinary people who want to understand one thing. Follow the str
 - `object` must not be a layout word such as title, card, bullet point, background, icon or text; `action` must not be a catch-all such as appear, show, fade in or list one by one.
 - At least 2 beats per page; no more than 30% of beats may be text-led; the first and last pages open and close on an object, never on a centred quote card.
 - Every number on screen must be found in the material.
-- Never draw faces: when a person is needed, show only hands, a back or a silhouette, or let an object take the lead.
+- Never draw faces: when a person is needed, show only hands, a back or a silhouette, or let an object take the lead. The one exception is a style whose grammar card says it draws characters with faces (a cartoon, a comic, a game): then the cast is those characters, as the card describes them.
 - The target length is a guide (about 4–6 pages a minute). Explaining clearly comes first; at least 2 pages per minute are `core: true`.
 
 When you finish, the server checks the storyboard mechanically; if it finds problems it sends you the list, and you fix them before stopping.

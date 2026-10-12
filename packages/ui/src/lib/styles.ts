@@ -1,5 +1,6 @@
 // Style names and swatches for the panel (the ids match packages/engine/styles/<id>).
-import { t, type MessageKey } from '../i18n';
+import { getLocale, t, type MessageKey } from '../i18n';
+import type { StyleInfo } from './client';
 
 const KNOWN = ['warm-story', 'study', 'whiteboard', 'chalkboard', 'tech-dark'];
 /** a style's name in the interface language; undefined for a style the panel doesn't know */
@@ -14,4 +15,10 @@ export const STYLE_SWATCH: Record<string, string[]> = {
   whiteboard: ['#F7F8F7', '#1E2226', '#D0342C', '#1F5DBA'],
   chalkboard: ['#223029', '#F1ECE1', '#F3DD86', '#F0A3A0'],
   'tech-dark': ['#15171A', '#E8E6E1', '#4FBFAE', '#E3A64B'],
+};
+
+/** a style's name, summary and pictures in the interface language: the panel's own translation, then the style's, then its own */
+export const styleLabel = (s: StyleInfo) => {
+  const own = s.i18n?.[getLocale() as 'zh' | 'en'];
+  return { name: styleName(s.id) ?? own?.name ?? s.name, summary: styleSummary(s.id) ?? own?.summary ?? s.summary, poster: own?.poster ?? s.poster, loop: own?.loop ?? s.loop };
 };

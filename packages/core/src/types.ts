@@ -20,7 +20,17 @@ export interface VoicesView {
    * listed instead), the key is wrong, the service could not be reached, or something else; detail is the service's own words */
   problems?: { elevenlabs?: { problem: 'permission' | 'key' | 'network' | 'other'; detail: string } };
 }
-export interface StyleInfo { id: string; name: string; summary: string }
+export interface StyleInfo {
+  id: string; name: string; summary: string;
+  /** a still and a short silent loop from a film drawn in this style (a hosted service's style market provides them) */
+  poster?: string; loop?: string;
+  /** its colours, ground first, for small marks where a picture would not fit */
+  swatch?: string[];
+  /** 'member': a paid plan draws in it (a hosted service) */
+  tier?: 'free' | 'member';
+  /** the name, one-line summary and pictures per interface language (a film in that language) */
+  i18n?: Partial<Record<'zh' | 'en', { name: string; summary: string; poster?: string; loop?: string }>>;
+}
 export interface EnvCheck { id: 'chrome' | 'ffmpeg' | 'git' | 'node'; ok: boolean; detail: string; fix?: string }
 
 export interface ProjectMeta {
