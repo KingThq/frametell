@@ -11,6 +11,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The panel can run hosted: a `studioBridge` that sets `hosted` (Frametell Cloud) gets the account and a sign-out in the top bar instead of Settings, no model picker (the service chooses), and only the voices the service can speak with. Home also takes `?topic=` to start with an idea typed elsewhere.
 
+## [0.1.2] - 2026-10-11
+
+### Changed
+
+- Films are made faster. Pages are drafted at medium thinking (a draft took 37–74 s instead of 170–220 s, and the pages were no worse); the director writes the storyboard from what it is given instead of browsing the engine first (the first storyboard came in about 50 s instead of 100 s); a check round's fixes go out in one reply and end the round, instead of two or three more model turns; and `frametell run` draws up to ten pages at once, like the studio.
+- The director's prompts, the style cards, the engine's tools and the docs are in English. Films are still made in Chinese or English, and every stage names the film's language. Reports, notes and failures follow the language of your latest message, or the interface's.
+- Material parsed from PDF and PowerPoint follows the film's language too: 「第 N 页」 and 「备注」 for a Chinese film, "Page N" and "Notes:" for an English one.
+
+### Added
+
+- `new Studio({ renderer })` hands exports to another renderer, such as a render service, instead of rendering in the same process.
+- Releases are built by GitHub Actions from a version tag: the macOS app and its dmg are signed with the Developer ID, notarized and checked, and wait in a draft release.
+
+### Fixed
+
+- Pages kept their fonts, and exports worked, when the engine was installed as a pnpm dependency; it used to look for its modules in the wrong folder.
+- The engine's tests no longer leave a link inside the package that points at its own parent folder. A tool that followed links could walk it forever (one scan grew to 43 GB).
+- The storyboard stage asks again when a model turn ends without a storyboard.
+
 ## [0.1.1] - 2026-10-11
 
 ### Fixed
@@ -75,6 +94,7 @@ The first release of 画说 · Frametell: a local, open-source studio that turns
 - The npm packages are not published yet; install from source (see the README).
 - The Claude Agent SDK and Codex runtimes are in the code but not offered; every film runs on the built-in agent, which works with any provider.
 
-[Unreleased]: https://github.com/sitor-ai/frametell/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/sitor-ai/frametell/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/sitor-ai/frametell/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/sitor-ai/frametell/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/sitor-ai/frametell/releases/tag/v0.1.0
