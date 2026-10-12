@@ -10,10 +10,11 @@ RUN apt-get update \
 ENV CHROME_PATH=/usr/bin/chromium FFMPEG_PATH=/usr/bin/ffmpeg
 
 WORKDIR /opt/frametell
-# the engine as it publishes itself, with its own node_modules (the pages load fonts and libraries from it);
-# ffmpeg-static's download is skipped: FFMPEG_PATH points at Debian's
+# the engine as it publishes itself, with its own node_modules (the pages load fonts and libraries from it), installed
+# with the repo's pnpm; ffmpeg-static's download is skipped: FFMPEG_PATH points at Debian's
 COPY packages/engine/package.json engine/package.json
-RUN cd engine && npm install --omit=dev --ignore-scripts --no-audit --no-fund --no-package-lock
+RUN corepack enable && corepack prepare pnpm@10.5.2 --activate \
+ && cd engine && pnpm install --prod --ignore-scripts --config.lockfile=false --config.fetch-retries=5
 COPY packages/engine/boot.js engine/
 COPY packages/engine/runtime engine/runtime
 COPY packages/engine/lib engine/lib
