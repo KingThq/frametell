@@ -77,6 +77,8 @@ export interface PublicSettings {
   /** voices the user added by id (「我的音色」) */
   myVoices: VoiceChoice[];
   locale: LocalePref;
+  /** 「创作偏好」: what the user wants in every film; '' when none */
+  preferences: string;
   defaults: { model?: string; pageModel?: string; runtime: RuntimeId; style: string; durationSec: number; voice?: VoiceChoice; subtitles: boolean; concurrency: number };
 }
 export interface SettingsPatch {
@@ -93,6 +95,8 @@ export interface SettingsPatch {
   /** 「我的音色」 renamed or with some removed (the whole list); a voice is added with addVoice, which checks it */
   myVoices?: VoiceChoice[];
   locale?: LocalePref;
+  /** the whole text; '' removes it */
+  preferences?: string;
   defaults?: Partial<PublicSettings['defaults']>;
 }
 

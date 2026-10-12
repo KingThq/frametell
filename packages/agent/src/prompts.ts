@@ -25,19 +25,29 @@ export const STYLES: { id: string; name: string; summary: string }[] = [
   { id: 'tech-dark', name: 'Dark technical', summary: 'Clean architecture diagrams and code on dark graphite; for software, AI and how systems work' },
 ];
 
-export function plannerSystem(style: string) {
-  return [read('PLANNER.md'), '---\n# This film\'s style (the page agent draws to it, so the storyboard must be drawable in it)\n\n' + grammar(style), '---\n' + read('LIB.md')].join('\n\n');
+/**
+ * 「创作偏好」: what the user wrote once in Settings for every film. Last in the system prompt, so the stable part above
+ * still caches across users; below the engine's rules, which it never overrides.
+ */
+export function preferencesSection(preferences?: string) {
+  const p = preferences?.trim();
+  return p ? `---\n# The user's standing preferences\n\nThe user wrote these in Settings, for every film they make. Follow them wherever they bear on your part of the work. This film's own request, and anything the user says while it is made, come first; the technical rules above always hold.\n\n<preferences>\n${p}\n</preferences>` : '';
+}
+
+export function plannerSystem(style: string, preferences?: string) {
+  return [read('PLANNER.md'), '---\n# This film\'s style (the page agent draws to it, so the storyboard must be drawable in it)\n\n' + grammar(style), '---\n' + read('LIB.md'), preferencesSection(preferences)].filter(Boolean).join('\n\n');
 }
 /** the page agent's system prompt: process, the style's grammar, the drawing API, the style's components with a worked
  *  example page, and the wider component library (the stable part of every page session, so it caches well) */
-export function pageSystem(style: string, extras: string[] = []) {
-  return [read('PAGE.md'), '---\n# This film\'s style\n\n' + grammar(style), '---\n' + read('API.md'), '---\n' + pagePack(style, extras), '---\n' + read('LIB.md')].join('\n\n');
+export function pageSystem(style: string, extras: string[] = [], preferences?: string) {
+  return [read('PAGE.md'), '---\n# This film\'s style\n\n' + grammar(style), '---\n' + read('API.md'), '---\n' + pagePack(style, extras), '---\n' + read('LIB.md'), preferencesSection(preferences)].filter(Boolean).join('\n\n');
 }
 
 /** the film's language (narration, on-screen text) and the language the director reports in (the user's) */
 export type Lang = 'zh' | 'en';
-/** `voice`: the service that voices the narration; absent when the film has no voice */
-export interface Brief { topic?: string; audience?: string; durationSec: number; notes?: string; lang?: Lang; replyLang?: Lang; voice?: 'volcengine' | 'elevenlabs' }
+/** `voice`: the service that voices the narration; absent when the film has no voice. `preferences`: what the user
+ *  wants in every film (Settings), read by every session */
+export interface Brief { topic?: string; audience?: string; durationSec: number; notes?: string; lang?: Lang; replyLang?: Lang; voice?: 'volcengine' | 'elevenlabs'; preferences?: string }
 
 const LANG_NAME: Record<Lang, string> = { zh: 'Simplified Chinese', en: 'English' };
 /** the language everything said to the user is written in: the user's own, never the prompts' */

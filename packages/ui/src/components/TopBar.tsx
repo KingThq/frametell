@@ -19,6 +19,7 @@ export function TopBar({ children, onSettings }: { children?: React.ReactNode; o
         <>
           <Credits />
           {hosted.email && <span className="hidden max-w-[220px] truncate text-[12.5px] text-ink-3 sm:inline" title={hosted.email}>{hosted.email}</span>}
+          <button className="fs-icon-btn" onClick={onSettings} aria-label={t('common.settings')} title={t('common.settings')}><Settings2 size={16} /></button>
           <button className="fs-icon-btn" onClick={() => hosted?.signOut()} aria-label={t('common.signOut')} title={t('common.signOut')}><LogOut size={16} /></button>
         </>
       ) : (

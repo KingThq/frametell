@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, CircleAlert, FileText, Image as ImageIcon, Loader2, Lock, Paperclip, Play, Settings2, Square, X } from 'lucide-react';
+import { ArrowRight, CircleAlert, FileText, Image as ImageIcon, Loader2, Lock, NotebookPen, Paperclip, Play, Settings2, Square, X } from 'lucide-react';
 import { client, hosted, type ProjectView, type PublicSettings, type Voice } from '../lib/client';
 import { go, useLoad } from '../lib/hooks';
 import { STAGE_NAME, type Stage } from '../lib/run';
@@ -42,13 +42,13 @@ function route(s: PublicSettings | undefined, modelId: string | undefined) {
   return parts.length ? parts.join(' · ') : undefined;
 }
 
-export function Home({ openSettings }: { openSettings: (section?: string) => void }) {
+export function Home({ openSettings, prefsStamp }: { openSettings: (section?: string) => void; prefsStamp?: number }) {
   const { t, locale } = useT();
   const projects = useLoad(() => client.projects());
   const models = useLoad(() => client.models());
   const styles = useLoad(() => client.styles());
   const voices = useLoad(() => client.voices());
-  const settings = useLoad(() => client.settings());
+  const settings = useLoad(() => client.settings(), [prefsStamp]);
 
   const [files, setFiles] = useState<File[]>([]);
   // ?topic= starts the box with an idea typed elsewhere (frametell.ai's landing page)
@@ -197,6 +197,7 @@ export function Home({ openSettings }: { openSettings: (section?: string) => voi
               <p className="mt-1.5 text-[12.5px] text-accent-ink">{t('home.styleLocked')} <a className="underline underline-offset-2" href={credits.url} target="_top">{t('home.upgrade')}</a></p>
             )}
           </fieldset>
+          {settings.data && <Preferences text={settings.data.preferences ?? ''} onOpen={() => openSettings('preferences')} />}
           {!hosted && <div className="sm:col-span-2">
             <div className="flex items-baseline justify-between gap-3">
               <label htmlFor="model" className="fs-label">{t('home.model')}</label>
@@ -276,5 +277,27 @@ export function Home({ openSettings }: { openSettings: (section?: string) => voi
         )}
       </section>
     </main>
+  );
+}
+
+/** 「创作偏好」 in the composer: that this film will follow them (their first line), or where to write some */
+function Preferences({ text, onOpen }: { text: string; onOpen: () => void }) {
+  const items = text.split('\n').map((l) => l.trim().replace(/^[-*•·]\s*/, '')).filter(Boolean);
+  return (
+    <div className="flex min-w-0 items-center gap-2 text-[12.5px] sm:col-span-2">
+      <NotebookPen size={14} className={`shrink-0 ${items.length ? 'text-accent-ink' : 'text-ink-3'}`} aria-hidden />
+      {items.length ? (
+        <>
+          <span className="shrink-0 font-medium text-ink-2">{t('home.prefs.on')}</span>
+          <span className="min-w-0 truncate text-ink-3" title={items.join('\n')}>{items[0]}{items.length > 1 && <span className="ml-1.5">{t('home.prefs.more', { n: items.length - 1 })}</span>}</span>
+          <button type="button" onClick={onOpen} className="ml-auto shrink-0 rounded-md px-1 text-accent-ink underline-offset-2 hover:underline">{t('home.prefs.edit')}</button>
+        </>
+      ) : (
+        <>
+          <span className="min-w-0 truncate text-ink-3">{t('home.prefs.off')}</span>
+          <button type="button" onClick={onOpen} className="shrink-0 rounded-md px-1 text-accent-ink underline-offset-2 hover:underline">{t('home.prefs.write')}</button>
+        </>
+      )}
+    </div>
   );
 }

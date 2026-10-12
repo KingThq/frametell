@@ -16,6 +16,8 @@ if (!process.env.FRAMETELL_HOME && !process.env.FRAMETELL_HOME && !fs.existsSync
   try { fs.renameSync(LEGACY_DIR, DATA_DIR); } catch {}
 }
 export const PROJECTS_DIR = path.join(DATA_DIR, 'projects');
+/** the longest 「创作偏好」 kept: it rides along in every agent session's system prompt */
+export const MAX_PREFERENCES = 2000;
 
 
 export interface Config {
@@ -33,6 +35,8 @@ export interface Config {
   myVoices?: VoiceChoice[];
   /** interface language; absent = follow the system */
   locale?: LocalePref;
+  /** what the user wants in every film (「创作偏好」), in their own words; every agent session reads it */
+  preferences?: string;
   defaults: {
     model?: string;          // "provider/model-id"
     pageModel?: string;      // the pages' model, when not the director's
@@ -98,6 +102,7 @@ export function publicConfig(c: Config): PublicSettings {
     tts: { volcengine: mask(c.tts.volcengine), elevenlabs: mask(c.tts.elevenlabs) },
     myVoices: c.myVoices ?? [],
     locale: c.locale || 'auto',
+    preferences: c.preferences ?? '',
     defaults: c.defaults,
   };
 }
@@ -120,6 +125,11 @@ export function patchConfig(c: Config, patch: SettingsPatch): Config {
     if (p) next.proxy = keep(p).replace(/\/$/, ''); else delete next.proxy;
   }
   for (const [k, v] of Object.entries(patch.baseUrls || {})) if (v.trim() && !/^https?:\/\//.test(v.trim())) throw new Error(tr(`${k} 的请求地址要以 http:// 或 https:// 开头`, `The ${k} address must start with http:// or https://`));
+  if (patch.preferences !== undefined) {
+    const p = patch.preferences.replace(/\r\n?/g, '\n').trim();
+    if (p.length > MAX_PREFERENCES) throw new Error(tr(`创作偏好最多 ${MAX_PREFERENCES} 个字`, `Preferences can be at most ${MAX_PREFERENCES} characters`));
+    if (p) next.preferences = p; else delete next.preferences;
+  }
   if (patch.locale) { if (patch.locale === 'auto') delete next.locale; else next.locale = patch.locale; }
   if (patch.custom) {
     // the user's own endpoints: each a name, a protocol and an http(s) address; ids are Studio's own (custom-…)

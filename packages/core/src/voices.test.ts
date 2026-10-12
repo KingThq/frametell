@@ -34,3 +34,12 @@ test('an ElevenLabs voice list that fails says why: permission, key, network or 
     assert.equal(await why(), 'network');
   } finally { globalThis.fetch = real; }
 });
+
+test('「创作偏好」 are kept trimmed, removed when emptied, and refused past their length', () => {
+  const c = withDefaults({});
+  const set = patchConfig(c, { preferences: '  - 少用术语\r\n- 开头先抛问题  \n' });
+  assert.equal(set.preferences, '- 少用术语\n- 开头先抛问题');
+  assert.equal(patchConfig(set, { locale: 'en' }).preferences, set.preferences);
+  assert.equal(patchConfig(set, { preferences: '   ' }).preferences, undefined);
+  assert.throws(() => patchConfig(c, { preferences: 'x'.repeat(2001) }), /2000/);
+});

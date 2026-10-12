@@ -90,6 +90,13 @@ const en: typeof zh = {
   recent: 'Recent videos',
   empty: 'Your videos will show up here. Start with one sentence, like “Why compound interest rewards starting early”.',
   about: (v) => `About ${v.n} min`,
+  prefs: {
+    on: 'Made to your preferences',
+    more: (v) => `+${v.n} more`,
+    edit: 'Edit',
+    off: 'Want every film made your way?',
+    write: 'Write your preferences',
+  },
 };
 
 export default en;

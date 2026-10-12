@@ -89,4 +89,11 @@ export default {
   recent: '最近的视频',
   empty: '做好的视频会出现在这里。可以从一句话开始，比如「讲讲复利为什么要趁早」。',
   about: (v: { n: number }) => `约 ${v.n} 分钟`,
+  prefs: {
+    on: '按你的创作偏好制作',
+    more: (v: { n: number }) => `等 ${v.n} 条`,
+    edit: '修改',
+    off: '想让每部片子都照你的习惯来？',
+    write: '写下创作偏好',
+  },
 };

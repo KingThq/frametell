@@ -193,7 +193,7 @@ export class Director {
     // only what the agent can read: md/txt/images. PDF/Word/PPT/EPUB are parsed beforehand into x.md (or x.pdf.md)
     const all = fs.existsSync(this.project.file('materials')) ? fs.readdirSync(this.project.file('materials')).filter((f) => !f.startsWith('.')) : [];
     const materials = all.filter((f) => /\.(md|markdown|txt|png|jpe?g|webp|gif)$/i.test(f));
-    const s = await this.session('planner', plannerSystem(this.o.style), MAX.planTurns, this.state.planner);
+    const s = await this.session('planner', plannerSystem(this.o.style, this.o.brief.preferences), MAX.planTurns, this.state.planner);
     let r = await this.send(s, storyboardPrompt(this.o.brief, this.o.style, materials));
     this.state.planner = s.ref; this.save();
     // a turn can end without the file (seen: a gateway answering a one-token "." mid-turn); ask once more, as for pages
@@ -225,7 +225,7 @@ export class Director {
     this.emit({ type: 'stage', stage: 'script', status: 'start' });
     this.state.stage = 'script'; this.save();
     this.serverMeta();
-    const s = await this.session('planner', plannerSystem(this.o.style), MAX.planTurns, this.state.planner);
+    const s = await this.session('planner', plannerSystem(this.o.style, this.o.brief.preferences), MAX.planTurns, this.state.planner);
     let r = await this.send(s, scriptPrompt(feedback, this.o.brief) + this.unseen('planner'));
     this.state.planner = s.ref; this.save();
     let check: Awaited<ReturnType<Project['scriptCheck']>>;
@@ -362,7 +362,7 @@ export class Director {
     const st: PageState = { status: 'drawing', rounds: 0, issues: [] };
     this.setPage(id, st);
     try {
-      const s = await this.session(`page-${id}`, pageSystem(this.o.style, STYLE_EXTRAS[this.o.style] ?? []), MAX.pageTurns);
+      const s = await this.session(`page-${id}`, pageSystem(this.o.style, STYLE_EXTRAS[this.o.style] ?? [], this.o.brief.preferences), MAX.pageTurns);
       const fix = this.state.revision?.[id];
       // a revision's page already exists, so "is there a file" says nothing: what tells is whether the code changed
       // (seen: a revision whose edits never landed was checked, passed and shown as done, on the old page)
@@ -447,7 +447,7 @@ export class Director {
     const limit = defectsOnly ? new AbortController() : undefined;
     const timer = limit && setTimeout(() => limit.abort(), MAX.reviewDefectsMs);
     const signal = limit ? AbortSignal.any([limit.signal, ...(this.o.signal ? [this.o.signal] : [])]) : this.o.signal;
-    const s = await this.session('review', pageSystem(this.o.style, STYLE_EXTRAS[this.o.style] ?? []), MAX.pageTurns, undefined, signal);
+    const s = await this.session('review', pageSystem(this.o.style, STYLE_EXTRAS[this.o.style] ?? [], this.o.brief.preferences), MAX.pageTurns, undefined, signal);
     let timedOut = false;
     try {
       for (let round = 1; round <= (defectsOnly ? 1 : MAX.reviewRounds); round++) {
@@ -559,7 +559,7 @@ export class Director {
   private async planRevision(request: string, sb: Storyboard, named: string[]) {
     // a fresh, small session per change: resuming the planner would carry the whole making of the film (slow, and every
     // token of it re-read); the files hold everything this decision needs
-    const s = await this.session('reviser', plannerSystem(this.o.style), MAX.planTurns);
+    const s = await this.session('reviser', plannerSystem(this.o.style, this.o.brief.preferences), MAX.planTurns);
     fs.rmSync(this.project.file('.studio/revision.json'), { force: true });   // last change's plan is not this one's
     // hand over what the decision needs up front (the script, and the code of the pages the request names) — reading
     // them file by file costs a model round trip each

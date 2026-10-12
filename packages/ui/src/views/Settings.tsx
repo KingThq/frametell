@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, AudioLines, Boxes, Check, CircleAlert, Globe, KeyRound, Monitor, SlidersHorizontal, Trash2, X, type LucideIcon } from 'lucide-react';
-import { client, type ModelInfo, type PublicSettings, type SettingsPatch } from '../lib/client';
+import { ArrowLeft, AudioLines, Boxes, Check, CircleAlert, Globe, KeyRound, Monitor, NotebookPen, SlidersHorizontal, Trash2, X, type LucideIcon } from 'lucide-react';
+import { client, hosted, type ModelInfo, type PublicSettings, type SettingsPatch } from '../lib/client';
 import { useLoad } from '../lib/hooks';
 import { t, useT, type MessageKey, getLocale } from '../i18n';
 import { ProviderLogo } from '../components/ProviderLogo';
 import { AddVoice, PlayButton, usePreview, VoiceProblem } from '../components/VoicePicker';
 import { CustomForm, ProviderDetail, ProviderList, type ProviderView } from './ProviderSettings';
+import { PreferenceSettings } from './PreferenceSettings';
 
 // Settings: a centred dialog with the sections on the left. A section is one entry in SECTIONS — either a list with a
-// detail beside it (model providers, voices), or a single page — so a new kind of setting is one more entry.
+// detail beside it (model providers, voices), or a single page — so a new kind of setting is one more entry. On a
+// hosted service only the sections marked `hosted` show: it runs the models and voices itself.
 
 type Ctx = { s: PublicSettings; patch: (p: SettingsPatch) => Promise<void>; models: ModelInfo[]; modelsLoading: boolean; providers: ProviderView[] };
 interface Item { id: string; name: string; logo: string; on: boolean }
@@ -16,6 +18,8 @@ interface Section {
   id: string;
   icon: LucideIcon;
   label: MessageKey;
+  /** shown on a hosted service too */
+  hosted?: boolean;
   /** a list with a detail beside it */
   list?: (c: Ctx) => { items: Item[]; render?: (c: Ctx, open: string | undefined, setOpen: (id: string | undefined) => void) => React.ReactNode };
   detail: (c: Ctx, open: string | undefined, setOpen: (id: string | undefined) => void) => React.ReactNode;
@@ -54,6 +58,7 @@ const SECTIONS: Section[] = [
     list: (c) => ({ items: (getLocale() === 'en' ? [...VOICES].reverse() : VOICES).map((v) => ({ id: v.id, name: t(`settings.voice.${v.id}` as MessageKey), logo: v.id, on: !!c.s.tts[v.key] })) }),
     detail: (c, open) => { const v = VOICES.find((x) => x.id === open) ?? VOICES[0]; return <VoiceDetail key={v.id} v={v} c={c} />; },
   },
+  { id: 'preferences', icon: NotebookPen, label: 'settings.nav.preferences', hosted: true, detail: (c) => <PreferenceSettings s={c.s} patch={c.patch} /> },
   { id: 'general', icon: SlidersHorizontal, label: 'settings.nav.general', detail: (c) => <General c={c} /> },
   { id: 'network', icon: Globe, label: 'settings.nav.network', detail: (c) => <Network c={c} /> },
   { id: 'machine', icon: Monitor, label: 'settings.nav.machine', detail: () => <Machine /> },
@@ -202,7 +207,9 @@ function Machine() {
   );
 }
 
-export function Settings({ open, onClose, onChanged, section: initial }: { open: boolean; onClose: () => void; onChanged?: () => void; section?: string }) {
+const shown = hosted ? SECTIONS.filter((x) => x.hosted) : SECTIONS;
+
+export function Settings({ open, onClose, onChanged, section: initial }: { open: boolean; onClose: () => void; onChanged?: (p: SettingsPatch) => void; section?: string }) {
   useT();   // re-render on a language change
   const ref = useRef<HTMLDialogElement>(null);
   const settings = useLoad(() => client.settings(), [open]);
@@ -210,7 +217,7 @@ export function Settings({ open, onClose, onChanged, section: initial }: { open:
   const [keysStamp, setKeysStamp] = useState(0);
   const models = useLoad(() => client.models(), [open, keysStamp]);
   const catalog = useLoad(() => client.providers(), [open]);
-  const [section, setSection] = useState(initial ?? 'models');
+  const [section, setSection] = useState(initial ?? shown[0].id);
   const [opened, setOpened] = useState<Record<string, string | undefined>>({});
   const [narrowDetail, setNarrowDetail] = useState(false);
   useEffect(() => { if (settings.data) setS(settings.data); }, [settings.data]);
@@ -221,14 +228,14 @@ export function Settings({ open, onClose, onChanged, section: initial }: { open:
     const next = await client.updateSettings(p);
     setS(next);
     if (p.keys || p.baseUrls || p.models || p.custom) setKeysStamp((k) => k + 1);   // the model list follows the keys
-    onChanged?.();
+    onChanged?.(p);
   };
   const providers: ProviderView[] = useMemo(() => [
     ...(catalog.data || []),
     ...((s?.custom as { id: string; name: string; baseUrl: string; protocol: string }[] | undefined) || []).map((c) => ({ id: c.id, name: c.name, group: 'custom' as const, baseUrl: c.baseUrl, protocol: c.protocol })),
   ], [catalog.data, s?.custom]);
 
-  const sec = SECTIONS.find((x) => x.id === section) ?? SECTIONS[0];
+  const sec = shown.find((x) => x.id === section) ?? shown[0];
   const ctx: Ctx | undefined = s && { s, patch, models: models.data?.models || [], modelsLoading: models.loading, providers };
   const list = ctx && sec.list?.(ctx);
   const cur = opened[sec.id];
@@ -241,7 +248,7 @@ export function Settings({ open, onClose, onChanged, section: initial }: { open:
         {/* sections */}
         <nav className="flex w-[196px] shrink-0 flex-col gap-0.5 border-r border-line bg-paper-2 p-3 max-md:w-full max-md:flex-row max-md:gap-1 max-md:overflow-x-auto max-md:border-b max-md:border-r-0 max-md:p-2 max-md:pr-12" aria-label={t('settings.title')}>
           <h2 id="settings-title" className="px-2.5 pb-3 pt-2 text-[15px] font-semibold max-md:sr-only">{t('settings.title')}</h2>
-          {SECTIONS.map((x) => {
+          {shown.map((x) => {
             const on = x.id === sec.id;
             return (
               <button key={x.id} type="button" onClick={() => { setSection(x.id); setNarrowDetail(false); }} aria-current={on || undefined}
