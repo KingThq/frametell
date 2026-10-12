@@ -11,6 +11,17 @@ const fps = +process.argv[4];
 const jobs = jobsMode ? JSON.parse(fs.readFileSync(process.argv[3], 'utf8')) : [{ a: +process.argv[2], b: +process.argv[3], out: process.argv[5] }];
 
 const { browser, page } = await openStage('render', ['--disable-gpu-vsync', '--force-color-profile=srgb']);
+// WATERMARK=1 (render.mjs --watermark): the Frametell mark, small and quiet in the bottom right, on every frame. It sits
+// outside the stage the pages draw on, so no page can cover or move it.
+if (process.env.WATERMARK === '1') {
+  await page.evaluate(() => {
+    const m = document.createElement('div');
+    m.setAttribute('aria-hidden', 'true');
+    m.style.cssText = 'position:fixed;right:2.1%;bottom:3.2%;z-index:2147483647;display:flex;align-items:center;gap:.45em;font:600 clamp(14px,1.25vw,26px)/1 Inter,"PingFang SC",system-ui,sans-serif;letter-spacing:-.01em;color:rgba(255,255,255,.82);text-shadow:0 1px 2px rgba(0,0,0,.45);filter:drop-shadow(0 1px 2px rgba(0,0,0,.35));pointer-events:none;opacity:.9';
+    m.innerHTML = '<svg viewBox="0 0 64 64" style="width:1.25em;height:1.25em"><path fill="currentColor" d="M8 8H31V14.5H14.5V31H8Z"/><path fill="currentColor" d="M56 56H33V49.5H49.5V33H56Z"/><circle fill="#E0B88A" cx="32" cy="32" r="7.5"/></svg><span>Frametell</span>';
+    document.body.appendChild(m);
+  });
+}
 // frames straight from Chrome (CDP): Playwright's screenshot() waits on fonts and settles the page on every call
 const cdp = await page.context().newCDPSession(page);
 // the stage's own size: without a clip CDP returns the browser window's visible area (1920×993 on a desktop Chrome)

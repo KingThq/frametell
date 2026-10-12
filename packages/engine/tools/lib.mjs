@@ -35,7 +35,9 @@ export const pageUrl = (query) => 'file://' + path.join(EP, 'index.html') + '?' 
 export async function openStage(query, launchArgs = []) {
   // META.webgl: the project paints with WebGL (three.js) → use the Mac's GPU through Metal instead of software GL
   const gl = loadEpisode().META.webgl ? ['--use-angle=metal', '--ignore-gpu-blocklist', '--enable-gpu-rasterization'] : [];
-  const browser = await chromium.launch({ executablePath: findChrome(), args: [...launchArgs, ...gl] });
+  // the window at the stage's own size: CDP captures what the window shows, and a Chrome whose default window is shorter
+  // than the stage (1920×993 on a Mac) left the bottom rows of every frame black
+  const browser = await chromium.launch({ executablePath: findChrome(), args: [`--window-size=${SIZE.width},${SIZE.height}`, ...launchArgs, ...gl] });
   const page = await browser.newPage({ viewport: SIZE, deviceScaleFactor: 1 });
   page.on('pageerror', (e) => console.error('pageerror', e.message));
   page.on('console', (m) => { if (m.type() === 'error' && !m.text().startsWith('Failed to load resource')) console.error('console', m.text()); });

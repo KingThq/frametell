@@ -1,5 +1,5 @@
 // Parallel render → out/<name>-no-subtitles.mp4, then burn subtitles → out/<name>-with-subtitles.mp4 (a Chinese film keeps Chinese file names). Run from a project dir:
-// node engine/tools/render.mjs [--portrait] [--hw] [--fps 60]
+// node engine/tools/render.mjs [--portrait] [--hw] [--fps 60] [--watermark]
 //   split across machines: --plan prints the segments as JSON (PLAN {…}) and exits; --segments 0,3,7 draws only those, each
 //   also with its subtitles (seg-….subs.mp4), into the segment cache and exits; a whole run then finds every segment
 //   cached and only joins them, voices the film and joins the subtitled segments
@@ -24,6 +24,10 @@ if (META.voice) {
 // --portrait: 1080×1920 from pages-portrait/, files get a portrait tag; children inherit PORTRAIT=1
 if (PORTRAIT) process.env.PORTRAIT = '1';
 if (has('hw')) process.env.HW = '1';
+// --watermark: a small Frametell mark in a corner of every frame, drawn with the page (a free plan's films on a hosted
+// service); children inherit WATERMARK=1, and marked segments are cached apart from unmarked ones
+const WATERMARK = has('watermark');
+if (WATERMARK) process.env.WATERMARK = '1';
 const FPS = +arg('fps', 60), W = +arg('workers', 12), name = arg('name', META.name || 'video') + (PORTRAIT ? (META.lang === 'en' ? '-portrait' : '-竖版') : '');
 const from = +arg('from', 0), to = +arg('to', L.duration);
 const F0 = Math.round(from * FPS), F1 = Math.round(to * FPS);
@@ -68,7 +72,10 @@ if (!has('skip-video')) {
   const shared = digest(
     ...[...files(path.join(kitDir, 'runtime')), ...files(path.join(kitDir, 'lib')), ...files(path.join(kitDir, 'styles', META.style || 'warm-story'), false)].map((f) => read(f).toString('base64')),
     ...files(path.join(EP, 'extras')).map((f) => read(f).toString('base64')), read(path.join(EP, 'index.html')).toString(),
-    { ...META, publish: undefined, voice: undefined }, L.pages.map((p) => [p.id, p.section, p.title]), FPS, PORTRAIT, has('hw'),
+    { ...META, publish: undefined, voice: undefined }, L.pages.map((p) => [p.id, p.section, p.title]), FPS, PORTRAIT, has('hw'), ...(WATERMARK ? ['watermark'] : []),
+    // how frames are captured: bumped when that changes, so segments drawn the old way are drawn again (2: the window
+    // at the stage's size, where it was short and the bottom rows came out black)
+    'capture-2',
   );
   const pageKey = Object.fromEntries(L.pages.map((p) => [p.id, digest(p, read(path.join(EP, PORTRAIT ? 'pages-portrait' : 'pages', p.id + '.js')).toString())]));
   // each page: a short piece at either end (where a neighbour's cross-fade reaches), the middle in pieces of ≤ SEG s;
