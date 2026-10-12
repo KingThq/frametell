@@ -11,7 +11,11 @@ const fps = +process.argv[4];
 const jobs = jobsMode ? JSON.parse(fs.readFileSync(process.argv[3], 'utf8')) : [{ a: +process.argv[2], b: +process.argv[3], out: process.argv[5] }];
 
 const { browser, page } = await openStage('render', ['--disable-gpu-vsync', '--force-color-profile=srgb']);
-const enc = process.env.HW === '1' ? ['-c:v', 'h264_videotoolbox', '-q:v', '72', '-realtime', '0'] : ['-c:v', 'libx264', '-preset', 'medium', '-crf', '16'];
+// frames straight from Chrome (CDP): Playwright's screenshot() waits on fonts and settles the page on every call
+const cdp = await page.context().newCDPSession(page);
+const grab = async () => Buffer.from((await cdp.send('Page.captureScreenshot', { format: 'jpeg', quality: 92, optimizeForSpeed: true })).data, 'base64');
+// veryfast: x264 at 'medium' took the CPU the browsers need to draw frames; at CRF 16 the difference does not show
+const enc = process.env.HW === '1' ? ['-c:v', 'h264_videotoolbox', '-q:v', '72', '-realtime', '0'] : ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '16'];
 let code = 0;
 for (const { a: f0, b: f1, out } of jobs) {
   const ff = spawn(FFMPEG, ['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', String(fps), '-c:v', 'mjpeg', '-i', '-',
@@ -20,7 +24,7 @@ for (const { a: f0, b: f1, out } of jobs) {
   for (let f = f0; f < f1; f++) {
     // window.__frameReady (optional, set by an episode's extras): wait until everything this frame needs (e.g. images) is ready
     await page.evaluate(async (t) => { ENGINE.renderAt(t); if (window.__frameReady) await window.__frameReady(t); }, f / fps);
-    const buf = await page.screenshot({ type: 'jpeg', quality: 95 });
+    const buf = await grab();
     if (!ff.stdin.write(buf)) await new Promise((r) => ff.stdin.once('drain', r));
     if ((f - f0) % 600 === 0) console.log(`[${path.basename(out)}] ${f - f0}/${f1 - f0}  ${((Date.now() - t0) / 1000) | 0}s`);
   }
