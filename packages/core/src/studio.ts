@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createCatalog, PROVIDERS, type ProviderSpec } from '@frametell/models';
-import { bundledSample, elevenLabsTts, listElevenLabsVoices, volcengineTts, VoiceNotFound, VOLCENGINE_VOICES } from '@frametell/voice';
+import { bundledSample, ELEVENLABS_DEFAULT_VOICES, ElevenLabsError, elevenLabsTts, listElevenLabsVoices, volcengineTts, VoiceNotFound, VOLCENGINE_VOICES } from '@frametell/voice';
 import { Project, STYLES, type Renderer, type Timeline } from '@frametell/agent';
 import { linkProject } from '@frametell/engine/tools/project.mjs';
 import { DATA_DIR, configFile, patchConfig, publicConfig, type ConfigStore } from './config.js';
@@ -11,7 +11,7 @@ import { Projects } from './runner.js';
 import { checkEnv } from './env.js';
 import { applyProxy } from './net.js';
 import { attach, cleanRefs } from './refs.js';
-import type { UserRef, EnvCheck, LoggedEvent, ModelInfo, NewProjectInput, ProjectMeta, ProjectSummary, PublicSettings, SettingsPatch, StyleInfo, Voice } from './types.js';
+import type { UserRef, EnvCheck, LoggedEvent, ModelInfo, NewProjectInput, ProjectMeta, ProjectSummary, PublicSettings, SettingsPatch, StyleInfo, Voice, VoicesView } from './types.js';
 import { resolveLocale, tr } from './i18n.js';
 
 export interface MaterialFile { name: string; data: Uint8Array }
@@ -67,14 +67,22 @@ export class Studio {
     return { models: await catalog.available(), default: await catalog.defaultModel() };
   }
 
-  async voices(): Promise<{ voices: Voice[]; configured: { volcengine: boolean; elevenlabs: boolean } }> {
+  async voices(): Promise<VoicesView> {
     const cfg = this.config.load();
     // the user's own voices first, then the built-in ones, listed without a key: their samples ship with Studio, so
     // they can be heard before connecting
     const mine: Voice[] = (cfg.myVoices ?? []).map((v) => ({ provider: v.provider, id: v.id, name: v.name || v.id, mine: true }));
     const voices: Voice[] = [...mine, ...VOLCENGINE_VOICES.filter((v) => !mine.some((m) => m.id === v.id))];
-    if (cfg.tts.elevenlabs) { try { voices.push(...(await listElevenLabsVoices(cfg.tts.elevenlabs))); } catch {} }
-    return { voices, configured: { volcengine: !!cfg.tts.volcengine, elevenlabs: !!cfg.tts.elevenlabs } };
+    let problems: VoicesView['problems'];
+    if (cfg.tts.elevenlabs) {
+      try { voices.push(...(await listElevenLabsVoices(cfg.tts.elevenlabs))); } catch (e) {
+        // said in the voice list and in Settings; a key that may speak but not read voices still gets the default ones
+        const problem = e instanceof ElevenLabsError ? e.problem : 'other';
+        problems = { elevenlabs: { problem, detail: (e as Error).message } };
+        if (problem === 'permission') voices.push(...ELEVENLABS_DEFAULT_VOICES);
+      }
+    }
+    return { voices, configured: { volcengine: !!cfg.tts.volcengine, elevenlabs: !!cfg.tts.elevenlabs }, ...(problems && { problems }) };
   }
 
   /**

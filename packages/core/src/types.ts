@@ -12,6 +12,14 @@ export type LocalePref = 'auto' | Locale;
 export type RunStatus = 'idle' | 'running' | 'awaiting_approval' | 'done' | 'failed' | 'stopped';
 export interface VoiceChoice { provider: 'volcengine' | 'elevenlabs'; id: string; name?: string }
 export interface Voice { provider: 'volcengine' | 'elevenlabs'; id: string; name: string; gender?: 'female' | 'male'; lang?: string; previewUrl?: string; /** added by the user by its id (「我的音色」) */ mine?: boolean }
+/** what Studio offers to narrate with, and which services have a key */
+export interface VoicesView {
+  voices: Voice[];
+  configured: { volcengine: boolean; elevenlabs: boolean };
+  /** a key is saved but its voices could not be listed: the key lacks the Voices permission (the default voices are
+   * listed instead), the key is wrong, the service could not be reached, or something else; detail is the service's own words */
+  problems?: { elevenlabs?: { problem: 'permission' | 'key' | 'network' | 'other'; detail: string } };
+}
 export interface StyleInfo { id: string; name: string; summary: string }
 export interface EnvCheck { id: 'chrome' | 'ffmpeg' | 'git' | 'node'; ok: boolean; detail: string; fix?: string }
 

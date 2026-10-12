@@ -11,6 +11,13 @@ export default {
   },
   action: { watch: '观看', review: '去确认分镜', progress: '看进度', resume: '继续制作', start: '开始' },
   voice: {
+    elevenlabs: {
+      permission: '这个 ElevenLabs key 没有读取音色的权限，先列出了 ElevenLabs 自带的默认音色。想看到你自己的音色，在 ElevenLabs 里给这个 key 打开 Voices 的 Read 权限。',
+      key: 'ElevenLabs 不认这个 key。检查是否复制完整、是否还有效，或者新建一个。',
+      network: '连不上 ElevenLabs。检查网络，或者在设置里填代理。',
+      other: '没能加载 ElevenLabs 的音色。',
+      detail: 'ElevenLabs 返回：{detail}',
+    },
     femaleTag: '女声',
     maleTag: '男声',
     volcengine: '火山引擎',

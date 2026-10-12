@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, ChevronDown, KeyRound, Loader2, Play, Plus, Search, VolumeX } from 'lucide-react';
-import { client, hosted, type Voice } from '../lib/client';
+import { Check, ChevronDown, CircleAlert, KeyRound, Loader2, Play, Plus, Search, VolumeX } from 'lucide-react';
+import { client, hosted, type Voice, type VoicesView } from '../lib/client';
 import { t } from '../i18n';
 import { ProviderLogo } from './ProviderLogo';
 
@@ -147,8 +147,20 @@ export function AddVoice({ needsKey, onAdded }: { needsKey: boolean; onAdded: (v
  * The voices as a listbox: search when there are many, 「我的音色」 first, then each service's, with a sample button on
  * every row; at its foot, adding a voice by id (on a hosted service, with the account's own Volcengine key).
  */
-export function VoiceList({ id, voices, value, onChoose, unconfigured = [], silent = true, onAdded, onEscape, p, autoFocus = true, listClass = 'max-h-[320px]' }: {
-  id: string; voices: Voice[]; value?: string | null; onChoose: (v: Voice | null) => void; unconfigured?: readonly Voice['provider'][];
+/** why a saved key's voices are missing (or only the default ones are listed), in the panel's language */
+export function VoiceProblem({ problems, className = '' }: { problems?: VoicesView['problems']; className?: string }) {
+  const x = problems?.elevenlabs;
+  if (!x) return null;
+  return (
+    <div className={`flex gap-2 text-[12px] leading-relaxed text-warn ${className}`} role="alert">
+      <CircleAlert size={13} className="mt-[3px] shrink-0" aria-hidden />
+      <p>{t(`home.voice.elevenlabs.${x.problem}`)}{x.problem !== 'permission' && <span className="block break-all text-ink-3">{t('home.voice.elevenlabs.detail', { detail: x.detail })}</span>}</p>
+    </div>
+  );
+}
+
+export function VoiceList({ id, voices, problems, value, onChoose, unconfigured = [], silent = true, onAdded, onEscape, p, autoFocus = true, listClass = 'max-h-[320px]' }: {
+  id: string; voices: Voice[]; problems?: VoicesView['problems']; value?: string | null; onChoose: (v: Voice | null) => void; unconfigured?: readonly Voice['provider'][];
   /** offer “no voice” */ silent?: boolean; onAdded?: (v: Voice) => void; onEscape?: () => void; p: Preview; autoFocus?: boolean; listClass?: string;
 }) {
   const [q, setQ] = useState('');
@@ -229,6 +241,7 @@ export function VoiceList({ id, voices, value, onChoose, unconfigured = [], sile
         ))}
         {!flat.length && voices.length > 0 && <p className="px-4 py-6 text-center text-[12.5px] text-ink-3">{t('picker.noMatch')}</p>}
       </div>
+      <VoiceProblem problems={problems} className="border-t border-line px-3.5 py-2" />
       {p.failed && <p className="border-t border-line px-3.5 py-2 text-[12px] text-seal" role="alert">{t('home.voice.previewFailed')}</p>}
       {canAdd
         ? <AddVoice needsKey={unconfigured.includes('volcengine')} onAdded={onAdded!} />
@@ -237,8 +250,8 @@ export function VoiceList({ id, voices, value, onChoose, unconfigured = [], sile
   );
 }
 
-export function VoicePicker({ id = 'voice', voices, value, onChange, unconfigured = [], onAdded }: {
-  id?: string; voices: Voice[]; value?: string | null; onChange: (id: string | null) => void; unconfigured?: readonly Voice['provider'][];
+export function VoicePicker({ id = 'voice', voices, problems, value, onChange, unconfigured = [], onAdded }: {
+  id?: string; voices: Voice[]; problems?: VoicesView['problems']; value?: string | null; onChange: (id: string | null) => void; unconfigured?: readonly Voice['provider'][];
   /** a voice was added by its id: reload the voices; it is chosen already */
   onAdded?: (v: Voice) => void;
 }) {
@@ -272,7 +285,7 @@ export function VoicePicker({ id = 'voice', voices, value, onChange, unconfigure
 
       {open && (
         <div className="absolute inset-x-0 top-[calc(100%+6px)] z-30 overflow-hidden rounded-xl border border-line bg-surface shadow-[0_12px_32px_-8px_rgb(0_0_0/0.35),0_2px_6px_rgb(0_0_0/0.12)] animate-pop [transform-origin:top]">
-          <VoiceList id={id} voices={voices} value={value} p={p} unconfigured={unconfigured} onEscape={close}
+          <VoiceList id={id} voices={voices} problems={problems} value={value} p={p} unconfigured={unconfigured} onEscape={close}
             onChoose={(v) => { onChange(v ? v.id : null); setOpen(false); }}
             onAdded={onAdded && ((v) => { onAdded(v); onChange(v.id); setOpen(false); })} />
         </div>

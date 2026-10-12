@@ -160,10 +160,56 @@ export function bundledSample(id: string): string | undefined {
   return fs.existsSync(f) ? f : undefined;
 }
 
-/** The user's ElevenLabs voices (their library includes the premade ones). */
+/** Why the ElevenLabs voice list could not be read: the key lacks the Voices permission, the key is wrong, ElevenLabs
+ * could not be reached, or something else (detail says what). */
+export type ElevenLabsProblem = 'permission' | 'key' | 'network' | 'other';
+export class ElevenLabsError extends Error {
+  constructor(readonly problem: ElevenLabsProblem, detail: string) { super(`ElevenLabs voices: ${detail}`); this.name = 'ElevenLabsError'; }
+}
+
+/** ElevenLabs' default voices, which every account can speak with: listed when the key may speak but not read voices.
+ * Their samples are spoken with the key, like any voice without a hosted preview. */
+export const ELEVENLABS_DEFAULT_VOICES: Voice[] = [
+  { provider: 'elevenlabs', id: 'hpp4J3VqNfWAUOO0d1Us', name: 'Bella - Professional, Bright, Warm', gender: 'female' },
+  { provider: 'elevenlabs', id: 'CwhRBWXzGAHq8TQ4Fs17', name: 'Roger - Laid-Back, Casual, Resonant', gender: 'male' },
+  { provider: 'elevenlabs', id: 'EXAVITQu4vr4xnSDxMaL', name: 'Sarah - Mature, Reassuring, Confident', gender: 'female' },
+  { provider: 'elevenlabs', id: 'FGY2WhTYpPnrIDTdsKH5', name: 'Laura - Enthusiast, Quirky Attitude', gender: 'female' },
+  { provider: 'elevenlabs', id: 'IKne3meq5aSn9XLyUdCD', name: 'Charlie - Deep, Confident, Energetic', gender: 'male' },
+  { provider: 'elevenlabs', id: 'JBFqnCBsd6RMkjVDRZzb', name: 'George - Warm, Captivating Storyteller', gender: 'male' },
+  { provider: 'elevenlabs', id: 'N2lVS1w4EtoT3dr4eOWO', name: 'Callum - Husky Trickster', gender: 'male' },
+  { provider: 'elevenlabs', id: 'SAz9YHcvj6GT2YYXdXww', name: 'River - Relaxed, Neutral, Informative' },
+  { provider: 'elevenlabs', id: 'SOYHLrjzK2X1ezoPC6cr', name: 'Harry - Fierce Warrior', gender: 'male' },
+  { provider: 'elevenlabs', id: 'TX3LPaxmHKxFdv7VOQHJ', name: 'Liam - Energetic, Social Media Creator', gender: 'male' },
+  { provider: 'elevenlabs', id: 'Xb7hH8MSUJpSbSDYk0k2', name: 'Alice - Clear, Engaging Educator', gender: 'female' },
+  { provider: 'elevenlabs', id: 'XrExE9yKIg1WjnnlVkGX', name: 'Matilda - Knowledgable, Professional', gender: 'female' },
+  { provider: 'elevenlabs', id: 'bIHbv24MWmeRgasZH58o', name: 'Will - Relaxed Optimist', gender: 'male' },
+  { provider: 'elevenlabs', id: 'cgSgspJ2msm6clMCkdW9', name: 'Jessica - Playful, Bright, Warm', gender: 'female' },
+  { provider: 'elevenlabs', id: 'cjVigY5qzO86Huf0OWal', name: 'Eric - Smooth, Trustworthy', gender: 'male' },
+  { provider: 'elevenlabs', id: 'iP95p4xoKVk53GoZ742B', name: 'Chris - Charming, Down-to-Earth', gender: 'male' },
+  { provider: 'elevenlabs', id: 'nPczCjzI2devNBz1zQrb', name: 'Brian - Deep, Resonant and Comforting', gender: 'male' },
+  { provider: 'elevenlabs', id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel - Steady Broadcaster', gender: 'male' },
+  { provider: 'elevenlabs', id: 'pFZP5JQG7iQjIQuC4Bku', name: 'Lily - Velvety Actress', gender: 'female' },
+  { provider: 'elevenlabs', id: 'pNInz6obpgDQGcFmaJgB', name: 'Adam - Dominant, Firm', gender: 'male' },
+  { provider: 'elevenlabs', id: 'pqHfZKP75CvOlQylNhV4', name: 'Bill - Wise, Mature, Balanced', gender: 'male' },
+];
+
+/** The user's ElevenLabs voices (their library includes the premade ones). Throws an ElevenLabsError saying why not. */
 export async function listElevenLabsVoices(apiKey: string): Promise<Voice[]> {
-  const res = await fetch('https://api.elevenlabs.io/v2/voices?page_size=100', { headers: { 'xi-api-key': apiKey } });
-  if (!res.ok) throw new Error(`ElevenLabs voices ${res.status}`);
+  let res: Response;
+  try {
+    res = await fetch('https://api.elevenlabs.io/v2/voices?page_size=100', { headers: { 'xi-api-key': apiKey }, signal: AbortSignal.timeout(15_000) });
+  } catch (e) {
+    const err = e as Error & { cause?: { code?: string; message?: string } };
+    throw new ElevenLabsError('network', err.cause?.code || err.cause?.message || err.message);
+  }
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    let status = '', message = '';
+    try { const d = JSON.parse(body).detail; status = d?.status || d?.code || ''; message = d?.message || (typeof d === 'string' ? d : ''); } catch {}
+    const problem: ElevenLabsProblem = status === 'missing_permissions' || /permission/i.test(message) ? 'permission'
+      : res.status === 401 || /invalid_api_key|unauthorized/.test(status) ? 'key' : 'other';
+    throw new ElevenLabsError(problem, `${res.status} ${message || status || body.slice(0, 200)}`.trim());
+  }
   const j = (await res.json()) as { voices: { voice_id: string; name: string; labels?: { gender?: string }; preview_url?: string }[] };
   return j.voices.map((v) => ({ provider: 'elevenlabs', id: v.voice_id, name: v.name, previewUrl: v.preview_url, gender: v.labels?.gender === 'female' ? 'female' : v.labels?.gender === 'male' ? 'male' : undefined }));
 }

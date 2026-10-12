@@ -167,7 +167,7 @@ export function Home({ openSettings }: { openSettings: (section?: string) => voi
           </div>
           <div>
             <label htmlFor="voice" className="fs-label">{t('home.voice.label')}</label>
-            <VoicePicker voices={voiceList} value={voiceId} onChange={setVoice} onAdded={() => voices.reload()} unconfigured={voices.data && !hosted ? (['volcengine', 'elevenlabs'] as const).filter((p) => !voices.data!.configured[p]) : []} />
+            <VoicePicker voices={voiceList} problems={hosted ? undefined : voices.data?.problems} value={voiceId} onChange={setVoice} onAdded={() => voices.reload()} unconfigured={voices.data && !hosted ? (['volcengine', 'elevenlabs'] as const).filter((p) => !voices.data!.configured[p]) : []} />
             {voiceNoKey && picked && (
               <p className="mt-1.5 text-[12px] text-ink-2">
                 {t('home.voice.needKey', { service: picked.provider === 'volcengine' ? t('home.voice.volcengine') : 'ElevenLabs' })}

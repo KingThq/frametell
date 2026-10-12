@@ -12,6 +12,13 @@ const en: typeof zh = {
   },
   action: { watch: 'Watch', review: 'Review storyboard', progress: 'See progress', resume: 'Resume', start: 'Start' },
   voice: {
+    elevenlabs: {
+      permission: "This ElevenLabs key can't read your voices, so only ElevenLabs' default voices are listed. To see your own, turn on Voices (Read) for the key in ElevenLabs.",
+      key: 'ElevenLabs turned down this key. Check that it was pasted whole and is still active, or create a new one.',
+      network: "Couldn't reach ElevenLabs. Check your connection, or set a proxy in Settings.",
+      other: "Couldn't load the ElevenLabs voices.",
+      detail: 'ElevenLabs said: {detail}',
+    },
     femaleTag: 'female',
     maleTag: 'male',
     volcengine: 'Volcengine',

@@ -2,10 +2,10 @@
 // the desktop app the preload script exposes the same methods as `window.studioBridge` over IPC.
 import { t } from '../i18n';
 import type {
-  EnvCheck, LoggedEvent, ModelInfo, NewProjectInput, PageTiming, ProjectSummary, ProviderSpec, PublicSettings, SettingsPatch, StyleInfo, Timeline, UserRef, Voice,
+  EnvCheck, LoggedEvent, ModelInfo, NewProjectInput, PageTiming, ProjectSummary, ProviderSpec, PublicSettings, SettingsPatch, StyleInfo, Timeline, UserRef, Voice, VoicesView,
 } from '@frametell/core/types';
 
-export type { EnvCheck, LoggedEvent, ModelInfo, NewProjectInput, PageTiming, ProjectSummary, ProviderSpec, PublicSettings, SettingsPatch, StyleInfo, Timeline, UserRef, Voice };
+export type { EnvCheck, LoggedEvent, ModelInfo, NewProjectInput, PageTiming, ProjectSummary, ProviderSpec, PublicSettings, SettingsPatch, StyleInfo, Timeline, UserRef, Voice, VoicesView };
 export type ProjectView = ProjectSummary & { previewBase: string };
 
 export interface StudioClient {
@@ -16,7 +16,7 @@ export interface StudioClient {
   env(): Promise<EnvCheck[]>;
   styles(): Promise<StyleInfo[]>;
   models(): Promise<{ models: ModelInfo[]; default?: ModelInfo }>;
-  voices(): Promise<{ voices: Voice[]; configured: { volcengine: boolean; elevenlabs: boolean } }>;
+  voices(): Promise<VoicesView>;
   /** add a Volcengine voice by its id to 「我的音色」, checked by speaking a sample (on a hosted service, with the account's own key) */
   addVoice?(input: { id: string; name?: string }): Promise<Voice>;
   projects(): Promise<ProjectView[]>;

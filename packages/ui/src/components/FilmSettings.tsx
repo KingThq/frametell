@@ -78,7 +78,7 @@ function Panel({ project, narrated, current, pending, onPick, onClose, openSetti
         ? <p className="px-4 py-8 text-center text-[12.5px] text-ink-3">{t('conversation.film.loading')}</p>
         : voices.error && !voices.data
           ? <p className="px-4 py-6 text-[12.5px] text-seal" role="alert">{voices.error}</p>
-          : <VoiceList id="film-voice" voices={list} value={pending?.id ?? current?.id} p={p} silent={false} unconfigured={unconfigured} listClass="max-h-[min(320px,42vh)]"
+          : <VoiceList id="film-voice" voices={list} problems={hosted ? undefined : voices.data?.problems} value={pending?.id ?? current?.id} p={p} silent={false} unconfigured={unconfigured} listClass="max-h-[min(320px,42vh)]"
               onChoose={(v) => onPick(v)} onEscape={onClose} onAdded={(v) => { voices.reload(); onPick(v); }} />}
       <footer className="flex items-start gap-2 border-t border-line bg-paper-2/60 px-3.5 py-2.5 text-[11.5px] leading-relaxed text-ink-3">
         <span className="min-w-0 flex-1">{narrated ? t('conversation.film.costAfter') : t('conversation.film.costBefore')}</span>

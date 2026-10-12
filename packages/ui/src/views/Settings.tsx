@@ -4,7 +4,7 @@ import { client, type ModelInfo, type PublicSettings, type SettingsPatch } from 
 import { useLoad } from '../lib/hooks';
 import { t, useT, type MessageKey, getLocale } from '../i18n';
 import { ProviderLogo } from '../components/ProviderLogo';
-import { AddVoice, PlayButton, usePreview } from '../components/VoicePicker';
+import { AddVoice, PlayButton, usePreview, VoiceProblem } from '../components/VoicePicker';
 import { CustomForm, ProviderDetail, ProviderList, type ProviderView } from './ProviderSettings';
 
 // Settings: a centred dialog with the sections on the left. A section is one entry in SECTIONS — either a list with a
@@ -88,6 +88,8 @@ function SecretField({ id, label, saved, hint, onSave }: { id: string; label: st
 
 function VoiceDetail({ v, c }: { v: (typeof VOICES)[number]; c: Ctx }) {
   const on = !!c.s.tts[v.key];
+  // a saved ElevenLabs key is tried by listing its voices, so a wrong key or a missing permission is said right here
+  const voices = useLoad(() => (v.id === 'elevenlabs' && c.s.tts.elevenlabs ? client.voices() : Promise.resolve(undefined)), [v.id, c.s.tts.elevenlabs]);
   return (
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex items-start gap-3.5 border-b border-line pb-5 pl-7 pr-14 pt-6">
@@ -102,6 +104,7 @@ function VoiceDetail({ v, c }: { v: (typeof VOICES)[number]; c: Ctx }) {
       </header>
       <div className="space-y-4 px-7 py-6">
         <SecretField id={`tts-${v.id}`} label={t('providers.key')} saved={c.s.tts[v.key]} hint={v.hint} onSave={(x) => c.patch({ tts: { [v.key]: x } })} />
+        {on && <VoiceProblem problems={voices.data?.problems} />}
         {!on && <a href={v.url} target="_blank" rel="noreferrer" className="inline-flex text-[12.5px] text-accent-ink hover:underline">{t('providers.getKey', { name: t(`settings.voice.${v.id}` as MessageKey) })} ↗</a>}
         <p className="text-[12.5px] leading-relaxed text-ink-3">{t('settings.voice.desc')}</p>
       </div>
