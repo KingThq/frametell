@@ -91,3 +91,25 @@ test('continuing a paused film says so at once, before the director is ready', a
     off();
   } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
 });
+
+test('an ElevenLabs voice list is fetched once per key and shared, and a failed fetch is tried again', async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'frametell-studio-'));
+  const real = globalThis.fetch;
+  let calls = 0, fail = true;
+  globalThis.fetch = (async () => {
+    calls++;
+    if (fail) return new Response(JSON.stringify({ detail: { status: 'invalid_api_key' } }), { status: 401 });
+    return new Response(JSON.stringify({ voices: [{ voice_id: 'v1', name: 'Sarah' }] }), { status: 200 });
+  }) as typeof fetch;
+  try {
+    const a = new Studio({ dataDir, config: memoryConfig({ tts: { elevenlabs: 'sk_cache_test_key' } }) });
+    const b = new Studio({ dataDir, config: memoryConfig({ tts: { elevenlabs: 'sk_cache_test_key' } }) });
+    assert.equal((await a.voices()).problems?.elevenlabs?.problem, 'key');
+    fail = false;
+    const [x, y] = await Promise.all([a.voices(), b.voices()]);   // the failure was not kept; the two share one fetch
+    assert.equal(calls, 2);
+    assert.ok(x.voices.some((v) => v.id === 'v1') && y.voices.some((v) => v.id === 'v1'));
+    await a.voices();
+    assert.equal(calls, 2);
+  } finally { globalThis.fetch = real; fs.rmSync(dataDir, { recursive: true, force: true }); }
+});

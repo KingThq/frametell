@@ -16,6 +16,22 @@ import { resolveLocale, tr } from './i18n.js';
 
 export interface MaterialFile { name: string; data: Uint8Array }
 
+/**
+ * An ElevenLabs account's voices, by key, for ELEVENLABS_TTL: the list takes seconds to fetch and was fetched every
+ * time a voice list opened. Shared by every Studio in the process (on a hosted service, every account shares the
+ * platform's key); requests that arrive together share one fetch; a failure is not kept, so a fixed key is tried again.
+ */
+const ELEVENLABS_TTL = 10 * 60_000;
+const elevenLabsLists = new Map<string, { at: number; list: Promise<Voice[]> }>();
+function elevenLabsVoices(key: string): Promise<Voice[]> {
+  const hit = elevenLabsLists.get(key);
+  if (hit && Date.now() - hit.at < ELEVENLABS_TTL) return hit.list;
+  const list = listElevenLabsVoices(key);
+  elevenLabsLists.set(key, { at: Date.now(), list });
+  list.catch(() => { if (elevenLabsLists.get(key)?.list === list) elevenLabsLists.delete(key); });
+  return list;
+}
+
 export interface StudioOptions {
   /** where projects (<dataDir>/projects) and voice samples live; by default ~/.frametell, or FRAMETELL_HOME */
   dataDir?: string;
@@ -75,7 +91,7 @@ export class Studio {
     const voices: Voice[] = [...mine, ...VOLCENGINE_VOICES.filter((v) => !mine.some((m) => m.id === v.id))];
     let problems: VoicesView['problems'];
     if (cfg.tts.elevenlabs) {
-      try { voices.push(...(await listElevenLabsVoices(cfg.tts.elevenlabs))); } catch (e) {
+      try { voices.push(...(await elevenLabsVoices(cfg.tts.elevenlabs))); } catch (e) {
         // said in the voice list and in Settings; a key that may speak but not read voices still gets the default ones
         const problem = e instanceof ElevenLabsError ? e.problem : 'other';
         problems = { elevenlabs: { problem, detail: (e as Error).message } };

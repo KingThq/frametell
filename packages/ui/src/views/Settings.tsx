@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, AudioLines, Boxes, Check, CircleAlert, Globe, KeyRound, Monitor, NotebookPen, SlidersHorizontal, Trash2, X, type LucideIcon } from 'lucide-react';
 import { client, hosted, type ModelInfo, type PublicSettings, type SettingsPatch } from '../lib/client';
-import { useLoad } from '../lib/hooks';
+import { forgetVoices, useLoad } from '../lib/hooks';
 import { t, useT, type MessageKey, getLocale } from '../i18n';
 import { ProviderLogo } from '../components/ProviderLogo';
 import { AddVoice, PlayButton, usePreview, VoiceProblem } from '../components/VoicePicker';
@@ -143,7 +143,7 @@ function MyVoices({ c }: { c: Ctx }) {
         ))}
         {p.failed && <p className="border-t border-line px-3.5 py-2 text-[12px] text-seal" role="alert">{t('home.voice.previewFailed')}</p>}
         <div className={mine.length ? '' : '[&>button]:border-t-0 [&>form]:border-t-0'}>
-          <AddVoice needsKey={false} onAdded={() => void c.patch({})} />
+          <AddVoice needsKey={false} onAdded={() => { forgetVoices(); void c.patch({}); }} />
         </div>
       </div>
     </section>
@@ -228,6 +228,7 @@ export function Settings({ open, onClose, onChanged, section: initial }: { open:
     const next = await client.updateSettings(p);
     setS(next);
     if (p.keys || p.baseUrls || p.models || p.custom) setKeysStamp((k) => k + 1);   // the model list follows the keys
+    if (p.tts || p.myVoices) forgetVoices();   // and the voice list the voice keys
     onChanged?.(p);
   };
   const providers: ProviderView[] = useMemo(() => [

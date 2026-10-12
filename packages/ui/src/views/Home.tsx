@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowRight, CircleAlert, FileText, Image as ImageIcon, Loader2, Lock, NotebookPen, Paperclip, Play, Settings2, Square, X } from 'lucide-react';
 import { client, hosted, type ProjectView, type PublicSettings, type Voice } from '../lib/client';
-import { go, useLoad } from '../lib/hooks';
+import { go, useLoad, useVoices } from '../lib/hooks';
 import { STAGE_NAME, type Stage } from '../lib/run';
 import { STYLE_SWATCH, styleName, styleSummary } from '../lib/styles';
 import { intlTag, t, useT } from '../i18n';
@@ -47,7 +47,7 @@ export function Home({ openSettings, prefsStamp }: { openSettings: (section?: st
   const projects = useLoad(() => client.projects());
   const models = useLoad(() => client.models());
   const styles = useLoad(() => client.styles());
-  const voices = useLoad(() => client.voices());
+  const voices = useVoices();
   const settings = useLoad(() => client.settings(), [prefsStamp]);
 
   const [files, setFiles] = useState<File[]>([]);

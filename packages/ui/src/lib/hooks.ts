@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
-import { client, type LoggedEvent, type ProjectView } from './client';
+import { client, type LoggedEvent, type ProjectView, type VoicesView } from './client';
 import { emptyRun, reduce, type RunView } from './run';
 import { useT } from '../i18n';
 
@@ -13,6 +13,43 @@ export function useLoad<T>(fn: () => Promise<T>, deps: unknown[] = []) {
   }, deps);
   useEffect(reload, [reload]);
   return { ...state, reload };
+}
+
+/**
+ * The voice list, one copy for the whole panel: opening a voice picker shows it at once instead of 「正在载入音色…」
+ * each time. A copy older than VOICES_FRESH is still shown, and fetched again behind it; `reload` (a voice added) and
+ * `forgetVoices` (keys or 「我的音色」 changed in Settings) fetch it anew.
+ */
+const VOICES_FRESH = 60_000;
+let voicesCache: { at: number; data?: VoicesView; pending?: Promise<VoicesView> } = { at: 0 };
+const voicesSubs = new Set<() => void>();
+function fetchVoices(force = false): Promise<VoicesView> | undefined {
+  if (voicesCache.pending) return voicesCache.pending;
+  if (!force && voicesCache.data && Date.now() - voicesCache.at < VOICES_FRESH) return undefined;
+  const pending = client.voices();
+  voicesCache = { ...voicesCache, pending };
+  pending.then((data) => { voicesCache = { at: Date.now(), data }; }, () => { voicesCache = { ...voicesCache, at: Date.now(), pending: undefined }; })
+    .finally(() => voicesSubs.forEach((f) => f()));
+  return pending;
+}
+export function forgetVoices() { voicesCache = { at: 0, data: voicesCache.data }; voicesSubs.forEach((f) => f()); }
+
+export function useVoices() {
+  const [state, set] = useState<{ data?: VoicesView; error?: string; loading: boolean }>(() => ({ data: voicesCache.data, loading: !voicesCache.data }));
+  const load = useCallback((force = false) => {
+    const p = fetchVoices(force);
+    if (!p) return;
+    set((s) => ({ ...s, loading: true }));
+    p.then((data) => set({ data, loading: false }), (e: Error) => set((s) => ({ ...s, error: e.message, loading: false })));
+  }, []);
+  useEffect(() => {
+    // another picker fetched it, or Settings made it stale: follow along
+    const on = () => { if (voicesCache.data) set({ data: voicesCache.data, loading: !!voicesCache.pending }); if (!voicesCache.at && !voicesCache.pending) load(); };
+    voicesSubs.add(on);
+    load();
+    return () => { voicesSubs.delete(on); };
+  }, [load]);
+  return { ...state, reload: useCallback(() => load(true), [load]) };
 }
 
 /** a project's live run: replays the event log, then follows it */

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AudioLines, ChevronUp, Settings2 } from 'lucide-react';
-import { client, hosted, type ProjectView, type Voice } from '../lib/client';
-import { useLoad } from '../lib/hooks';
+import { hosted, type ProjectView, type Voice } from '../lib/client';
+import { useVoices } from '../lib/hooks';
 import { useT } from '../i18n';
 import { VoiceList, usePreview } from './VoicePicker';
 
@@ -55,7 +55,7 @@ function Panel({ project, narrated, current, pending, onPick, onClose, openSetti
   project: ProjectView; narrated: boolean; current?: Choice; pending?: Choice; onPick: (v: Voice | null) => void; onClose: () => void; openSettings?: (section?: string) => void;
 }) {
   const { t } = useT();
-  const voices = useLoad(() => client.voices());
+  const voices = useVoices();
   const p = usePreview();
   const lang = project.lang ?? 'zh';
   // the voices that speak the film's language (on a hosted service, those it can use), and the film's own voice even
