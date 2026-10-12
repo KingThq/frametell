@@ -1,6 +1,6 @@
 {
   "name": "@frametell/engine",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Hand-drawn explainer video engine: page runtime as a pure function of time, components, styles, and the render pipeline.",
   "license": "MIT",
   "author": "Sitor Team (https://sitor.ai)",

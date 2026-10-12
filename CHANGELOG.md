@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-10-12
+
 ### Security
 
 - An agent's shell is confined to its project. The file tools already were, but a shell command could read anything the app could: a page agent unsure what a change meant was seen reading other folders and searching the whole home folder. Now its shell runs in a sandbox (Seatbelt on macOS, bubblewrap on Linux when it works there) that reads only the project, the engine and the system, and writes only the project. On Windows the shell is not confined yet.
@@ -16,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - A change the page already shows, or one that says nothing the page can do, is answered in seconds with the reason ("the numbers on this page are already yellow"), instead of the page agent searching for minutes and sometimes changing other pages.
+- An ElevenLabs key whose voices could not be listed showed no voices and no reason. The voice lists and the key in Settings now say why: the key can't read voices (turn on Voices: Read for it in ElevenLabs), the key was turned down, or ElevenLabs couldn't be reached (check the connection or set a proxy). A key that can speak but not read voices gets ElevenLabs' default voices, so it can still narrate. Listing gives up after 15 seconds instead of waiting with no end.
+
+### Added
+
+- On a hosted service, a Volcengine voice can be added by its id with the account's own key.
 
 ## [0.2.2] - 2026-10-12
 
@@ -43,7 +50,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - A change to a finished film that never reached the page is no longer shown as done. When the page model's edits didn't land (or it only said it had made the change), the page passed its checks and showed "done", and the preview and the export kept the old picture. Now a page whose code is unchanged is asked once more, every check round restates the change, and if it still didn't land the page is marked for you to look at and the director says which page was not changed.
 - Continue answers at once. A paused film shows that it is getting ready the moment you continue, instead of staying paused until its next step began: getting ready fetched the model list of every provider with a key (12 seconds was seen, and a provider that hung held the film back with no end), so Continue seemed to do nothing until you left and came back. Now only the film's own providers' lists are fetched, and they get 15 seconds.
-- Relay is reached at relay.example.com.
+- A provider whose gateway moved is reached at its new address.
 - Exports on a small machine no longer run out of memory adding subtitles: they are added to two segments at a time, not all at once.
 - Pause stops the film whenever you press it. Pressed while an agent was between two requests (checking a page, taking screenshots), it used to be missed, and the film went on for minutes.
 
@@ -142,7 +149,8 @@ The first release of Frametell: a local, open-source studio that turns an idea o
 - The npm packages are not published yet; install from source (see the README).
 - The Claude Agent SDK and Codex runtimes are in the code but not offered; every film runs on the built-in agent, which works with any provider.
 
-[Unreleased]: https://github.com/sitor-ai/frametell/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/sitor-ai/frametell/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/sitor-ai/frametell/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/sitor-ai/frametell/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/sitor-ai/frametell/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/sitor-ai/frametell/compare/v0.1.2...v0.2.0

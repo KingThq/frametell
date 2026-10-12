@@ -1,6 +1,6 @@
 {
   "name": "@frametell/models",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Model catalog for Frametell: every Pi provider, plus Relay (recommended), Volcengine Ark and custom endpoints.",
   "license": "MIT",
   "author": "Sitor Team (https://sitor.ai)",
