@@ -88,6 +88,7 @@ const en: typeof zh = {
   creating: 'Creating',
   create: 'Start',
   recent: 'Recent videos',
+  deleteVideo: { label: 'Delete “{title}”', ask: 'Delete this video? Its pages, narration and exported films go with it, for good.', confirm: 'Delete', cancel: 'Cancel' },
   empty: 'Your videos will show up here. Start with one sentence, like “Why compound interest rewards starting early”.',
   about: (v) => `About ${v.n} min`,
   prefs: {

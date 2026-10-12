@@ -35,7 +35,7 @@ const en: typeof zh = {
   done: {
     play: 'Play',
     title: 'Your video is ready',
-    meta: (v) => `${v.secs ? `${v.secs}s` : ''}${v.took ? ` · made in ${v.took}` : ''} · cost ${v.cost}`,
+    meta: (v) => `${v.secs ? `${v.secs}s` : ''}${v.took ? ` · made in ${v.took}` : ''}${v.cost ? ` · cost ${v.cost}` : ''}`,
     hint: 'Want to change something? Say it below. Only the pages you change are redrawn, and you can watch the result right away. Export an mp4 when you’re ready to publish.',
   },
   export: { running: 'Exporting mp4', done: 'Exported', failed: 'Export failed', withSubs: 'With subtitles', noSubs: 'No subtitles' },

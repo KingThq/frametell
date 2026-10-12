@@ -1,28 +1,61 @@
 /* The in-browser preview player (only when index.html is opened directly; ?render / ?t captures do not use it).
  * Click the picture or press Space: play / pause; ← →: 5 s back / forward; F: full screen; the bar at the bottom can be dragged.
- * With narration (SCRIPT.VOICE), each line's audio plays in sync. */
+ * With narration (SCRIPT.VOICE), each line's audio plays in sync: lines are loaded ahead, the picture waits for a line
+ * that is not ready yet, and while a line plays the picture keeps to it. */
 (function () {
   const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
   window.PLAYER = function ({ from = 0, render }) {
     const dur = ENGINE.layout.duration;
-    // the player speaks the film's language (META.lang; a film made before it was set: Chinese if its title is)
+    // the player speaks the Studio panel's language when embedded there (?lang=), else the film's (META.lang; a film
+    // made before it was set: Chinese if its title is)
     const meta = (window.SCRIPT && SCRIPT.META) || {};
-    const en = meta.lang ? meta.lang === 'en' : !/[\u3400-\u9fff]/.test(meta.title || '');
+    const ui = new URLSearchParams(location.search).get('lang');
+    const en = ui === 'en' || ui === 'zh' ? ui === 'en' : meta.lang ? meta.lang === 'en' : !/[\u3400-\u9fff]/.test(meta.title || '');
     const say = (zh, english) => (en ? english : zh);
     let t = Math.min(from, dur), playing = false, t0 = 0, wall = 0;
 
-    // ── narration: one <audio> per line, aligned to the current time while playing ──
+    // ── narration: one <audio> per line ──
+    // A line used to be fetched only once it began, so it started late by the fetch (a hosted service's round trip:
+    // the whole line out of step) and was then cut off where it should have ended. Now the lines of the next AHEAD
+    // seconds are loaded in advance; the clock holds at a line that cannot play yet (at most WAIT_MS); a line plays out
+    // to its own end; and while one plays, the clock keeps to it (more than DRIFT off, e.g. after frames stalled in a
+    // background tab, the picture moves, never the sound: seeking a playing line is itself an audible jolt).
+    const AHEAD = 15, WAIT_MS = 4000, DRIFT = 0.12;
     const clips = ENGINE.layout.pages.flatMap((p) => p.cues).filter((c) => c.audio)
-      .map((c) => ({ at: c.audioAt ?? c.start, d: c.dur ?? c.end - c.start, src: c.audio, el: null }));
+      .map((c) => ({ at: c.audioAt ?? c.start, d: c.dur ?? c.end - c.start, src: c.audio, el: null, done: false, since: 0 }));
+    const audioOf = (c) => {
+      if (!c.el) {
+        c.el = new Audio(c.src); c.el.preload = 'auto';
+        c.el.addEventListener('ended', () => { c.done = true; });
+        c.el.addEventListener('error', () => { c.done = true; });   // a line that will not load does not hold the film
+      }
+      return c.el;
+    };
+    const loadAhead = () => { for (const c of clips) if (c.at + c.d > t && c.at < t + AHEAD) audioOf(c); };
+    /** a line due by `to` that has not started and cannot play yet: the clock waits for it */
+    const holding = (to, now) => clips.find((c) => {
+      if (c.done || to < c.at || t >= c.at + c.d) return false;
+      const el = audioOf(c);
+      if (!el.paused || el.readyState >= 3) return false;
+      if (!c.since) c.since = now;
+      if (now - c.since > WAIT_MS) { c.done = true; return false; }
+      return true;
+    });
     const sfx = TIMING.sfxTimes ? TIMING.sfxTimes(ENGINE.layout).map((s) => ({ ...s, el: null })) : [];
     const syncAudio = () => {
+      if (playing) loadAhead();
       for (const c of clips) {
-        const inside = playing && t >= c.at && t < c.at + c.d - 0.03;
-        if (inside) {
-          if (!c.el) { c.el = new Audio(c.src); c.el.preload = 'auto'; }
-          if (c.el.paused) { c.el.currentTime = Math.max(0, t - c.at); c.el.play().catch(() => {}); }
-        } else if (c.el && !c.el.paused) c.el.pause();
+        const off = t - c.at, el = c.el;
+        if (playing && !c.done && off >= 0 && off < c.d) {
+          const a = audioOf(c);
+          if (a.paused) {
+            if (a.readyState < 2) continue;
+            a.currentTime = off;
+            // refused (no user gesture yet): leave it, rather than asking again every frame
+            a.play().catch(() => { c.done = true; });
+          }
+        } else if (el && !el.paused && (!playing || off < 0 || off > c.d + 0.5)) el.pause();
       }
       // sound effects / music beds (page.sfx): volume and fades approximated, no ducking (the render mixes them exactly)
       for (const s of sfx) {
@@ -78,7 +111,12 @@
     };
     const loop = (now) => {
       if (!playing) return;
-      t = Math.min(dur, wall + (now - t0) / 1000);
+      let next = Math.min(dur, wall + (now - t0) / 1000);
+      const wait = holding(next, now);
+      const lead = !wait && clips.findLast((c) => c.el && !c.el.paused);
+      if (wait) { next = Math.max(t, wait.at); wall = next; t0 = now; }
+      else if (lead && Math.abs(lead.at + lead.el.currentTime - next) > DRIFT) { next = Math.min(dur, lead.at + lead.el.currentTime); wall = next; t0 = now; }
+      t = next;
       if (t >= dur) playing = false;
       syncAudio();
       show();
@@ -87,12 +125,17 @@
     const play = () => {
       if (t >= dur - 0.05) t = 0;
       playing = true; wall = t; t0 = performance.now();
+      loadAhead();
       hint.firstChild.style.opacity = '0';
       requestAnimationFrame(loop);
     };
     const pause = () => { playing = false; syncAudio(); show(); };
     const toggle = () => (playing ? pause() : play());
-    const jump = (to) => { t = Math.max(0, Math.min(dur, to)); wall = t; t0 = performance.now(); for (const c of clips) if (c.el) c.el.pause(); syncAudio(); show(); };
+    const jump = (to) => {
+      t = Math.max(0, Math.min(dur, to)); wall = t; t0 = performance.now();
+      for (const c of clips) { c.done = false; c.since = 0; if (c.el) c.el.pause(); }
+      syncAudio(); show();
+    };
     const fullscreen = () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()).catch(() => {});
 
     document.getElementById('viewport').addEventListener('click', toggle);
@@ -114,6 +157,7 @@
     // while playing, the control bar hides after 2 s without mouse movement
     let idle;
     addEventListener('mousemove', () => { bar.classList.remove('idle'); clearTimeout(idle); idle = setTimeout(() => playing && bar.classList.add('idle'), 2000); });
+    loadAhead();
     show();
     if (embedded) parent.postMessage({ type: 'studio:ready', duration: dur }, '*');
   };

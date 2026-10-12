@@ -87,6 +87,7 @@ export default {
   creating: '正在创建',
   create: '开始制作',
   recent: '最近的视频',
+  deleteVideo: { label: '删除「{title}」', ask: '删除这条视频？画面、配音和导出的成片都会一起删掉，找不回来。', confirm: '删除', cancel: '取消' },
   empty: '做好的视频会出现在这里。可以从一句话开始，比如「讲讲复利为什么要趁早」。',
   about: (v: { n: number }) => `约 ${v.n} 分钟`,
   prefs: {

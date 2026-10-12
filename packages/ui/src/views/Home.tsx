@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, CircleAlert, FileText, Image as ImageIcon, Loader2, NotebookPen, Paperclip, Play, Settings2, Square, X } from 'lucide-react';
+import { ArrowRight, CircleAlert, FileText, Image as ImageIcon, Loader2, NotebookPen, Paperclip, Play, Settings2, Square, Trash2, X } from 'lucide-react';
 import { client, hosted, type ProjectView, type PublicSettings, type Voice } from '../lib/client';
 import { go, useLoad, useVoices } from '../lib/hooks';
 import { STAGE_NAME, type Stage } from '../lib/run';
@@ -117,6 +117,13 @@ export function Home({ openSettings, prefsStamp }: { openSettings: (section?: st
   };
 
   const recent = useMemo(() => projects.data || [], [projects.data]);
+  // the row asking to be deleted, and what went wrong deleting it
+  const [removing, setRemoving] = useState<{ id: string; busy?: boolean; error?: string }>();
+  const remove = async (id: string) => {
+    setRemoving({ id, busy: true });
+    try { await client.deleteProject(id); setRemoving(undefined); projects.reload(); }
+    catch (e) { setRemoving({ id, error: (e as Error).message }); }
+  };
   const current = (styles.data || []).find((s) => s.id === styleId);
   const via = route(settings.data, modelId);
   const addModel = async (provider: string, id: string) => {
@@ -249,8 +256,22 @@ export function Home({ openSettings, prefsStamp }: { openSettings: (section?: st
           <ul className="mt-3 divide-y divide-line border-y border-line">
             {recent.map((p) => {
               const st = rowState(p);
+              if (removing?.id === p.id) return (
+                <li key={p.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3.5">
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[14px] font-medium text-ink">{p.title}</span>
+                    <span className={`mt-0.5 block text-[12px] ${removing.error ? 'text-seal' : 'text-ink-2'}`} role={removing.error ? 'alert' : undefined}>{removing.error || t('home.deleteVideo.ask')}</span>
+                  </span>
+                  <span className="flex shrink-0 gap-1.5">
+                    <button className="fs-btn fs-btn-sm fs-btn-ghost" onClick={() => setRemoving(undefined)} autoFocus>{t('home.deleteVideo.cancel')}</button>
+                    {!removing.error && <button className="fs-btn fs-btn-sm bg-seal text-white hover:brightness-105" disabled={removing.busy} onClick={() => remove(p.id)}>
+                      {removing.busy ? <Loader2 size={13} className="animate-spin" aria-hidden /> : <Trash2 size={13} aria-hidden />}{t('home.deleteVideo.confirm')}
+                    </button>}
+                  </span>
+                </li>
+              );
               return (
-                <li key={p.id} className="flex items-center gap-4 py-3.5">
+                <li key={p.id} className="group/row flex items-center gap-4 py-3.5">
                   <a href={`#/p/${p.id}`} className="group flex min-w-0 flex-1 items-center gap-4 rounded-lg">
                     <span className="flex -space-x-1" aria-hidden>{(STYLE_SWATCH[p.style] || styles.data?.find((x) => x.id === p.style)?.swatch || STYLE_SWATCH.study).slice(0, 3).map((c) => <span key={c} className="h-3.5 w-3.5 rounded-full ring-1 ring-black/15" style={{ background: c }} />)}</span>
                     <span className="min-w-0 flex-1">
@@ -264,6 +285,11 @@ export function Home({ openSettings, prefsStamp }: { openSettings: (section?: st
                       {st.action.icon}{st.action.text}
                     </button>
                   )}
+                  {/* a film being made is stopped first: its row offers no delete */}
+                  <button className={`fs-icon-btn -ml-2 shrink-0 hover:text-seal sm:opacity-0 sm:focus-visible:opacity-100 sm:group-hover/row:opacity-100 ${p.status === 'running' ? 'invisible' : ''}`}
+                    aria-label={t('home.deleteVideo.label', { title: p.title })} title={t('home.deleteVideo.confirm')} onClick={() => setRemoving({ id: p.id })}>
+                    <Trash2 size={14} aria-hidden />
+                  </button>
                 </li>
               );
             })}

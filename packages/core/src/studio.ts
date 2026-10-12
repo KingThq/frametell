@@ -234,6 +234,8 @@ export class Studio {
   export(id: string) { return this.store.runner(id).export(); }
   approve(id: string, feedback?: string) { return this.store.runner(id).approve(feedback); }
   stop(id: string) { this.store.runner(id).stop(); }
+  /** delete a project and its files; refused while it is being made */
+  deleteProject(id: string) { this.store.remove(id); this.timelines.delete(id); }
   /** talk to the director: storyboard feedback, a note mid-run, or a change to the finished film */
   say(id: string, text: string, refs?: unknown) { return this.store.runner(id).say(text, cleanRefs(refs)); }
   /** save a file the user attached to a message; returns the reference to send with it */

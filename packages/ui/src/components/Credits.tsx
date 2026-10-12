@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { hosted } from '../lib/client';
+import { isWorking, money, type RunView } from '../lib/run';
 import { useT } from '../i18n';
 
 /** a hosted service's credits, read on load, every half minute and whenever the tab comes back into view (a film spends
@@ -17,6 +18,26 @@ export function useCredits() {
     return () => { alive = false; clearInterval(timer); document.removeEventListener('visibilitychange', read); };
   }, [credits]);
   return state && credits ? { ...state, url: credits.url } : null;
+}
+
+/** what a film has spent, as the panel shows it: on a hosted service its credits (read again every ten seconds while
+ * it is being made), never money; elsewhere what it cost. null until a hosted service has answered, or without billing */
+export function useSpent(project: string, run: RunView) {
+  const { t, locale } = useT();
+  const spent = hosted?.credits?.spent;
+  const working = isWorking(run);
+  const [n, setN] = useState<number | null>(null);
+  useEffect(() => {
+    if (!spent) return;
+    let alive = true;
+    const read = () => { if (!document.hidden) spent(project).then((v) => { if (alive) setN(v); }, () => {}); };
+    read();
+    // and once more as it stops: its last charges land a moment after
+    const timer = working ? setInterval(read, 10_000) : setTimeout(read, 3_000);
+    return () => { alive = false; clearInterval(timer); };
+  }, [spent, project, working]);
+  if (!hosted) return money(run.cost);
+  return n == null ? null : t('common.credits', { n: n.toLocaleString(locale === 'zh' ? 'zh-CN' : 'en-US') });
 }
 
 /** the balance, quiet in the top bar, linking to billing; below a minute of film it says so */

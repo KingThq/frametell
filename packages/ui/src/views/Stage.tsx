@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Captions, CaptionsOff, Check, ChevronLeft, ChevronRight, Download, Images, Maximize2, MessageSquareText, Quote, TriangleAlert } from 'lucide-react';
-import { client, type PageTiming, type ProjectView, type Timeline } from '../lib/client';
+import { client, downloadUrl, type PageTiming, type ProjectView, type Timeline } from '../lib/client';
 import { film, finished, relPath, STAGE_NAME, STAGES, type PageView, type RunView } from '../lib/run';
 import { issueText } from '../lib/lint';
 import { ExportControls, RevealFile } from './Export';
@@ -27,41 +27,67 @@ function useTimeline(id: string, key: string) {
  * open used to reload it: it flashed and went back to the start. Now the new version loads behind the one on screen, at
  * the moment that one shows, and takes its place once it has drawn (studio:ready); while the preview plays, the new
  * version waits for a pause. `frame` is the player on screen; `frames(props)` renders the players.
+ * A player that does not come up (the engine reports it could not build, or it says nothing for a while) is loaded
+ * again: it used to stay dark until the whole panel was reloaded.
  */
 function useLivePlayer(version: string, url: string, from = 0) {
+  const { locale } = useT();   // the player's own words (play hint, buttons) in the panel's language, not the film's
   const frame = useRef<HTMLIFrameElement>(null);
   const behind = useRef<HTMLIFrameElement>(null);
-  // on screen first, then the version loading behind it (if any); `from` is where each boots
-  const [docs, setDocs] = useState<{ v: string; from?: number }[]>([{ v: version }]);
+  // on screen first, then the version loading behind it (if any); `from` is where each boots, `n` how often it was retried
+  const [docs, setDocs] = useState<{ v: string; from?: number; n?: number }[]>([{ v: version }]);
   const [st, setSt] = useState({ t: 0, playing: false, ready: false });
   const [drawn, setDrawn] = useState('');   // the version behind that has drawn
   const boot = useRef<number>(undefined);   // where the first player boots; fixed once it is on screen
   const latest = docs[docs.length - 1].v;
+  const keyOf = (d: { v: string; n?: number }) => `${d.v}#${d.n ?? 0}`;
+  // load player i again (it failed or hung), a few times at most
+  const retry = (i: number) => setDocs((d) => (d[i] && (d[i].n ?? 0) < RETRIES ? d.map((x, j) => (j === i ? { ...x, n: (x.n ?? 0) + 1 } : x)) : d));
   useEffect(() => {
-    if (version === latest || st.playing) return;
+    if (version === latest || (st.playing && st.ready)) return;
+    // nothing on screen to keep (the player there never came up): the new version takes its place at once
+    if (!st.ready) { setDocs([{ v: version }]); return; }
     setDocs((d) => [d[0], { v: version, from: st.t }]);   // a version still loading behind is replaced by the newer one
-  }, [version, latest, st.playing]);
+  }, [version, latest, st.playing, st.ready]);
   useEffect(() => {
     if (drawn !== docs[1]?.v || st.playing) return;
     seekFrame(behind.current, st.t, false);   // where the viewer is now (they may have moved while it loaded)
     setDocs((d) => d.slice(-1));
   }, [drawn, docs, st.playing]);
+  // a player that has said nothing after a while is loaded again
+  const front = keyOf(docs[0]), back = docs[1] ? keyOf(docs[1]) : '';
   useEffect(() => {
+    if (st.ready) return;
+    const timer = setTimeout(() => retry(0), SILENT_MS);
+    return () => clearTimeout(timer);
+  }, [front, st.ready]);
+  useEffect(() => {
+    if (!back || drawn === docs[1]?.v) return;
+    const timer = setTimeout(() => retry(1), SILENT_MS);
+    return () => clearTimeout(timer);
+  }, [back, drawn]);
+  useEffect(() => {
+    const later: ReturnType<typeof setTimeout>[] = [];
     const on = (e: MessageEvent) => {
       if (e.source === frame.current?.contentWindow) {
         if (e.data?.type === 'studio:time') setSt((s) => ({ ...s, t: e.data.t, playing: !!e.data.playing }));
         else if (e.data?.type === 'studio:ready') setSt((s) => ({ ...s, ready: true }));
-      } else if (e.source && e.source === behind.current?.contentWindow && e.data?.type === 'studio:ready') setDrawn(behind.current?.dataset.v ?? '');
+        else if (e.data?.type === 'studio:error') later.push(setTimeout(() => retry(0), 1500));
+      } else if (e.source && e.source === behind.current?.contentWindow) {
+        if (e.data?.type === 'studio:ready') setDrawn(behind.current?.dataset.v ?? '');
+        else if (e.data?.type === 'studio:error') later.push(setTimeout(() => retry(1), 1500));
+      }
     };
     addEventListener('message', on);
-    return () => removeEventListener('message', on);
+    return () => { removeEventListener('message', on); later.forEach(clearTimeout); };
   }, []);
   const frames = ({ className, ...props }: React.IframeHTMLAttributes<HTMLIFrameElement>) => (boot.current ??= from, docs.map((d, i) => (
-    <iframe key={d.v} ref={i === 0 ? frame : behind} data-v={d.v} src={`${url}?from=${(d.from ?? boot.current!).toFixed(2)}`} sandbox="allow-scripts" {...props} tabIndex={i === 0 ? undefined : -1} aria-hidden={i > 0 || undefined}
+    <iframe key={keyOf(d)} ref={i === 0 ? frame : behind} data-v={d.v} src={`${url}?from=${(d.from ?? boot.current!).toFixed(2)}&lang=${locale}`} sandbox="allow-scripts" {...props} tabIndex={i === 0 ? undefined : -1} aria-hidden={i > 0 || undefined}
       className={`${className ?? ''} ${i > 0 ? '!absolute inset-0 pointer-events-none !opacity-0' : ''}`} />
   )));
   return { frame, frames, ...st };
 }
+const RETRIES = 4, SILENT_MS = 20_000;
 const seekFrame = (frame: HTMLIFrameElement | null, t: number, play = true) => frame?.contentWindow?.postMessage({ type: 'studio:seek', t, play }, '*');
 
 function Thumb({ p, project, poster, className = '', badge = true }: { p?: PageView; project: ProjectView; poster?: string; className?: string; badge?: boolean }) {
@@ -436,7 +462,7 @@ export function Stage({ run, project, selected, onSelect, playKey, onRef }: { ru
               <button className="fs-btn fs-btn-ghost fs-btn-sm" aria-pressed={subs} onClick={() => setSubs(!subs)} title={subs ? tr('stage.subsOnTitle') : tr('stage.subsOffTitle')}>
                 {subs ? <Captions size={14} aria-hidden /> : <CaptionsOff size={14} aria-hidden />}{subs ? tr('stage.subsOn') : tr('stage.subsOff')}
               </button>
-              <a className="fs-btn fs-btn-secondary fs-btn-sm" href={client.fileUrl(project, relPath(cut, project.id))} download><Download size={13} aria-hidden /> {subs ? tr('stage.downloadSubs') : tr('stage.downloadNoSubs')}</a>
+              <a className="fs-btn fs-btn-secondary fs-btn-sm" href={downloadUrl(project, relPath(cut, project.id), !subs)} download><Download size={13} aria-hidden /> {subs ? tr('stage.downloadSubs') : tr('stage.downloadNoSubs')}</a>
               <RevealFile file={cut} size="fs-btn-sm" />
             </span>
           )}

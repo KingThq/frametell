@@ -61,6 +61,15 @@ export class Projects {
     return meta;
   }
 
+  /** delete a project and everything in it; refused while it is being made, here or in another process */
+  remove(id: string) {
+    if (!/^[\w-]+$/.test(id)) throw new Error(tr('项目不存在', 'Project not found'));
+    const dir = this.dir(id), r = this.runner(id);
+    if (r.status === 'running' || heldElsewhere(dir)) throw new Error(tr('这条视频正在制作，先停下再删', 'This video is being made. Stop it before deleting.'));
+    this.runners.delete(id);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+
   runner(id: string): Runner {
     if (!fs.existsSync(studioFile(this.dir(id), 'project.json'))) throw new Error(tr('项目不存在', 'Project not found'));
     let r = this.runners.get(id);

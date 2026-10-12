@@ -36,7 +36,7 @@ export default {
   done: {
     play: '播放',
     title: '你的视频好了',
-    meta: (v: { secs?: number; took?: string; cost: string }) => `${v.secs ? `${v.secs} 秒` : ''}${v.took ? ` · 做了 ${v.took}` : ''} · 花费 ${v.cost}`,
+    meta: (v: { secs?: number; took?: string; cost?: string }) => `${v.secs ? `${v.secs} 秒` : ''}${v.took ? ` · 做了 ${v.took}` : ''}${v.cost ? ` · 花费 ${v.cost}` : ''}`,
     hint: '想改哪里？直接在下面说，只重画要改的那几页，改完马上能看；要发出去时再导出 mp4。',
   },
   export: { running: '正在导出 mp4', done: '导出好了', failed: '导出没成功', withSubs: '带字幕', noSubs: '无字幕' },

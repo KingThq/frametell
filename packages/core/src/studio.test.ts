@@ -47,6 +47,30 @@ test('two Studios in one process do not see each other', () => {
   } finally { for (const d of [a, b]) fs.rmSync(d, { recursive: true, force: true }); }
 });
 
+test('a project can be deleted, but not while another process is making it, and only by its own id', () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'frametell-delete-'));
+  try {
+    const studio = new Studio({ dataDir, config: memoryConfig() });
+    const now = new Date().toISOString();
+    const make = (id: string) => {
+      const dir = path.join(dataDir, 'projects', id);
+      fs.mkdirSync(path.join(dir, '.studio'), { recursive: true });
+      fs.writeFileSync(path.join(dir, '.studio', 'project.json'), JSON.stringify({ id, title: id, style: 'whiteboard', durationSec: 60, model: 'relay/x', runtime: 'pi', subtitles: true, materials: [], createdAt: now, updatedAt: now }));
+      return dir;
+    };
+    const kept = make('2026-10-12-keep'), gone = make('2026-10-12-gone');
+    studio.deleteProject('2026-10-12-gone');
+    assert.equal(fs.existsSync(gone), false);
+    assert.deepEqual(studio.projects().map((p) => p.id), ['2026-10-12-keep']);
+    assert.throws(() => studio.deleteProject('2026-10-12-gone'));
+    assert.throws(() => studio.deleteProject('..'));
+    // a run held by another live process (this test's parent stands in for it)
+    fs.writeFileSync(path.join(kept, '.studio', 'run.lock'), String(process.ppid));
+    assert.throws(() => studio.deleteProject('2026-10-12-keep'), /Stop it|先停下/);
+    assert.equal(fs.existsSync(kept), true);
+  } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
+});
+
 test('after a restart, a run cut short is picked up again, a paused one is left alone', async () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'frametell-resume-'));
   try {

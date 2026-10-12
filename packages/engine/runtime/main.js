@@ -47,5 +47,9 @@
     frameScale();
     frame.style.visibility = '';
     PLAYER({ from: parseFloat(q.get('from') || '0'), render: (t) => ENGINE.renderAt(t) });
+  }).catch((e) => {
+    // a film that did not build stays dark: embedded in the Studio panel, say so, and the panel loads it again
+    console.error(e);
+    if (window.parent !== window) parent.postMessage({ type: 'studio:error', message: String((e && e.message) || e) }, '*');
   });
 })();

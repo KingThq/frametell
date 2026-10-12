@@ -8,12 +8,15 @@ import { Conversation } from './Conversation';
 import { Stage } from './Stage';
 import { offerRef } from '../lib/refs';
 import { useT } from '../i18n';
+import { useSpent } from '../components/Credits';
+import { hosted } from '../lib/client';
 
 const fmtK = (n: number) => (n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'K' : String(n));
 
 /** what this film has cost; the details (model, tokens, cache) open on click instead of crowding the workbench */
 function CostChip({ run, project }: { run: RunView; project: ProjectView }) {
   const { t } = useT();
+  const spent = useSpent(project.id, run);
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLSpanElement>(null);
   useEffect(() => {
@@ -24,6 +27,8 @@ function CostChip({ run, project }: { run: RunView; project: ProjectView }) {
   }, [open]);
   const u = run.cost?.usage;
   const seen = u ? u.input + u.cacheRead : 0;
+  // a hosted service counts in credits alone: no money, models or tokens
+  if (hosted) return spent ? <span className="px-2 font-mono text-[12.5px] text-ink-3 tabular" title={t('workbench.spentTitle')}>{spent}</span> : null;
   return (
     <span ref={box} className="relative">
       <button className="fs-btn fs-btn-ghost fs-btn-sm font-mono tabular" aria-expanded={open} onClick={() => setOpen(!open)} title={t('workbench.spentTitle')}>{money(run.cost)}</button>

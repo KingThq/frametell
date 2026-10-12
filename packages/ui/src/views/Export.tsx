@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, Copy, Download, FolderOpen, Loader2 } from 'lucide-react';
-import { client, type ProjectView } from '../lib/client';
+import { client, downloadUrl, hosted, type ProjectView } from '../lib/client';
 import { useNow } from '../lib/hooks';
 import { clock, film, isWorking, relPath, type RunView } from '../lib/run';
 import { useT } from '../i18n';
@@ -16,7 +16,7 @@ export function ExportControls({ run, project, size = '' }: { run: RunView; proj
   const cut = film(run);
   if (cut) return (
     <>
-      <a className={`fs-btn fs-btn-secondary ${size}`} href={client.fileUrl(project, relPath(cut.path, project.id))} download><Download size={14} aria-hidden /> {t('common.export.download')}</a>
+      <a className={`fs-btn fs-btn-secondary ${size}`} href={downloadUrl(project, relPath(cut.path, project.id))} download><Download size={14} aria-hidden /> {t('common.export.download')}</a>
       <RevealFile file={cut.path} size={size} />
     </>
   );
@@ -31,7 +31,7 @@ export function ExportControls({ run, project, size = '' }: { run: RunView; proj
 
 /**
  * Where an exported file is. In the desktop app: show it in Finder (Explorer, the file manager). In a browser, which
- * cannot open one: the path, to copy.
+ * cannot open one: the path, to copy. On a hosted service the file is on its server, not here: nothing (the download is).
  */
 export function RevealFile({ file, size = '' }: { file: string; size?: string }) {
   const { t } = useT();
@@ -56,6 +56,7 @@ export function RevealFile({ file, size = '' }: { file: string; size?: string })
     addEventListener('mousedown', away); addEventListener('keydown', esc); addEventListener('resize', moved); addEventListener('scroll', moved, true);
     return () => { removeEventListener('mousedown', away); removeEventListener('keydown', esc); removeEventListener('resize', moved); removeEventListener('scroll', moved, true); };
   }, [open]);
+  if (hosted) return null;
   if (client.reveal) {
     const label = platform === 'darwin' ? t('common.export.revealMac') : platform === 'win32' ? t('common.export.revealWin') : t('common.export.revealOther');
     return <button type="button" className={`fs-btn fs-btn-ghost ${size}`} onClick={() => void client.reveal!(file)}><FolderOpen size={14} aria-hidden /> {label}</button>;

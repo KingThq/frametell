@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronRight, CircleDashed, Clapperboard, Download, Loader2, Pause, Play, TriangleAlert } from 'lucide-react';
-import { client, type ProjectView } from '../lib/client';
-import { clock, film, finished, money, relPath, STAGE_NAME, STAGES, type FeedItem, type PageView, type RunView, type Stage, type Storyboard, isWorking } from '../lib/run';
+import { client, downloadUrl, type ProjectView } from '../lib/client';
+import { clock, film, finished, relPath, STAGE_NAME, STAGES, type FeedItem, type PageView, type RunView, type Stage, type Storyboard, isWorking } from '../lib/run';
 import { issueText } from '../lib/lint';
 import { pageName, stepText, summarizeTools } from '../lib/describe';
 import { useNow } from '../lib/hooks';
 import { Crest } from '../components/Logo';
+import { useSpent } from '../components/Credits';
 import { STYLE_NAME } from '../lib/styles';
 import { Composer, RefChip } from './Composer';
 import { ExportControls, RevealFile } from './Export';
@@ -179,6 +180,7 @@ function DoneCard({ run, project, onPlay }: { run: RunView; project: ProjectView
   const poster = ids.map((id) => run.pages[id]?.thumb).find(Boolean);
   const took = run.startedAt && run.activeAt ? clock((run.ready?.at ?? run.activeAt) - run.startedAt) : undefined;
   const seconds = run.ready?.duration ?? run.video?.duration;
+  const spent = useSpent(project.id, run);
   return (
     <div className="overflow-hidden rounded-2xl border border-jade/30 bg-surface animate-rise">
       {poster && (
@@ -191,7 +193,7 @@ function DoneCard({ run, project, onPlay }: { run: RunView; project: ProjectView
       )}
       <div className="px-4 py-4">
         <p className="font-display text-[22px] leading-tight text-ink">{t('conversation.done.title')}</p>
-        <p className="mt-1.5 text-[12.5px] text-ink-3 tabular">{t('conversation.done.meta', { secs: seconds ? Math.round(seconds) : undefined, took, cost: money(run.cost) })}</p>
+        <p className="mt-1.5 text-[12.5px] text-ink-3 tabular">{t('conversation.done.meta', { secs: seconds ? Math.round(seconds) : undefined, took, cost: spent ?? undefined })}</p>
         <div className="mt-3.5 flex flex-wrap gap-2">
           <button className="fs-btn fs-btn-accent" onClick={onPlay}><Clapperboard size={14} aria-hidden /> {t('conversation.done.play')}</button>
           <ExportControls run={run} project={project} />
@@ -214,8 +216,8 @@ function ExportLine({ it, project }: { it: Extract<FeedItem, { kind: 'export' }>
       <span className="text-ink-3 tabular">{took}</span>
       {it.status === 'done' && it.video && (
         <span className="flex gap-1.5">
-          <a className="fs-btn fs-btn-ghost fs-btn-sm" href={client.fileUrl(project, relPath(it.video, project.id))} download><Download size={13} aria-hidden /> {t('conversation.export.withSubs')}</a>
-          {it.noSubs && <a className="fs-btn fs-btn-ghost fs-btn-sm" href={client.fileUrl(project, relPath(it.noSubs, project.id))} download><Download size={13} aria-hidden /> {t('conversation.export.noSubs')}</a>}
+          <a className="fs-btn fs-btn-ghost fs-btn-sm" href={downloadUrl(project, relPath(it.video, project.id))} download><Download size={13} aria-hidden /> {t('conversation.export.withSubs')}</a>
+          {it.noSubs && <a className="fs-btn fs-btn-ghost fs-btn-sm" href={downloadUrl(project, relPath(it.noSubs, project.id), true)} download><Download size={13} aria-hidden /> {t('conversation.export.noSubs')}</a>}
           <RevealFile file={it.video} size="fs-btn-sm" />
         </span>
       )}
@@ -353,7 +355,8 @@ function Chapter({ b, run, project, onSelectPage, selected }: { b: Extract<Block
 const ESTIMATE: Record<Stage, (pages: number) => number> = { storyboard: () => 100, script: () => 80, narrate: () => 20, pages: (n) => Math.ceil(Math.max(n, 1) / 10) * 240, review: () => 60, render: () => 120 };
 
 /** the line above the composer: what is happening now, how long it has taken, about how long is left */
-function NowBar({ run }: { run: RunView }) {
+function NowBar({ run, project }: { run: RunView; project: ProjectView }) {
+  const spent = useSpent(project.id, run);
   useT();
   const running = isWorking(run);
   const now = useNow(running);
@@ -383,7 +386,7 @@ function NowBar({ run }: { run: RunView }) {
       <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${running ? 'animate-breathe bg-accent' : run.awaitingApproval ? 'bg-accent' : finished(run) ? 'bg-jade' : 'bg-line-2'}`} aria-hidden />
       <span className={`min-w-0 flex-1 truncate ${run.awaitingApproval ? 'text-accent-ink' : 'text-ink-2'}`}>{text}</span>
       {running && left > 0 && <span className="shrink-0 text-ink-3 tabular">{t('conversation.bar.left', { min: left < 90 ? 1 : Math.round(left / 60) })}</span>}
-      <span className="shrink-0 font-mono text-ink-3 tabular" title={t('conversation.bar.spent')}>{money(run.cost)}</span>
+      {spent && <span className="shrink-0 font-mono text-ink-3 tabular" title={t('conversation.bar.spent')}>{spent}</span>}
     </div>
   );
 }
@@ -439,7 +442,7 @@ export function Conversation({ run, project, onSelectPage, selected, onPlay, ope
         </div>
       </div>
       <div className="border-t border-line bg-paper-2">
-        <NowBar run={run} />
+        <NowBar run={run} project={project} />
         <Composer run={run} project={project} viewing={viewing} openSettings={openSettings} />
       </div>
     </div>

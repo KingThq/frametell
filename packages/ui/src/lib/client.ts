@@ -25,6 +25,8 @@ export interface StudioClient {
   start(id: string): Promise<void>;
   approve(id: string, feedback?: string): Promise<boolean>;
   stop(id: string): Promise<void>;
+  /** delete a project and its files; refused while it is being made */
+  deleteProject(id: string): Promise<void>;
   /** talk to the director: storyboard feedback, a note mid-run, or a change to the finished film */
   say(id: string, text: string, refs?: UserRef[]): Promise<boolean>;
   /** save a file the user attached to a message into the project; returns the reference to send with it */
@@ -53,7 +55,11 @@ export interface Hosted {
   email?: string;
   signOut(): void;
   /** the account's credits, shown in the top bar and linking to where they are managed; absent: no billing */
-  credits?: { read(): Promise<{ available: number; perMinute: number; plan?: string; styles?: string[] | null } | null>; url: string };
+  credits?: {
+    read(): Promise<{ available: number; perMinute: number; plan?: string; styles?: string[] | null } | null>; url: string;
+    /** the credits one film has spent so far, shown instead of what it cost in money; null when nothing is metered */
+    spent?(project: string): Promise<number | null>;
+  };
 }
 
 class HttpError extends Error { constructor(msg: string, readonly status: number) { super(msg); } }
@@ -88,6 +94,7 @@ export const httpClient: StudioClient = {
   start: async (id) => { await call('POST', `/api/projects/${id}/start`); },
   approve: async (id, feedback) => (await call<{ ok: boolean }>('POST', `/api/projects/${id}/approve`, { feedback })).ok,
   stop: async (id) => { await call('POST', `/api/projects/${id}/stop`); },
+  deleteProject: async (id) => { await call('DELETE', `/api/projects/${id}`); },
   timeline: (id) => call<Timeline | null>('GET', `/api/projects/${id}/timeline`),
   export: async (id) => (await call<{ ok: boolean }>('POST', `/api/projects/${id}/export`)).ok,
   frames: async (id, times) => (await call<{ paths: string[] }>('GET', `/api/projects/${id}/frames?t=${times.map((t) => t.toFixed(1)).join(',')}`)).paths,
@@ -120,3 +127,9 @@ declare global { interface Window { studioBridge?: StudioClient & { platform?: s
 /** the desktop app's bridge when present, else the local HTTP server */
 export const client: StudioClient = (typeof window !== 'undefined' && window.studioBridge) || httpClient;
 export const hosted = client.hosted;
+/** an exported mp4 to save, named after the film: `?download=` asks the server to send it as an attachment, since a
+ * browser ignores <a download> for a file on another origin (a hosted service's previews) and plays it instead */
+export const downloadUrl = (p: ProjectView, rel: string, noSubs = false) => {
+  const name = `${(p.title || 'frametell').replace(/[\\/:*?"<>|]+/g, ' ').trim()}${noSubs ? '-nosubs' : ''}.mp4`;
+  return `${client.fileUrl(p, rel)}?download=${encodeURIComponent(name)}`;
+};
