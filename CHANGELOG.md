@@ -95,6 +95,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Voicing no longer waits forever on a voice service that stops answering. Each take gives up after 90 seconds and is asked again, as it always meant to; making a film had dropped that deadline, so one silent request held the film on "Recording the voiceover" until it was paused.
 - Voicing no longer stops on a page whose recording begins (or ends) with a few milliseconds of noise before its silence. It used to call its own trim of that silence "dropped sound" and stop, and 「继续制作」 stopped the same way every time.
 
 ## [0.1.2] - 2026-10-11

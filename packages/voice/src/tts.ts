@@ -31,6 +31,16 @@ async function retry<T>(fn: () => Promise<T>, tries = 4): Promise<T> {
   throw last;
 }
 
+/**
+ * A request's signal: the caller's stop, and its own deadline. The deadline holds even when the caller passes a stop
+ * signal (as narrating a film always does), so a provider that stops answering fails the take, and retry asks again,
+ * instead of the request waiting forever.
+ */
+function deadline(stop: AbortSignal | undefined, ms = 90_000): AbortSignal {
+  const timeout = AbortSignal.timeout(ms);
+  return stop ? AbortSignal.any([stop, timeout]) : timeout;
+}
+
 /** The voice is not one this resource serves (or not one the account has): the next resource may serve it. */
 class Mismatch extends Error {}
 
@@ -63,7 +73,7 @@ export function volcengineTts(apiKey: string): TtsProvider {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...auth, 'X-Api-Resource-Id': resource, 'X-Api-Request-Id': crypto.randomUUID() },
       body: JSON.stringify({ req_params: req }),
-      signal: o.signal ?? AbortSignal.timeout(90_000),
+      signal: deadline(o.signal),
     });
     const raw = await res.text(), chunks: Buffer[] = [], words: WordTime[] = [];
     let err: string | null = null;
@@ -109,7 +119,7 @@ export function elevenLabsTts(apiKey: string, model = 'eleven_multilingual_v2'):
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'xi-api-key': apiKey },
         body: JSON.stringify({ text, model_id: model, voice_settings: { stability: 0.5, similarity_boost: 0.75, speed } }),
-        signal: o.signal ?? AbortSignal.timeout(90_000),
+        signal: deadline(o.signal),
       });
       if (!res.ok) throw new Error(`ElevenLabs ${res.status} ${(await res.text()).slice(0, 200)}`);
       const j = (await res.json()) as { audio_base64: string; alignment?: { characters: string[]; character_start_times_seconds: number[]; character_end_times_seconds: number[] } };
