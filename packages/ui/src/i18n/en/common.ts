@@ -9,6 +9,9 @@ const en: typeof zh = {
   dark: 'Dark',
   settings: 'Settings',
   signOut: 'Sign out',
+  credits: '{n} credits',
+  creditsLow: 'Running low',
+  creditsTitle: 'Your credits: open billing and top-ups',
   requestFailed: 'Request failed ({status})',
   styles: {
     'warm-story': 'Warm storybook', study: 'Quiet study', whiteboard: 'Whiteboard', chalkboard: 'Chalkboard', 'tech-dark': 'Tech dark',

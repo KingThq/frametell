@@ -53,7 +53,7 @@ export interface Hosted {
   email?: string;
   signOut(): void;
   /** the account's credits, shown in the top bar and linking to where they are managed; absent: no billing */
-  credits?: { read(): Promise<{ available: number; perMinute: number } | null>; url: string };
+  credits?: { read(): Promise<{ available: number; perMinute: number; plan?: string; styles?: string[] | null } | null>; url: string };
 }
 
 class HttpError extends Error { constructor(msg: string, readonly status: number) { super(msg); } }

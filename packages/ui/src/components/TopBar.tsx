@@ -3,6 +3,7 @@ import { Wordmark } from './Logo';
 import { useTheme } from '../lib/hooks';
 import { useT } from '../i18n';
 import { hosted } from '../lib/client';
+import { Credits } from './Credits';
 
 export function TopBar({ children, onSettings }: { children?: React.ReactNode; onSettings: () => void }) {
   const { dark, toggle } = useTheme();
@@ -16,6 +17,7 @@ export function TopBar({ children, onSettings }: { children?: React.ReactNode; o
       <button className="fs-icon-btn" onClick={toggle} aria-label={dark ? t('common.toLight') : t('common.toDark')} title={dark ? t('common.light') : t('common.dark')}>{dark ? <Sun size={16} /> : <Moon size={16} />}</button>
       {hosted ? (
         <>
+          <Credits />
           {hosted.email && <span className="hidden max-w-[220px] truncate text-[12.5px] text-ink-3 sm:inline" title={hosted.email}>{hosted.email}</span>}
           <button className="fs-icon-btn" onClick={() => hosted?.signOut()} aria-label={t('common.signOut')} title={t('common.signOut')}><LogOut size={16} /></button>
         </>

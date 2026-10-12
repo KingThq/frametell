@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, CircleAlert, FileText, Image as ImageIcon, Loader2, Paperclip, Play, Settings2, Square, X } from 'lucide-react';
+import { ArrowRight, CircleAlert, FileText, Image as ImageIcon, Loader2, Lock, Paperclip, Play, Settings2, Square, X } from 'lucide-react';
 import { client, hosted, type ProjectView, type PublicSettings, type Voice } from '../lib/client';
 import { go, useLoad } from '../lib/hooks';
 import { STAGE_NAME, type Stage } from '../lib/run';
 import { STYLE_SWATCH, styleName, styleSummary } from '../lib/styles';
 import { intlTag, t, useT } from '../i18n';
+import { useCredits } from '../components/Credits';
 import { ModelPicker } from '../components/ModelPicker';
 import { VoicePicker } from '../components/VoicePicker';
 
@@ -53,6 +54,9 @@ export function Home({ openSettings }: { openSettings: (section?: string) => voi
   // ?topic= starts the box with an idea typed elsewhere (frametell.ai's landing page)
   const [topic, setTopic] = useState(() => new URLSearchParams(location.search).get('topic') || '');
   const [duration, setDuration] = useState(60);
+  // on a hosted service: what this film is quoted at, against the balance
+  const credits = useCredits();
+  const estimate = credits ? Math.ceil((duration / 60) * credits.perMinute) : 0;
   const [lang, setLang] = useState<'zh' | 'en'>();
   const [style, setStyle] = useState<string>();
   const [model, setModel] = useState<string>();
@@ -86,7 +90,9 @@ export function Home({ openSettings }: { openSettings: (section?: string) => voi
   // a voice of a service with no key can be heard, not used: the film would come out silent
   const voiceNoKey = !!picked && voices.data?.configured[picked.provider] === false;
   const hasInput = !!topic.trim() || files.length > 0;
-  const ready = hasInput && !!modelId && !voiceNoKey && !busy;
+  // a hosted plan may draw in only some styles: the others show, marked, and say how to get them
+  const lockedStyle = (id: string) => !!credits?.styles && !credits.styles.includes(id);
+  const ready = hasInput && !!modelId && !voiceNoKey && !busy && !lockedStyle(styleId);
   const add = (list: FileList | null) => {
     if (!list) return;
     const ok = [...list].filter((f) => READABLE.test(f.name));
@@ -179,13 +185,17 @@ export function Home({ openSettings }: { openSettings: (section?: string) => voi
             <legend className="fs-label">{t('home.style')}</legend>
             <div className="flex flex-wrap gap-1.5" role="radiogroup">
               {(styles.data || []).map((s) => (
-                <button key={s.id} type="button" role="radio" aria-checked={styleId === s.id} className="fs-chip" onClick={() => setStyle(s.id)}>
-                  <span className="flex -space-x-1" aria-hidden>{(STYLE_SWATCH[s.id] || []).map((c) => <span key={c} className="h-3 w-3 rounded-full ring-1 ring-black/15" style={{ background: c }} />)}</span>
+                <button key={s.id} type="button" role="radio" aria-checked={styleId === s.id} className={`fs-chip ${lockedStyle(s.id) ? 'text-ink-3' : ''}`} onClick={() => setStyle(s.id)}>
+                  <span className={`flex -space-x-1 ${lockedStyle(s.id) ? 'opacity-60' : ''}`} aria-hidden>{(STYLE_SWATCH[s.id] || []).map((c) => <span key={c} className="h-3 w-3 rounded-full ring-1 ring-black/15" style={{ background: c }} />)}</span>
                   {styleName(s.id) ?? s.name}
+                  {lockedStyle(s.id) && <><Lock size={11} className="text-ink-3" aria-hidden /><span className="sr-only">{t('home.styleMembers')}</span></>}
                 </button>
               ))}
             </div>
             {current && <p className="mt-2 text-[12.5px] text-ink-3">{styleSummary(current.id) ?? current.summary}</p>}
+            {current && lockedStyle(current.id) && credits && (
+              <p className="mt-1.5 text-[12.5px] text-accent-ink">{t('home.styleLocked')} <a className="underline underline-offset-2" href={credits.url} target="_top">{t('home.upgrade')}</a></p>
+            )}
           </fieldset>
           {!hosted && <div className="sm:col-span-2">
             <div className="flex items-baseline justify-between gap-3">
@@ -221,8 +231,10 @@ export function Home({ openSettings }: { openSettings: (section?: string) => voi
             <p className="text-[12.5px] text-seal" role="alert">{error}</p>
           ) : hint ? (
             <p className="text-[12.5px] text-ink-3">{hint}</p>
+          ) : credits && estimate > credits.available ? (
+            <p className="text-[12.5px] text-seal" role="status">{t('home.short', { n: estimate.toLocaleString(intlTag()) })} <a className="underline underline-offset-2" href={credits.url} target="_top">{t('home.topUp')}</a></p>
           ) : (
-            <p className="text-[12px] text-ink-3"><kbd className="fs-kbd">⌘</kbd> <kbd className="fs-kbd">↵</kbd> {t('home.startKey')}</p>
+            <p className="text-[12px] text-ink-3"><kbd className="fs-kbd">⌘</kbd> <kbd className="fs-kbd">↵</kbd> {t('home.startKey')}{credits && <span className="tabular-nums"> · {t('home.estimate', { n: estimate.toLocaleString(intlTag()) })}</span>}</p>
           )}
           <button className="fs-btn fs-btn-accent fs-btn-lg" disabled={!ready} onClick={start}>
             {busy && <Loader2 size={16} className="animate-spin" aria-hidden />}

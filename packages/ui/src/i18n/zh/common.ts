@@ -8,6 +8,9 @@ export default {
   dark: '深色',
   settings: '设置',
   signOut: '退出登录',
+  credits: '{n} 积分',
+  creditsLow: '积分不多了',
+  creditsTitle: '积分余额，点开看计费和充值',
   requestFailed: '请求失败（{status}）',
   styles: {
     'warm-story': '暖调叙事插画', study: '安静书房', whiteboard: '白板手绘', chalkboard: '黑板', 'tech-dark': '科技深色',
