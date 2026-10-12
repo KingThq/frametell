@@ -209,7 +209,7 @@ class Runner {
     try {
       // PDF/Word/PPT/EPUB → Markdown the director can read (skipped when already done); a file that cannot be read is
       // reported but does not stop the run
-      const { files } = await prepareMaterials(path.join(dir, 'materials'));
+      const { files } = await prepareMaterials(path.join(dir, 'materials'), meta.lang ?? 'zh');
       for (const f of files) if (f.kind === 'document' && !f.parsedTo) this.emit({ type: 'error', message: tr(`资料 ${f.name} 读不了：${f.warning}`, `Couldn't read ${f.name}: ${f.warning}`) });
       const { runtime, prices } = await buildRuntime(meta, cfg);
       const ttsKey = meta.voice?.provider === 'elevenlabs' ? cfg.tts.elevenlabs : cfg.tts.volcengine;

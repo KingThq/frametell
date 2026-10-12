@@ -169,7 +169,7 @@ export class Studio {
   /** talk to the director: storyboard feedback, a note mid-run, or a change to the finished film */
   say(id: string, text: string, refs?: unknown) { return this.store.runner(id).say(text, cleanRefs(refs)); }
   /** save a file the user attached to a message; returns the reference to send with it */
-  attach(id: string, name: string, data: Uint8Array): Promise<UserRef> { this.store.read(id); return attach(this.store.dir(id), name, data); }
+  attach(id: string, name: string, data: Uint8Array): Promise<UserRef> { const meta = this.store.read(id); return attach(this.store.dir(id), name, data, meta.lang ?? 'zh'); }
 
   /** replay events after `since`, then stream live ones; returns the unsubscribe function */
   subscribe(id: string, since: number, fn: (e: LoggedEvent) => void): () => void { return this.store.runner(id).subscribe(fn, since); }

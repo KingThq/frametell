@@ -16,7 +16,7 @@ They install Frametell on their own computer and usually use it in a focused ses
 
 ## Product Purpose
 
-An open-source AI explainer-video studio. The director agent first drafts a storyboard for the user to approve, then writes the narration, voices it, draws each page and checks its own work, and finally renders a 1080p video. Any model can drive it, with Relay as the recommended first choice; material and keys stay on the user's computer.
+An open-source AI explainer-video studio. The director agent first drafts a storyboard for the user to approve, then writes the narration, voices it, draws each page and checks its own work, and finally renders a 1080p video. Any model can drive it, with the user's own keys; material and keys stay on the user's computer.
 
 What success looks like: a video ready to publish on the first try; knowing at every moment what the agent is doing and what it has cost; when something should change, being able to point at a page and say what.
 
@@ -26,7 +26,7 @@ A complete, mature video engine plus a visible director agent: nothing is genera
 
 ## Brand Personality
 
-Quiet, precise, warm. Studio is part of Relay: the same Ink & Paper language, dark by default, like a studio with a warm lamp on at night. The interface steps back; the video itself is the brightest thing in the room. The process feels like a dependable colleague talking you through the work as it goes, with a small sense of ceremony when the film is done.
+Quiet, precise, warm. Studio speaks the Ink & Paper language, dark by default, like a studio with a warm lamp on at night. The interface steps back; the video itself is the brightest thing in the room. The process feels like a dependable colleague talking you through the work as it goes, with a small sense of ceremony when the film is done.
 
 ## Anti-references
 
@@ -39,9 +39,9 @@ Quiet, precise, warm. Studio is part of Relay: the same Ink & Paper language, da
 - **The film is the star; the process is transparent.** The workspace always keeps the video at the visual centre; the conversation explains what the agent is doing and why without competing with the picture.
 - **Decide at the moments that matter.** Storyboard sign-off, pages that need attention and continuing after an error are all handled in place, where the user is already looking, never by an interrupting pop-up.
 - **Be clear about money and time.** Amount spent, model in use and the time each stage took are visible at a glance at any moment.
-- **One language with Relay.** Tokens, components and motion follow Ink & Paper; Studio is part of Relay.
+- **One visual language.** Tokens, components and motion follow Ink & Paper, across the studio, the site and the brand.
 - **Fail gracefully.** When something goes wrong, say what happened and what can be done next, and continue with one click.
 
 ## Accessibility & Inclusion
 
-Body text contrast ≥ 4.5:1; state never relies on colour alone and always comes with text or an icon; a complete keyboard path with visible focus; respect `prefers-reduced-motion`. The interface defaults to Chinese, with copy structured for an English version to follow.
+Body text contrast ≥ 4.5:1; state never relies on colour alone and always comes with text or an icon; a complete keyboard path with visible focus; respect `prefers-reduced-motion`. The interface speaks English and Chinese, following the system language unless the user picks one in settings; every string exists in both, and the director answers in the language the user writes in.

@@ -1,6 +1,6 @@
 # Frametell · Design system
 
-Follows Relay's **Ink & Paper**: warm paper, ink text and a single caramel accent; the quality comes from type and detail, not neon, glass or gradients. Studio is dark by default (Relay's dark set) and can switch to light.
+Follows **Ink & Paper**: warm paper, ink text and a single caramel accent; the quality comes from type and detail, not neon, glass or gradients. Studio is dark by default (the dark set) and can switch to light.
 
 ## Scene
 

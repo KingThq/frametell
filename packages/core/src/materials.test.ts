@@ -104,7 +104,7 @@ test('docx: headings, paragraphs, tables and embedded pictures', async () => {
 test('pptx: slides in presentation order, titles, bullet levels, tables, notes, pictures', async () => {
   const dir = tmp();
   fs.writeFileSync(path.join(dir, 'deck.pptx'), await pptx());
-  const { files } = await prepareMaterials(dir);
+  const { files } = await prepareMaterials(dir, 'zh');
   assert.equal(files.find((f) => f.name === 'deck.pptx')?.pages, 2);
   const md = fs.readFileSync(path.join(dir, 'deck.md'), 'utf8');
   const first = md.indexOf('## 第 1 页：开场：为什么'), second = md.indexOf('## 第 2 页：结尾');
@@ -131,7 +131,7 @@ test('epub: chapters in spine order with headings and lists', async () => {
 test('pdf: page headings, a large line becomes a heading, body text kept', async () => {
   const dir = tmp();
   fs.writeFileSync(path.join(dir, 'paper.pdf'), pdf());
-  const { files } = await prepareMaterials(dir);
+  const { files } = await prepareMaterials(dir, 'zh');
   const f = files[0];
   assert.equal(f.pages, 2);
   assert.equal(f.warning, undefined);
@@ -140,6 +140,18 @@ test('pdf: page headings, a large line becomes a heading, body text kept', async
   assert.match(md, /^### Relay Overview$/m);
   assert.match(md, /Studio turns your materials into explainer videos\./);
   assert.ok(md.indexOf('## 第 2 页') > md.indexOf('no cloud OCR'));
+});
+
+test('page headings and speaker notes follow the film language', async () => {
+  const dir = tmp();
+  fs.writeFileSync(path.join(dir, 'deck.pptx'), await pptx());
+  fs.writeFileSync(path.join(dir, 'paper.pdf'), pdf());
+  await prepareMaterials(dir, 'en');
+  const deck = fs.readFileSync(path.join(dir, 'deck.md'), 'utf8'), paper = fs.readFileSync(path.join(dir, 'paper.md'), 'utf8');
+  assert.ok(deck.includes('## Page 1: 开场：为什么') && deck.includes('## Page 2: 结尾'), deck);
+  assert.match(deck, /^> Notes: 先讲痛点$/m);
+  assert.match(paper, /^## Page 1$/m);
+  assert.ok(!/第 \d+ 页|备注/.test(deck + paper));
 });
 
 test('idempotent, never touches originals or a user-written x.md, reports failures', async () => {

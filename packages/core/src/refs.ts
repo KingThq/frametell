@@ -15,7 +15,7 @@ const safe = (p: string) => !path.isAbsolute(p) && !p.split(/[\\/]/).includes('.
  * Save a file the user attached into the project's refs/ folder. Documents are parsed to markdown next to it (the
  * director reads that); images and text files are used as they are. Returns the reference to send with the message.
  */
-export async function attach(dir: string, name: string, data: Uint8Array): Promise<UserRef> {
+export async function attach(dir: string, name: string, data: Uint8Array, lang: 'zh' | 'en' = 'en'): Promise<UserRef> {
   if (data.byteLength > MAX_BYTES) throw new Error(tr(`「${name}」超过 20MB，换个小一点的文件`, `“${name}” is over 20 MB. Try a smaller file.`));
   const kind = kindOf(name);
   if (!kind) throw new Error(tr(`「${name}」的格式还不支持：可以附图片、Markdown / 文本、PDF、Word、PPT、EPUB`, `“${name}” isn't a supported format. Attach images, Markdown / text, PDF, Word, PowerPoint or EPUB.`));
@@ -26,7 +26,7 @@ export async function attach(dir: string, name: string, data: Uint8Array): Promi
   fs.writeFileSync(path.join(refs, file), data);
   let rel = `refs/${file}`;
   if (kind === 'document') {
-    const parsed = (await prepareMaterials(refs)).files.find((f) => f.name === file);
+    const parsed = (await prepareMaterials(refs, lang)).files.find((f) => f.name === file);
     if (!parsed?.parsedTo) throw new Error(tr(`「${name}」没能读出文字${parsed?.warning ? `：${parsed.warning}` : ''}`, `Couldn't read any text from “${name}”${parsed?.warning ? `: ${parsed.warning}` : ''}`));
     rel = `refs/${parsed.parsedTo}`;
   }

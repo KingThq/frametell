@@ -30,7 +30,15 @@ export const kindOf = (name: string): MaterialKind | undefined =>
 interface Parsed { markdown: string; pages?: number; warning?: string }
 type ImageSink = (data: Uint8Array, ext: string) => string | undefined;
 
-export async function prepareMaterials(dir: string): Promise<{ files: PreparedMaterial[] }> {
+/** the headings a parse writes into the Markdown the director reads, in the film's language */
+const LABELS = {
+  zh: { page: (n: number, title?: string) => `第 ${n} 页${title ? `：${title}` : ''}`, notes: '备注：' },
+  en: { page: (n: number, title?: string) => `Page ${n}${title ? `: ${title}` : ''}`, notes: 'Notes: ' },
+};
+export type MaterialLang = keyof typeof LABELS;
+
+export async function prepareMaterials(dir: string, lang: MaterialLang = 'en'): Promise<{ files: PreparedMaterial[] }> {
+  const L = LABELS[lang] ?? LABELS.en;
   if (!fs.existsSync(dir)) return { files: [] };
   const names = fs.readdirSync(dir).filter((n) => !n.startsWith('.') && fs.statSync(path.join(dir, n)).isFile()).sort();
   const files: PreparedMaterial[] = [];
@@ -65,7 +73,7 @@ export async function prepareMaterials(dir: string): Promise<{ files: PreparedMa
     try {
       const buf = fs.readFileSync(src);
       const ext = path.extname(name).slice(1).toLowerCase();
-      const r = ext === 'pdf' ? await parsePdf(buf) : ext === 'docx' ? await parseDocx(buf, sink) : ext === 'pptx' ? await parsePptx(buf, sink) : await parseEpub(buf);
+      const r = ext === 'pdf' ? await parsePdf(buf, L) : ext === 'docx' ? await parseDocx(buf, sink) : ext === 'pptx' ? await parsePptx(buf, sink, L) : await parseEpub(buf);
       const body = tidy(r.markdown);
       fs.writeFileSync(outPath, header(name, r.pages) + `# ${base}\n\n` + body + '\n');
       const warning = r.warning ?? (body.trim() ? undefined : tr('没有提取到文字', 'no text found'));
@@ -126,7 +134,7 @@ async function rels(zip: JSZip, part: string) {
 
 // ── PDF ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
-async function parsePdf(buf: Buffer): Promise<Parsed> {
+async function parsePdf(buf: Buffer, L: (typeof LABELS)[MaterialLang]): Promise<Parsed> {
   const { getDocumentProxy, extractTextItems } = await import('unpdf');
   const pdf = await getDocumentProxy(new Uint8Array(buf), { verbosity: 0 });
   try {
@@ -163,7 +171,7 @@ async function parsePdf(buf: Buffer): Promise<Parsed> {
     const out: string[] = [];
     let chars = 0;
     pages.forEach((lines, i) => {
-      out.push(`## 第 ${i + 1} 页`);
+      out.push(`## ${L.page(i + 1)}`);
       let para = '', heading = '';
       const flush = () => { if (para) out.push(para); if (heading) out.push(heading); para = heading = ''; };
       for (const l of lines) {
@@ -264,7 +272,7 @@ function inline(s: string) {
 
 const REL_SLIDE = /\/slide$/, REL_NOTES = /\/notesSlide$/, REL_IMAGE = /\/image$/;
 
-async function parsePptx(buf: Buffer, sink: ImageSink): Promise<Parsed> {
+async function parsePptx(buf: Buffer, sink: ImageSink, L: (typeof LABELS)[MaterialLang]): Promise<Parsed> {
   const zip = await JSZip.loadAsync(buf);
   const slideNo = (p: string) => +(/slide(\d+)\.xml$/.exec(p)?.[1] ?? 0);
   // presentation order comes from presentation.xml's slide list; fall back to slideN numbering
@@ -313,14 +321,14 @@ async function parsePptx(buf: Buffer, sink: ImageSink): Promise<Parsed> {
       const sub = !!ph && /type="subTitle"/.test(ph);
       for (const p of paras) lines.push(sub ? p.text : `${'  '.repeat(p.level)}- ${p.text}`);
     }
-    out.push(`## 第 ${i + 1} 页${title ? `：${title}` : ''}`);
+    out.push(`## ${L.page(i + 1, title)}`);
     if (lines.length) out.push(lines.join('\n'));
     const notesPart = [...r.values()].find((x) => REL_NOTES.test(x.type))?.target;
     const notesXml = notesPart ? await zip.file(notesPart)?.async('string') : undefined;
     if (notesXml) {
       // the notes slide also holds a slide-image and a slide-number placeholder; only the body is the speaker's
       const notes = [...notesXml.matchAll(/<p:sp\b[\s\S]*?<\/p:sp>/g)].filter((s) => /<p:ph\b[^>]*type="body"/.test(s[0])).flatMap((s) => paragraphs(s[0]).map((p) => p.text));
-      if (notes.length) out.push(notes.map((n, k) => `> ${k ? '' : '备注：'}${n}`).join('\n>\n'));
+      if (notes.length) out.push(notes.map((n, k) => `> ${k ? '' : L.notes}${n}`).join('\n>\n'));
     }
   }
   return { markdown: out.join('\n\n'), pages: order.length };
