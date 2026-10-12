@@ -74,10 +74,11 @@ ${code}
 \`\`\`
 Change only what needs changing, with edit; **never rewrite the whole file with write**. **Put all the edits in one reply** (one reply can call edit several times), each with finish: true: you're done once they apply, no reply needed and no need to read the file again; the check screenshots will show the result.`;
 
-// A page is drafted at the model's full thinking level; its check rounds (look at the contact sheet, fix what is off) are
-// small edits and run at medium, which on a gateway's …-high model means its …-medium sibling: most of a check round's
-// time was the model thinking before a short answer.
-const CHECK_THINKING: Thinking = 'medium';
+// Pages are drawn at medium thinking, drafts and check rounds alike; on a gateway's …-high model that means its …-medium
+// sibling. Most of a page's time was the model thinking before writing: on the same pages a -high draft took 170–220 s
+// and a -medium one 37–74 s, with no worse a page (one was cleaner, with no lint issues); a check round dropped from
+// 26–153 s to about 6 s. The storyboard and the narration keep the model's own level.
+const PAGE_THINKING: Thinking = 'medium';
 const MAX = { pagesAtOnce: 10, storyboardFix: 2, planTurns: 30, pageTurns: 40, pageRounds: 3, revisionRounds: 2, reviewRounds: 2 };
 
 export class Director {
@@ -292,8 +293,8 @@ export class Director {
     try {
       const s = await this.session(`page-${id}`, pageSystem(this.o.style, STYLE_EXTRAS[this.o.style] ?? []), MAX.pageTurns);
       const fix = this.state.revision?.[id];
-      let r = await this.send(s, pagePrompt(sb, id, t, this.o.brief.lang, this.o.brief.replyLang) + (fix ? revisionNote(id, fix, this.project.read(`pages/${id}.js`)) : '') + this.unseen(`page-${id}`));
-      if (!this.project.exists(`pages/${id}.js`)) r = await this.send(s, `pages/${id}.js does not exist yet; write it, then stop.`);
+      let r = await this.send(s, pagePrompt(sb, id, t, this.o.brief.lang, this.o.brief.replyLang) + (fix ? revisionNote(id, fix, this.project.read(`pages/${id}.js`)) : '') + this.unseen(`page-${id}`), undefined, PAGE_THINKING);
+      if (!this.project.exists(`pages/${id}.js`)) r = await this.send(s, `pages/${id}.js does not exist yet; write it, then stop.`, undefined, PAGE_THINKING);
       if (!this.project.exists(`pages/${id}.js`)) throw new Error(r.error || this.say('没有写出页面文件', 'No page file was written'));
       st.ref = s.ref;
       await this.commit(this.say(`${id}：初稿`, `${id}: first draft`));
@@ -308,7 +309,7 @@ export class Director {
         if (crash) {
           if (round > rounds) throw new Error(crash);
           this.setPage(id, { ...st, issues: [crash] });
-          r = await this.send(s, crashPrompt(id, crash) + this.unseen(`page-${id}`), undefined, CHECK_THINKING);
+          r = await this.send(s, crashPrompt(id, crash) + this.unseen(`page-${id}`), undefined, PAGE_THINKING);
           await this.commit(this.say(`${id}：修运行错误`, `${id}: fix a runtime error`));
           continue;
         }
@@ -316,7 +317,7 @@ export class Director {
         const times = this.sheetTimes(sb, t);
         const sheet = await this.project.snap(`${id}-r${round}`, times.map((x) => x.t), [id]);
         this.setPage(id, { ...st, issues: issues.map((i) => i.msg) }, { sheet });
-        r = await this.send(s, checkPrompt(round, issues, times) + this.unseen(`page-${id}`), [sheet], CHECK_THINKING);
+        r = await this.send(s, checkPrompt(round, issues, times) + this.unseen(`page-${id}`), [sheet], PAGE_THINKING);
         await this.commit(this.say(`${id}：第 ${round} 轮修改`, `${id}: check round ${round}`));
         const reply = r.text.trim();
         if (/^FLAGGED/i.test(reply)) { st.status = 'flagged'; st.issues = [reply.replace(/^FLAGGED:?\s*/i, '')]; break; }
