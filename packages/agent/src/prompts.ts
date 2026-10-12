@@ -36,7 +36,8 @@ export function pageSystem(style: string, extras: string[] = []) {
 
 /** the film's language (narration, on-screen text) and the language the director reports in (the user's) */
 export type Lang = 'zh' | 'en';
-export interface Brief { topic?: string; audience?: string; durationSec: number; notes?: string; lang?: Lang; replyLang?: Lang }
+/** `voice`: the service that voices the narration; absent when the film has no voice */
+export interface Brief { topic?: string; audience?: string; durationSec: number; notes?: string; lang?: Lang; replyLang?: Lang; voice?: 'volcengine' | 'elevenlabs' }
 
 const LANG_NAME: Record<Lang, string> = { zh: 'Simplified Chinese', en: 'English' };
 /** the language everything said to the user is written in: the user's own, never the prompts' */
@@ -63,6 +64,27 @@ export function langNote(stage: 'storyboard' | 'script' | 'page' | 'revise', lan
   return `\n${film}\n${replyNote(replyLang, lang)}`;
 }
 
+/** What a stage must know about the voice. Volcengine reads a tone instruction with each take (ElevenLabs ignores one);
+ *  a film with no voice is timed by its cues and may be watched without subtitles, so its picture carries the meaning.
+ *  In the user messages, like langNote, so the system prompts stay shared. */
+export function voiceNote(stage: 'storyboard' | 'script' | 'revise', voice?: Brief['voice']) {
+  if (!voice) return {
+    storyboard: 'This film has no voice, and may be watched without subtitles: the picture alone must tell the story, so key words and numbers go on screen as text.',
+    script: 'This film has no voice: nobody hears the cues. They time the picture, and become the subtitles if the user turns them on, so write each as a short caption that reads well on its own.',
+    revise: 'This film has no voice: the cues only time the picture and serve as subtitles.',
+  }[stage];
+  if (voice !== 'volcengine') return '';
+  return {
+    storyboard: '',
+    script: [
+      "The narrator takes a tone instruction with each page. Give every page an `instruction`: one Chinese sentence on how that page is said (pace, warmth, where the weight falls). It replaces the film's default tone, so write it as a whole direction, e.g. `instruction: '放慢一点，像在揭晓答案，最后一句加重'`. Follow the film's arc: the hook curious and quick, the intuition relaxed, the key page slower and firmer, the close calm.",
+      "When one line turns sharply from the rest of its page (a question to the viewer, a punchline, someone else's words quoted), give that cue its own: `{ t: '你猜结果是多少？', solo: { instruction: '真诚地发问，尾音上扬' } }`. A solo line is voiced as a separate take and loses the flow of its page, so use at most one per page and only where the tone really turns; most pages need none.",
+    ].join('\n'),
+    revise: "When you change a page's cues, keep its `instruction` (and any cue's `solo`) in step with the new lines.",
+  }[stage];
+}
+const withVoice = (stage: 'storyboard' | 'script' | 'revise', brief?: Brief) => { const n = voiceNote(stage, brief?.voice); return n ? `\n${n}` : ''; };
+
 export function storyboardPrompt(brief: Brief, style: string, materials: string[]) {
   return [
     'Stage 1: storyboard.',
@@ -71,7 +93,7 @@ export function storyboardPrompt(brief: Brief, style: string, materials: string[
     brief.notes ? `Further notes from the user: ${brief.notes}` : '',
     `Style: ${style} (write "${style}" as the style in storyboard.json).`,
     `Material: ${materials.map((m) => 'materials/' + m).join(', ') || '(none; write from the topic)'}`,
-    'Stop and report once storyboard.json is written.' + langNote('storyboard', brief.lang, brief.replyLang),
+    'Stop and report once storyboard.json is written.' + withVoice('storyboard', brief) + langNote('storyboard', brief.lang, brief.replyLang),
   ].filter(Boolean).join('\n');
 }
 
@@ -80,7 +102,7 @@ export function storyboardFixPrompt(issues: { level: string; page?: string; beat
 }
 
 export function scriptPrompt(feedback?: string, brief?: Brief) {
-  return [feedback ? `The user's changes to the storyboard: ${feedback}\nFirst update storyboard.json to match, then write the narration.` : 'The user approved the storyboard without changes.', 'Stage 2: write script.js, run node engine/tools/script.mjs to see the estimated length, then stop and report.' + langNote('script', brief?.lang, brief?.replyLang)].join('\n');
+  return [feedback ? `The user's changes to the storyboard: ${feedback}\nFirst update storyboard.json to match, then write the narration.` : 'The user approved the storyboard without changes.', 'Stage 2: write script.js, run node engine/tools/script.mjs to see the estimated length, then stop and report.' + withVoice('script', brief) + langNote('script', brief?.lang, brief?.replyLang)].join('\n');
 }
 
 export function pagePrompt(sb: Storyboard, id: string, t: PageTiming, lang: Lang | undefined = sb.lang, replyLang?: Lang) {

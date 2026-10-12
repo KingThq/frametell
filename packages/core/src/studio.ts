@@ -121,7 +121,7 @@ export class Studio {
     const meta = this.store.create({
       title: input.title?.trim() || fromText(topic) || fromText(said) || files[0]?.name.replace(/\.[^.]+$/, '') || tr('未命名视频', 'Untitled video'),
       style: input.style || d.style, durationSec: input.durationSec || d.durationSec, model,
-      runtime: input.runtime || d.runtime, voice: input.voice ?? d.voice, subtitles: input.subtitles ?? d.subtitles,
+      runtime: input.runtime || d.runtime, voice: input.voice === null ? undefined : input.voice ?? d.voice, subtitles: input.subtitles ?? d.subtitles,
       lang: input.lang ?? resolveLocale(cfg.locale), topic, notes: topic ? undefined : input.notes,
     }, files.map((f) => ({ name: f.name, data: Buffer.from(f.data) })));
     void this.store.runner(meta.id).start();

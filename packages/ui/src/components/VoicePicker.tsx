@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, ChevronDown, Loader2, Play, Search, Square } from 'lucide-react';
+import { Check, ChevronDown, Loader2, Play, Search, Square, VolumeX } from 'lucide-react';
 import { client, type Voice } from '../lib/client';
 import { t } from '../i18n';
 import { ProviderLogo } from './ProviderLogo';
 
-// The narrator: the voices of every connected voice service, grouped by service. Any voice can be heard from the list
-// without choosing it; the chosen one can be heard from the field itself.
+// The narrator: the voices of every connected voice service, grouped by service, after the choice of no voice at all
+// (null). Any voice can be heard from the list without choosing it; the chosen one can be heard from the field itself.
 
 const PROVIDER_NAME: Record<Voice['provider'], () => string> = { volcengine: () => t('home.voice.volcengine'), elevenlabs: () => 'ElevenLabs' };
 const gender = (v: Voice) => (v.gender === 'female' ? t('home.voice.femaleTag') : v.gender === 'male' ? t('home.voice.maleTag') : '');
@@ -51,7 +51,7 @@ function PlayButton({ v, p, size = 'md' }: { v: Voice; p: ReturnType<typeof useP
   );
 }
 
-export function VoicePicker({ id = 'voice', voices, value, onChange, unconfigured = [] }: { id?: string; voices: Voice[]; value?: string; onChange: (id: string) => void; unconfigured?: readonly Voice['provider'][] }) {
+export function VoicePicker({ id = 'voice', voices, value, onChange, unconfigured = [] }: { id?: string; voices: Voice[]; value?: string | null; onChange: (id: string | null) => void; unconfigured?: readonly Voice['provider'][] }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
   const [hi, setHi] = useState(0);
@@ -59,7 +59,7 @@ export function VoicePicker({ id = 'voice', voices, value, onChange, unconfigure
   const list = useRef<HTMLDivElement>(null);
   const search = useRef<HTMLInputElement>(null);
   const p = usePreview();
-  const picked = voices.find((v) => v.id === value);
+  const picked = value ? voices.find((v) => v.id === value) : undefined;
   const searchable = voices.length > 8;
 
   const groups = useMemo(() => {
@@ -68,11 +68,12 @@ export function VoicePicker({ id = 'voice', voices, value, onChange, unconfigure
       .map((provider) => ({ provider, items: voices.filter((v) => v.provider === provider && (!s || v.name.toLowerCase().includes(s))) }))
       .filter((g) => g.items.length);
   }, [voices, q]);
-  const flat = groups.flatMap((g) => g.items);
+  // no voice leads the list, unless a search is typed
+  const flat: (Voice | null)[] = [...(q.trim() ? [] : [null]), ...groups.flatMap((g) => g.items)];
 
   useEffect(() => {
     if (!open) return;
-    setQ(''); setHi(Math.max(0, voices.findIndex((v) => v.id === value)));
+    setQ(''); setHi(value ? voices.findIndex((v) => v.id === value) + 1 : 0);
     requestAnimationFrame(() => (searchable ? search.current : list.current)?.focus());
     const away = (e: MouseEvent) => { if (!root.current?.contains(e.target as Node)) setOpen(false); };
     addEventListener('mousedown', away);
@@ -80,7 +81,7 @@ export function VoicePicker({ id = 'voice', voices, value, onChange, unconfigure
   }, [open]);
   useEffect(() => { setHi(0); }, [q]);
   useEffect(() => { list.current?.querySelector<HTMLElement>(`[data-i="${hi}"]`)?.scrollIntoView({ block: 'nearest' }); }, [hi, open]);
-  const choose = (v?: Voice) => { if (!v) return; onChange(v.id); setOpen(false); };
+  const choose = (v?: Voice | null) => { if (v === undefined) return; onChange(v ? v.id : null); setOpen(false); };
   const keys = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') { e.preventDefault(); setHi((h) => Math.min(flat.length - 1, h + 1)); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setHi((h) => Math.max(0, h - 1)); }
@@ -93,10 +94,10 @@ export function VoicePicker({ id = 'voice', voices, value, onChange, unconfigure
   return (
     <div ref={root} className="relative">
       <div className={`flex h-11 items-center gap-1 rounded-[10px] border bg-surface pr-1.5 transition-[border-color,box-shadow] duration-150 ${open ? 'border-accent ring-4 ring-accent/15' : 'border-line hover:border-line-2'}`}>
-        <button id={id} type="button" disabled={!voices.length} onClick={() => setOpen(!open)} aria-haspopup="listbox" aria-expanded={open}
+        <button id={id} type="button" onClick={() => setOpen(!open)} aria-haspopup="listbox" aria-expanded={open}
           className="flex h-full min-w-0 flex-1 items-center gap-2.5 rounded-l-[10px] pl-3 text-left outline-none disabled:opacity-50">
-          {picked ? <ProviderLogo id={picked.provider} size={18} /> : <span className="h-[18px] w-[18px] rounded-full border border-dashed border-line-2" aria-hidden />}
-          <span className="min-w-0 flex-1 truncate text-[13.5px] text-ink">{picked ? picked.name : t('home.voice.none')}</span>
+          {picked ? <ProviderLogo id={picked.provider} size={18} /> : value === null ? <VolumeX size={17} className="shrink-0 text-ink-3" aria-hidden /> : <span className="h-[18px] w-[18px] rounded-full border border-dashed border-line-2" aria-hidden />}
+          <span className="min-w-0 flex-1 truncate text-[13.5px] text-ink">{picked ? picked.name : value === null ? t('home.voice.silent') : t('home.voice.none')}</span>
           {picked && gender(picked) && <span className="shrink-0 text-[12px] text-ink-3">{gender(picked)}</span>}
           <ChevronDown size={15} className={`mr-1 shrink-0 text-ink-3 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} aria-hidden />
         </button>
@@ -115,6 +116,20 @@ export function VoicePicker({ id = 'voice', voices, value, onChange, unconfigure
             </label>
           )}
           <div ref={list} tabIndex={-1} role="listbox" aria-label={t('home.voice.label')} aria-activedescendant={flat.length ? `${id}-o${hi}` : undefined} className="max-h-[320px] overflow-y-auto overscroll-contain py-1.5 outline-none">
+            {!q.trim() && (() => {
+              i++;
+              const idx = i;
+              return (
+                <div id={`${id}-o${idx}`} data-i={idx} role="option" aria-selected={value === null} onMouseEnter={() => setHi(idx)} onMouseDown={(e) => e.preventDefault()} onClick={() => choose(null)}
+                  className={`mx-1.5 flex cursor-pointer items-center gap-3 rounded-lg py-1.5 pl-1.5 pr-2.5 ${hi === idx ? 'bg-ink/[0.06]' : ''}`}>
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center text-ink-3" aria-hidden><VolumeX size={14} /></span>
+                  <span className="min-w-0 flex-1 truncate text-[13px] text-ink">{t('home.voice.silent')}</span>
+                  <span className="shrink-0 text-[11.5px] text-ink-3">{t('home.voice.silentTag')}</span>
+                  <Check size={14} className={`shrink-0 text-accent-ink ${value === null ? '' : 'invisible'}`} aria-hidden />
+                </div>
+              );
+            })()}
+            {!voices.length && <p className="px-4 pb-3 pt-2 text-[12px] text-ink-3">{t('home.voice.none')}</p>}
             {groups.map((g) => (
               <div key={g.provider} role="group" aria-label={PROVIDER_NAME[g.provider]()}>
                 {(groups.length > 1 || unconfigured.includes(g.provider)) && <div className="flex items-center gap-2 px-3 pb-1 pt-2.5 text-[11.5px] font-medium text-ink-3"><ProviderLogo id={g.provider} size={13} />{PROVIDER_NAME[g.provider]()}{unconfigured.includes(g.provider) && <span className="ml-auto font-normal">{t('home.voice.noKeyTag')}</span>}</div>}

@@ -56,7 +56,8 @@ export function Home({ openSettings }: { openSettings: (section?: string) => voi
   const [lang, setLang] = useState<'zh' | 'en'>();
   const [style, setStyle] = useState<string>();
   const [model, setModel] = useState<string>();
-  const [voice, setVoice] = useState<string>();
+  // null: no voice; undefined: the default one
+  const [voice, setVoice] = useState<string | null>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [drag, setDrag] = useState(false);
@@ -65,17 +66,16 @@ export function Home({ openSettings }: { openSettings: (section?: string) => voi
   const noModel = models.data && !models.data.models.length;
   const modelId = model ?? settings.data?.defaults.model ?? (models.data?.default ? `${models.data.default.provider}/${models.data.default.id}` : undefined);
   const styleId = style ?? settings.data?.defaults.style ?? 'warm-story';
-  // hosted: only the voices the service can speak with
-  const voiceList = (voices.data?.voices || []).filter((v) => !hosted || voices.data?.configured[v.provider]);
   const filmLang = lang ?? locale;
-  // a voice speaks the film's language: Volcengine's are Chinese voices (lang 'zh'); ElevenLabs' speak many (no lang)
-  const speaks = (v: { lang?: string }) => !v.lang || v.lang === filmLang;
-  const defaultVoice = voiceList.find((v) => v.id === settings.data?.defaults.voice?.id && speaks(v)) ?? voiceList.find(speaks) ?? voiceList[0];
-  const voiceId = voice ?? defaultVoice?.id;
+  // only voices that speak the film's language: Volcengine's are Chinese voices (lang 'zh'), so an English film (the
+  // default in English) never offers them; ElevenLabs' speak many (no lang). Hosted: only the voices the service can use
+  const voiceList = (voices.data?.voices || []).filter((v) => (!v.lang || v.lang === filmLang) && (!hosted || voices.data?.configured[v.provider]));
+  const defaultVoice = voiceList.find((v) => v.id === settings.data?.defaults.voice?.id) ?? voiceList[0];
+  // no voice to offer means none; until the list loads, undefined (the server's default)
+  const voiceId = voice !== undefined ? voice : voices.data ? defaultVoice?.id ?? null : undefined;
   const picked = voiceList.find((v) => v.id === voiceId);
   // a voice of a service with no key can be heard, not used: the film would come out silent
   const voiceNoKey = !!picked && voices.data?.configured[picked.provider] === false;
-  const voiceOtherLang = !!picked && !speaks(picked);
   const hasInput = !!topic.trim() || files.length > 0;
   const ready = hasInput && !!modelId && !voiceNoKey && !busy;
   const add = (list: FileList | null) => {
@@ -90,7 +90,7 @@ export function Home({ openSettings }: { openSettings: (section?: string) => voi
     setBusy(true); setError(undefined);
     try {
       const v = voiceList.find((x) => x.id === voiceId);
-      const p = await client.createProject({ durationSec: duration, lang: filmLang, style: styleId, model: modelId, notes: topic.trim() || undefined, voice: v ? { provider: v.provider, id: v.id, name: v.name } : undefined }, files);
+      const p = await client.createProject({ durationSec: duration, lang: filmLang, style: styleId, model: modelId, notes: topic.trim() || undefined, voice: v ? { provider: v.provider, id: v.id, name: v.name } : voiceId === null ? null : undefined }, files);
       go(`#/p/${p.id}`);
     } catch (e) { setError((e as Error).message); setBusy(false); }
   };
@@ -155,7 +155,6 @@ export function Home({ openSettings }: { openSettings: (section?: string) => voi
           <div>
             <label htmlFor="voice" className="fs-label">{t('home.voice.label')}</label>
             <VoicePicker voices={voiceList} value={voiceId} onChange={setVoice} unconfigured={voices.data && !hosted ? (['volcengine', 'elevenlabs'] as const).filter((p) => !voices.data!.configured[p]) : []} />
-            {voiceOtherLang && !voiceNoKey && <p className="mt-1.5 text-[12px] text-ink-2">{t('home.voice.langMismatch')}</p>}
             {voiceNoKey && picked && (
               <p className="mt-1.5 text-[12px] text-ink-2">
                 {t('home.voice.needKey', { service: picked.provider === 'volcengine' ? t('home.voice.volcengine') : 'ElevenLabs' })}

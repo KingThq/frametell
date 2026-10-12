@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { narrate, type TtsProvider } from '@frametell/voice';
 import { Project, type LintIssue, type PageTiming, type Storyboard, type Renderer } from './project.js';
-import { checkPrompt, langNote, pagePrompt, pageSystem, plannerSystem, replyNote, reviewPrompt, scriptPrompt, storyboardFixPrompt, storyboardPrompt, type Brief } from './prompts.js';
+import { checkPrompt, langNote, voiceNote, pagePrompt, pageSystem, plannerSystem, replyNote, reviewPrompt, scriptPrompt, storyboardFixPrompt, storyboardPrompt, type Brief } from './prompts.js';
 import { addUsage, emptyUsage, type AgentRuntime, type AgentSession, type Thinking, type TokenUsage, type TurnResult } from './runtime/types.js';
 import type { PageStatus, Stage, StudioEvent } from './events.js';
 
@@ -232,7 +232,7 @@ export class Director {
     this.state.stage = 'narrate'; this.save();
     if (!this.o.tts || !this.o.voice) {
       this.state.stage = 'pages'; this.save();
-      this.emit({ type: 'stage', stage: 'narrate', status: 'skipped', detail: this.say('没有配置配音，用估算时长', 'No voice set up; using estimated timing') });
+      this.emit({ type: 'stage', stage: 'narrate', status: 'skipped', detail: this.say('这条视频不配音，按估算时长', 'No voice for this film; using estimated timing') });
       return;
     }
     this.serverMeta();
@@ -453,7 +453,7 @@ export class Director {
 ${request}
 
 Decide which pages to change and how: change only the pages that need it (usually 1–2). Touch script.js only when the user asks to change the narration; then change the matching cues and keep their number the same.
-${langNote('revise', this.o.brief.lang, this.o.brief.replyLang).trim()}
+${[voiceNote('revise', this.o.brief.voice), langNote('revise', this.o.brief.lang, this.o.brief.replyLang).trim()].filter(Boolean).join('\n')}
 Write the decision to .studio/revision.json: { "pages": [{ "id": "p03", "note": "the change for the page agent, down to objects and actions" }] }, then tell the user in one sentence what you will change.
 The storyboard and script.js${named.length ? ' and the code of the pages mentioned' : ''} are given below; don't read them again. Read pages/<id>.js for other pages only if you need to.
 You decide only which pages change and what they should become; the page agent writes the code. Don't look into the engine, take screenshots or run tools. When the user points at a page (a page in <references>), that is usually the page to change.

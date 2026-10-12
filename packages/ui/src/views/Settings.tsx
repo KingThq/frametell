@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, AudioLines, Boxes, Check, CircleAlert, Globe, KeyRound, Monitor, SlidersHorizontal, X, type LucideIcon } from 'lucide-react';
 import { client, type ModelInfo, type PublicSettings, type SettingsPatch } from '../lib/client';
 import { useLoad } from '../lib/hooks';
-import { t, useT, type MessageKey } from '../i18n';
+import { t, useT, type MessageKey, getLocale } from '../i18n';
 import { ProviderLogo } from '../components/ProviderLogo';
 import { CustomForm, ProviderDetail, ProviderList, type ProviderView } from './ProviderSettings';
 
@@ -20,6 +20,7 @@ interface Section {
   detail: (c: Ctx, open: string | undefined, setOpen: (id: string | undefined) => void) => React.ReactNode;
 }
 
+// Volcengine first in Chinese; in English ElevenLabs first, Volcengine's voices speaking only Chinese
 const VOICES = [
   { id: 'volcengine', key: 'volcengine' as const, url: 'https://console.volcengine.com/speech/app', hint: 'API Key' },
   { id: 'elevenlabs', key: 'elevenlabs' as const, url: 'https://elevenlabs.io/app/settings/api-keys', hint: 'sk_…' },
@@ -49,7 +50,7 @@ const SECTIONS: Section[] = [
   },
   {
     id: 'voice', icon: AudioLines, label: 'settings.nav.voice',
-    list: (c) => ({ items: VOICES.map((v) => ({ id: v.id, name: t(`settings.voice.${v.id}` as MessageKey), logo: v.id, on: !!c.s.tts[v.key] })) }),
+    list: (c) => ({ items: (getLocale() === 'en' ? [...VOICES].reverse() : VOICES).map((v) => ({ id: v.id, name: t(`settings.voice.${v.id}` as MessageKey), logo: v.id, on: !!c.s.tts[v.key] })) }),
     detail: (c, open) => { const v = VOICES.find((x) => x.id === open) ?? VOICES[0]; return <VoiceDetail key={v.id} v={v} c={c} />; },
   },
   { id: 'general', icon: SlidersHorizontal, label: 'settings.nav.general', detail: (c) => <General c={c} /> },

@@ -41,7 +41,8 @@ export interface NewProjectInput {
   durationSec?: number;
   model?: string;
   runtime?: RuntimeId;
-  voice?: VoiceChoice;
+  /** null: a film with no voice; absent: the default voice */
+  voice?: VoiceChoice | null;
   subtitles?: boolean;
   /** default: the panel's language */
   lang?: Locale;

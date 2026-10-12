@@ -217,7 +217,7 @@ class Runner {
       const voice = meta.voice && tts ? { speaker: meta.voice.id, rate: 0, instruction: '像跟朋友分享一个实用的发现，语气轻松、真诚、自然，有轻重缓急' } : undefined;
       director = new Director({
         dir, runtime, style: meta.style, prices, tts, voice, concurrency: cfg.defaults.concurrency,
-        brief: { durationSec: meta.durationSec, topic: meta.topic, notes: meta.notes, lang: meta.lang ?? 'zh', replyLang: this.replyLang ?? resolveLocale(cfg.locale) },
+        brief: { durationSec: meta.durationSec, topic: meta.topic, notes: meta.notes, lang: meta.lang ?? 'zh', replyLang: this.replyLang ?? resolveLocale(cfg.locale), voice: voice && meta.voice?.provider },
         emit: this.emit, signal: this.abort.signal, renderer: this.renderer,
       });
     } catch (e) {
