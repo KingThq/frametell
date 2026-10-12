@@ -12,8 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - A film can draw its pages with another model than its director's. The director (storyboard, narration, planning a change) and the pages (drawing them, checking the whole film) each have a model in the new-film form, remembered for the next film; the pages are most of a film's tokens, so a faster, cheaper model there saves the most. Unset, the pages use the director's; the page model must be able to see images, and each turn is priced at the model that took it.
-- 「我的音色」: any Volcengine voice by its id (the 1.0 and 2.0 libraries, and cloned voices), pasted at the foot of a voice list or added in Settings. Adding one speaks a sample with it, so a wrong id or a voice the account hasn't enabled is said right there. 1.0 voices get word timings too. The built-in list is 18 explainer voices of TTS 2.0, with samples.
-- A film's voice can be switched from the composer: pick another in 「本片设置」 and send; the whole film is narrated again in that voice and nothing is redrawn (going back to a voice you had costs nothing).
+- My voices: any Volcengine voice by its id (the 1.0 and 2.0 libraries, and cloned voices), pasted at the foot of a voice list or added in Settings. Adding one speaks a sample with it, so a wrong id or a voice the account hasn't enabled is said right there. 1.0 voices get word timings too. The built-in list is 18 explainer voices of TTS 2.0, with samples.
+- A film's voice can be switched from the composer: pick another under This film and send; the whole film is narrated again in that voice and nothing is redrawn (going back to a voice you had costs nothing).
 - A Volcengine key can also be an older app's `AppID:Access Token`.
 - The model picker lists providers on the left and their models on the right; search spans every provider, and arrow keys and Tab move between them.
 - `studio.resumeInterrupted()` continues the runs and exports a restart cut short, for a hosted service that restarts on every deploy. The desktop app and the CLI still leave it to you: the film shows as paused, with Continue.
@@ -46,7 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Films are made faster. Pages are drafted at medium thinking (a draft took 37–74 s instead of 170–220 s, and the pages were no worse); the director writes the storyboard from what it is given instead of browsing the engine first (the first storyboard came in about 50 s instead of 100 s); a check round's fixes go out in one reply and end the round, instead of two or three more model turns; and `frametell run` draws up to ten pages at once, like the studio.
 - The director's prompts, the style cards, the engine's tools and the docs are in English. Films are still made in Chinese or English, and every stage names the film's language. Reports, notes and failures follow the language of your latest message, or the interface's.
-- Material parsed from PDF and PowerPoint follows the film's language too: 「第 N 页」 and 「备注」 for a Chinese film, "Page N" and "Notes:" for an English one.
+- Material parsed from PDF and PowerPoint follows the film's language too: page and notes labels are in Chinese for a Chinese film, "Page N" and "Notes:" for an English one.
 
 ### Added
 
@@ -67,7 +67,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.0] - 2026-10-11
 
-The first release of 画说 · Frametell: a local, open-source studio that turns an idea or your material into an explainer video. A director agent drafts a storyboard for you to approve, then writes the narration, voices it, draws every page in a chosen style, checks its own work, and renders a 1080p film with subtitles.
+The first release of Frametell: a local, open-source studio that turns an idea or your material into an explainer video. A director agent drafts a storyboard for you to approve, then writes the narration, voices it, draws every page in a chosen style, checks its own work, and renders a 1080p film with subtitles.
 
 ### Added
 
