@@ -105,7 +105,7 @@ If this page already shows the change, or the change says nothing this page can 
 const PAGE_THINKING: Thinking = 'medium';
 /** a revised page whose code is as it was: the change never landed */
 const NOT_MADE = { zh: '这次没有改上：页面和改之前一样', en: 'The change was not made: the page is as it was' };
-const MAX = { pagesAtOnce: 10, storyboardFix: 2, planTurns: 30, pageTurns: 40, pageRounds: 3, revisionRounds: 2, reviewRounds: 2, reviewDefectsMs: 180_000 };
+const MAX = { pagesAtOnce: 10, storyboardFix: 2, scriptFix: 2, planTurns: 30, pageTurns: 40, pageRounds: 3, revisionRounds: 2, reviewRounds: 2, reviewDefectsMs: 180_000 };
 
 export class Director {
   readonly project: Project;
@@ -226,12 +226,22 @@ export class Director {
     this.state.stage = 'script'; this.save();
     this.serverMeta();
     const s = await this.session('planner', plannerSystem(this.o.style), MAX.planTurns, this.state.planner);
-    const r = await this.send(s, scriptPrompt(feedback, this.o.brief) + this.unseen('planner'));
+    let r = await this.send(s, scriptPrompt(feedback, this.o.brief) + this.unseen('planner'));
     this.state.planner = s.ref; this.save();
-    // the planner rewrites script.js: put the server-owned fields back (a lost META.voice once rendered a silent film)
-    this.serverMeta();
-    const check = await this.project.scriptCheck();
-    if (check.code) this.fail('script', this.say(`口播脚本有错：`, `The narration script has an error: `) + `${check.err || check.out} ${r.error ?? ''}`);
+    let check: Awaited<ReturnType<Project['scriptCheck']>>;
+    for (let ask = 0; ; ask++) {
+      // the planner rewrites script.js: put the server-owned fields back (a lost META.voice once rendered a silent film)
+      this.serverMeta();
+      check = await this.project.scriptCheck();
+      if (check.code) this.fail('script', this.say(`口播脚本有错：`, `The narration script has an error: `) + `${check.err || check.out} ${r.error ?? ''}`);
+      // the pages drawn are the narration's: a turn that ended before every storyboard page had its words made a
+      // one-page film of an eight-page storyboard, green all the way. Ask for the rest; stop if they still don't come.
+      const narrated = new Set((await this.project.timeline()).pages.map((p) => p.id));
+      const missing = this.project.storyboard().pages.map((p) => p.id).filter((id) => !narrated.has(id));
+      if (!missing.length) break;
+      if (ask === MAX.scriptFix) this.fail('script', this.say(`口播没有写完：分镜里的 ${missing.join('、')} 没有口播`, `The narration is unfinished: ${missing.join(', ')} of the storyboard ha${missing.length > 1 ? 've' : 's'} no narration`) + (r.error ? ` (${r.error})` : ''));
+      r = await this.send(s, `script.js has no narration for ${missing.join(', ')}: every page of storyboard.json needs its entry in PAGES, in the storyboard's order, with the same id. Add the missing pages and keep the ones already written, then run node engine/tools/script.mjs and stop. ` + replyNote(this.o.brief.replyLang, this.o.brief.lang));
+    }
     await this.commit(this.say('口播', 'Narration'));
     await s.close();
     this.state.stage = 'narrate'; this.save();

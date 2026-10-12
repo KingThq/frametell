@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A film always has every page of its storyboard. The pages drawn are the ones the narration covers, and a model whose turn ended early had narrated only the first page of an eight-page storyboard: the film was then drawn, checked and shown as done, green all the way, one page long. Now the director asks for the narration of the missing pages, and if it still doesn't come, the film stops and says which pages have none.
+
 ## [0.2.3] - 2026-10-12
 
 ### Security
