@@ -75,8 +75,9 @@ function cut(wav: string, sp: { s: number; e: number }[]) {
   segs[n - 1].b = tail && tail[0] > segs[0].a ? Math.min(D, tail[0] + TAIL) : D;
   segs[n - 1].fout = true;
   const removed: [number, number][] = [];
-  if (head && segs[0].a > 0) removed.push([0, segs[0].a]);
-  if (segs[n - 1].b < D) removed.push([segs[n - 1].b, D]);
+  // the few ms before a leading silence (or after a trailing one) count as part of it, as when head/tail were found
+  if (head && segs[0].a > head[0]) removed.push([head[0], segs[0].a]);
+  if (segs[n - 1].b < D) removed.push([segs[n - 1].b, tail ? Math.max(segs[n - 1].b, tail[1]) : D]);
   for (let i = 0; i < n - 1; i++) {
     const lo = sp[i].e - 0.15, hi = sp[i + 1].s + 0.15;
     const cand = sil.filter(([a, b]) => b > lo && a < hi && a > 0.02 && b < D - 0.02).sort((x, y) => y[1] - y[0] - (x[1] - x[0]))[0];

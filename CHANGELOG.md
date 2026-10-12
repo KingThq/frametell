@@ -93,6 +93,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - English films no longer offer Volcengine's voices, which speak only Chinese. Since a film's language follows the panel's, the English panel doesn't show them by default, and its Settings list ElevenLabs first.
 
+### Fixed
+
+- Voicing no longer stops on a page whose recording begins (or ends) with a few milliseconds of noise before its silence. It used to call its own trim of that silence "dropped sound" and stop, and 「继续制作」 stopped the same way every time.
+
 ## [0.1.2] - 2026-10-11
 
 ### Changed
