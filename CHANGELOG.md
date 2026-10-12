@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-12
+
+### Added
+
+- Preferences in Settings: write once what you want in every film (the voice, the look, the pace, who it is for), and the director and the page agents follow it in every storyboard, narration, page and change. Suggestions add a line with one click.
+- A video can be deleted from the list on Home. It asks first, and a video being made has to be stopped before it can go.
+- Styles can be installed beside the built-in ones: a style pack brings its own components, the new-film form picks a style by its picture (and plays a short loop on hover), and a style that draws characters may give them faces.
+- On a hosted service: the account's credits in the top bar, what a film will take before it starts, what a film has spent in credits instead of money, and downloads saved as a file named after the film.
+
+### Fixed
+
+- The narration stays in step with the picture. Each line's audio was only fetched when its turn came, so on a slow connection every line started late and was cut off where its estimate ended, with a thud. Now lines load ahead, the picture waits for a line that isn't ready and follows the voice while it plays, and every line plays to its end.
+- A preview that fails to load, or stays dark, is loaded again by itself instead of waiting for the whole panel to be reloaded. Its play hint and buttons follow the panel's language.
+- Exported frames fill the whole stage: on some machines the bottom rows of every frame came out black.
+- Voice lists open at once: the ElevenLabs list is kept per key instead of being fetched every time a list opens.
+
 ## [0.2.4] - 2026-10-12
 
 ### Fixed
@@ -155,7 +171,8 @@ The first release of Frametell: a local, open-source studio that turns an idea o
 - The npm packages are not published yet; install from source (see the README).
 - The Claude Agent SDK and Codex runtimes are in the code but not offered; every film runs on the built-in agent, which works with any provider.
 
-[Unreleased]: https://github.com/sitor-ai/frametell/compare/v0.2.4...HEAD
+[Unreleased]: https://github.com/sitor-ai/frametell/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/sitor-ai/frametell/compare/v0.2.4...v0.3.0
 [0.2.4]: https://github.com/sitor-ai/frametell/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/sitor-ai/frametell/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/sitor-ai/frametell/compare/v0.2.1...v0.2.2
