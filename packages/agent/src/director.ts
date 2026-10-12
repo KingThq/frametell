@@ -26,6 +26,12 @@ export interface DirectorOptions {
   signal?: AbortSignal;
   /** where exports are drawn; this process when absent */
   renderer?: Renderer;
+  /**
+   * the whole-film check after the pages: 'full' (the default) whenever the film's lint finds anything or a page is
+   * still flagged after its own rounds; 'defects' only for what breaks a film (a frame that renders differently, page
+   * code that fails), one round, at most MAX.reviewDefectsMs — a hosted service paying for every turn
+   */
+  review?: 'full' | 'defects';
 }
 
 interface PageState { status: PageStatus; rounds: number; issues: string[]; ref?: string }
@@ -79,7 +85,7 @@ Change only what needs changing, with edit; **never rewrite the whole file with 
 // and a -medium one 37–74 s, with no worse a page (one was cleaner, with no lint issues); a check round dropped from
 // 26–153 s to about 6 s. The storyboard and the narration keep the model's own level.
 const PAGE_THINKING: Thinking = 'medium';
-const MAX = { pagesAtOnce: 10, storyboardFix: 2, planTurns: 30, pageTurns: 40, pageRounds: 3, revisionRounds: 2, reviewRounds: 2 };
+const MAX = { pagesAtOnce: 10, storyboardFix: 2, planTurns: 30, pageTurns: 40, pageRounds: 3, revisionRounds: 2, reviewRounds: 2, reviewDefectsMs: 180_000 };
 
 export class Director {
   readonly project: Project;
@@ -131,8 +137,8 @@ export class Director {
     this.save();
     this.emit({ type: 'cost', usage: this.state.usage, ...this.cost() });
   }
-  private async session(name: string, system: string, maxTurns: number, resume?: string): Promise<AgentSession> {
-    return this.o.runtime.open({ name, system, cwd: this.o.dir, maxTurns, signal: this.o.signal, onEvent: (event) => {
+  private async session(name: string, system: string, maxTurns: number, resume?: string, signal = this.o.signal): Promise<AgentSession> {
+    return this.o.runtime.open({ name, system, cwd: this.o.dir, maxTurns, signal, onEvent: (event) => {
       this.emit({ type: 'agent', session: name, event });
       if (event.type === 'turn') { this.countTurn(event.usage); if (name.startsWith('page-')) this.firstTurn?.(); }
     } }, resume);
@@ -347,22 +353,38 @@ export class Director {
   async review() {
     this.emit({ type: 'stage', stage: 'review', status: 'start' });
     this.state.stage = 'review'; this.save();
-    const issues = await this.project.lint(undefined, ['--determinism']);
-    const flagged = Object.entries(this.state.pages).filter(([, s]) => s.status === 'flagged').map(([id, s]) => `${id}（${s.issues.join('，')}）`);
+    const defectsOnly = this.o.review === 'defects';
+    const all = await this.project.lint(undefined, ['--determinism']);
+    // defects: a frame that differs by where playback came from (it flickers), or page code that fails
+    const issues = defectsOnly ? all.filter((i) => /^not deterministic|— at pages\//.test(i.msg)) : all;
+    const flagged = defectsOnly ? [] : Object.entries(this.state.pages).filter(([, s]) => s.status === 'flagged').map(([id, s]) => `${id}（${s.issues.join('，')}）`);
     if (!issues.length && !flagged.length) {
       this.emit({ type: 'stage', stage: 'review', status: 'skipped', detail: this.say('全片检查通过，各页自检通过', 'The whole film passed its checks, and every page passed its own') });
       return this.ready();
     }
     const tl = await this.project.timeline();
     const sheet = await this.project.snap('review', tl.pages.flatMap((p) => [(p.start + p.end) / 2, p.end - 0.35]), undefined, 400);
-    const s = await this.session('review', pageSystem(this.o.style, STYLE_EXTRAS[this.o.style] ?? []), MAX.pageTurns);
-    for (let round = 1; round <= MAX.reviewRounds; round++) {
-      const r = await this.send(s, reviewPrompt(round === 1 ? issues : await this.project.lint(), flagged, this.o.brief.replyLang), [sheet]);
-      await this.commit(this.say(`全片检查：第 ${round} 轮`, `Whole-film check: round ${round}`));
-      if (/^DONE\b/i.test(r.text.trim())) break;
+    // defects mode stops on a timer of its own, keeping what it fixed so far; a stop by the user still stops the run
+    const limit = defectsOnly ? new AbortController() : undefined;
+    const timer = limit && setTimeout(() => limit.abort(), MAX.reviewDefectsMs);
+    const signal = limit ? AbortSignal.any([limit.signal, ...(this.o.signal ? [this.o.signal] : [])]) : this.o.signal;
+    const s = await this.session('review', pageSystem(this.o.style, STYLE_EXTRAS[this.o.style] ?? []), MAX.pageTurns, undefined, signal);
+    let timedOut = false;
+    try {
+      for (let round = 1; round <= (defectsOnly ? 1 : MAX.reviewRounds); round++) {
+        const r = await this.send(s, reviewPrompt(round === 1 ? issues : await this.project.lint(), flagged, this.o.brief.replyLang), [sheet]);
+        await this.commit(this.say(`全片检查：第 ${round} 轮`, `Whole-film check: round ${round}`));
+        if (/^DONE\b/i.test(r.text.trim())) break;
+      }
+    } catch (e) {
+      if (!limit?.signal.aborted || this.o.signal?.aborted) throw e;
+      timedOut = true;
+      await this.commit(this.say('全片检查：到时间了', 'Whole-film check: time limit'));
+    } finally {
+      clearTimeout(timer);
+      await s.close();
     }
-    await s.close();
-    this.emit({ type: 'stage', stage: 'review', status: 'done' });
+    this.emit({ type: 'stage', stage: 'review', status: 'done', ...(timedOut ? { detail: this.say('全片检查到了时间上限，已保留改好的部分', 'The whole-film check reached its time limit; what it fixed is kept') } : {}) });
     return this.ready();
   }
 
