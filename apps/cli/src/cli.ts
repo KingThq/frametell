@@ -61,7 +61,7 @@ async function run(argv: string[]) {
     else if (e.type === 'gate') console.log(`[${sec(t0)}]   ` + tr(`成片门禁：${e.red ? '红灯 ' + JSON.stringify(e.blank) : '通过'}`, `Final check: ${e.red ? 'failed ' + JSON.stringify(e.blank) : 'passed'}`));
     else if (e.type === 'error') console.log(`[${sec(t0)}] ✗ ${e.message}`);
   };
-  const director = new Director({ dir, runtime, style, brief: { durationSec: +(o.duration || 60), topic: o.topic, lang: o.lang === 'en' || o.lang === 'zh' ? o.lang : locale(), replyLang: locale() }, tts, voice, prices: { ...info.cost, currency: info.currency }, concurrency: +(o.concurrency || 3), emit });
+  const director = new Director({ dir, runtime, style, brief: { durationSec: +(o.duration || 60), topic: o.topic, lang: o.lang === 'en' || o.lang === 'zh' ? o.lang : locale(), replyLang: locale() }, tts, voice, prices: { ...info.cost, currency: info.currency }, concurrency: +(o.concurrency || 10), emit });
   await director.run();
   const out = await director.render();   // the CLI's run ends with the mp4
   const u = director.usage, c = director.cost();
