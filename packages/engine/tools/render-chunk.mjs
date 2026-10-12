@@ -13,7 +13,10 @@ const jobs = jobsMode ? JSON.parse(fs.readFileSync(process.argv[3], 'utf8')) : [
 const { browser, page } = await openStage('render', ['--disable-gpu-vsync', '--force-color-profile=srgb']);
 // frames straight from Chrome (CDP): Playwright's screenshot() waits on fonts and settles the page on every call
 const cdp = await page.context().newCDPSession(page);
-const grab = async () => Buffer.from((await cdp.send('Page.captureScreenshot', { format: 'jpeg', quality: 92, optimizeForSpeed: true })).data, 'base64');
+// the stage's own size: without a clip CDP returns the browser window's visible area (1920×993 on a desktop Chrome)
+const { width, height } = page.viewportSize();
+const clip = { x: 0, y: 0, width, height, scale: 1 };
+const grab = async () => Buffer.from((await cdp.send('Page.captureScreenshot', { format: 'jpeg', quality: 92, optimizeForSpeed: true, clip })).data, 'base64');
 // veryfast: x264 at 'medium' took the CPU the browsers need to draw frames; at CRF 16 the difference does not show
 const enc = process.env.HW === '1' ? ['-c:v', 'h264_videotoolbox', '-q:v', '72', '-realtime', '0'] : ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '16'];
 let code = 0;
