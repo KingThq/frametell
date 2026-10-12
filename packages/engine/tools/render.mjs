@@ -114,7 +114,9 @@ if (!has('skip-video')) {
     if (!has('skip-subs')) {
       console.time('subs');
       await run(process.execPath, [path.join(dir, 'subs.mjs'), String(from), String(to)]);
-      await Promise.all(segs.filter((g, i) => only.has(i) && !fs.existsSync(subbed(g))).map(subtitle));
+      // two at a time: each is an x264 encode, next to the browsers that may still be drawing on a small machine
+      const queue = segs.filter((g, i) => only.has(i) && !fs.existsSync(subbed(g)));
+      await Promise.all([0, 1].map(async () => { for (let g; (g = queue.shift());) await subtitle(g); }));
       console.timeEnd('subs');
     }
     console.timeEnd('video');
