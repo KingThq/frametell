@@ -51,3 +51,11 @@ test('a revision that lands on the second ask is done', async () => {
   assert.equal(page.status, 'ok');
   assert.ok(!sent[2].includes('在开头加一个标题'));   // a page that shows the change is checked as usual
 });
+
+test('a page that already shows the change says so, and is neither asked again nor checked', async () => {
+  const { sent, page, code } = await revise(() => 'FLAGGED: 这一页的数字本来就是黄色的');
+  assert.equal(code, PAGE);
+  assert.equal(sent.length, 1);
+  assert.equal(page.status, 'flagged');
+  assert.equal(page.issues[0], '这一页的数字本来就是黄色的');
+});

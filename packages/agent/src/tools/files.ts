@@ -1,5 +1,6 @@
 // File and shell tools for the Pi runtime. Everything is confined to the project directory: the engine (engine/,
-// engine_modules/) is read-only, nothing outside the project is reachable, and commands run with a timeout.
+// engine_modules/) is read-only, nothing outside the project is reachable (the shell runs in a sandbox, see
+// sandbox.ts), commands run with a timeout and see no keys.
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
@@ -7,8 +8,10 @@ import { nodeEnv } from '../project.js';
 import { Type } from 'typebox';
 import type { AgentTool } from '@earendil-works/pi-agent-core';
 import { rewriteRefusal } from '../runtime/types.js';
+import { confine } from './sandbox.js';
 
 const READ_ONLY = ['engine', 'engine_modules', '.git'];
+const STUDIO = '.studio';
 const IMAGE = /\.(png|jpe?g|webp|gif)$/i;
 const MAX_TEXT = 60_000;
 
@@ -18,6 +21,9 @@ export function resolveIn(root: string, p: string, write = false): string {
   if (rel.startsWith('..') || path.isAbsolute(rel)) throw new Error(`path is outside the project directory: ${p}`);
   const top = rel.split(path.sep)[0];
   if (write && READ_ONLY.includes(top)) throw new Error(`cannot change ${p}: the engine directory is read-only`);
+  // the studio's own record of the run (its events, sessions, state) is not the film: an agent unsure of a change mined
+  // it for minutes. Only the planner's decision on a change is written there.
+  if (top === STUDIO && rel !== path.join(STUDIO, 'revision.json')) throw new Error(`${p} is the studio's record, not part of the film`);
   return abs;
 }
 
@@ -31,6 +37,10 @@ const WriteP = Type.Object({ path: Type.String(), content: Type.String() });
 const EditP = Type.Object({ path: Type.String(), old_string: Type.String(), new_string: Type.String(), replace_all: Type.Optional(Type.Boolean()),
   finish: Type.Optional(Type.Boolean({ description: 'true when this reply holds all of this round\'s edits: the round ends once they apply, no reply needed' })) });
 const BashP = Type.Object({ command: Type.String() });
+
+/** the shell's environment, without the keys: an agent can print its environment, and every word it reads goes to the
+ *  model's provider (on a hosted service, the environment holds the service's own keys) */
+const shellEnv = () => Object.fromEntries(Object.entries(nodeEnv()).filter(([k]) => !/KEY|SECRET|TOKEN|PASSWORD|CREDENTIAL|AUTH/i.test(k)));
 
 export function fileTools(root: string, opts: { timeoutMs?: number } = {}): AgentTool<any>[] {
   const read: AgentTool<typeof ReadP> = {
@@ -86,8 +96,8 @@ export function fileTools(root: string, opts: { timeoutMs?: number } = {}): Agen
     executionMode: 'sequential',
     execute: (_id, p, signal) => new Promise((resolve, reject) => {
       if (/\brender\.mjs\b|\bnpm (i|install)\b|\bcurl\b|\bwget\b/.test(p.command)) return reject(new Error('this command is not allowed in a page session'));
-      const [cmd, argv]: [string, string[]] = process.platform === 'win32' ? ['cmd.exe', ['/d', '/s', '/c', p.command]] : ['bash', ['-lc', p.command]];
-      const child = spawn(cmd, argv, { cwd: root, env: nodeEnv(), signal });
+      const [cmd, argv]: [string, string[]] = process.platform === 'win32' ? ['cmd.exe', ['/d', '/s', '/c', p.command]] : confine(root, 'bash', ['-lc', p.command]);
+      const child = spawn(cmd, argv, { cwd: root, env: shellEnv(), signal });
       let out = '';
       const add = (d: Buffer) => { out += d.toString(); if (out.length > MAX_TEXT * 2) out = out.slice(-MAX_TEXT * 2); };
       child.stdout.on('data', add); child.stderr.on('data', add);

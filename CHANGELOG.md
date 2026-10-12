@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- An agent's shell is confined to its project. The file tools already were, but a shell command could read anything the app could: a page agent unsure what a change meant was seen reading other folders and searching the whole home folder. Now its shell runs in a sandbox (Seatbelt on macOS, bubblewrap on Linux when it works there) that reads only the project, the engine and the system, and writes only the project. On Windows the shell is not confined yet.
+- An agent's shell no longer sees API keys, secrets or tokens in its environment.
+- Agents can't read the studio's own record of a run (`.studio/`: its events, sessions and state).
+
+### Fixed
+
+- A change the page already shows, or one that says nothing the page can do, is answered in seconds with the reason ("the numbers on this page are already yellow"), instead of the page agent searching for minutes and sometimes changing other pages.
+
 ## [0.2.2] - 2026-10-12
 
 ### Fixed

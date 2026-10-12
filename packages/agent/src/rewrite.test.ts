@@ -26,3 +26,14 @@ test('the write tool refuses, and edit still works', async () => {
   assert.match(fs.readFileSync(path.join(dir, 'pages/p01.js'), 'utf8'), /line seven/);
   await tools.write.execute('3', { path: 'pages/p02.js', content: 'new page' } as never);
 });
+
+test("the studio's record of the run is out of the agents' reach, but for the planner's decision on a change", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fs-tools-'));
+  fs.mkdirSync(path.join(dir, '.studio'));
+  fs.writeFileSync(path.join(dir, '.studio/events.jsonl'), '{}');
+  const tools = Object.fromEntries(fileTools(dir).map((t) => [t.name, t]));
+  await assert.rejects(tools.read.execute('1', { path: '.studio/events.jsonl' } as never), /studio's record/);
+  await assert.rejects(tools.read.execute('2', { path: './.studio/../.studio/state.json' } as never), /studio's record/);
+  await tools.write.execute('3', { path: '.studio/revision.json', content: '{"pages":[]}' } as never);
+  assert.equal(fs.readFileSync(path.join(dir, '.studio/revision.json'), 'utf8'), '{"pages":[]}');
+});

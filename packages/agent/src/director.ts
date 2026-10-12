@@ -95,7 +95,8 @@ Here is the current pages/${id}.js; it is already given, so don't read it again:
 \`\`\`js
 ${code}
 \`\`\`
-Change only what needs changing, with edit; **never rewrite the whole file with write**. **Put all the edits in one reply** (one reply can call edit several times), each with finish: true: you're done once they apply, no reply needed and no need to read the file again; the check screenshots will show the result.`;
+Change only what needs changing, with edit; **never rewrite the whole file with write**. **Put all the edits in one reply** (one reply can call edit several times), each with finish: true: you're done once they apply, no reply needed and no need to read the file again; the check screenshots will show the result.
+If this page already shows the change, or the change says nothing this page can do, don't go looking for what was meant (other files, the film's history, other folders): change nothing and reply only FLAGGED: <one sentence for the user, in the language you reply in, saying what you found>.`;
 
 // Pages are drawn at medium thinking, drafts and check rounds alike; on a gateway's …-high model that means its …-medium
 // sibling. Most of a page's time was the model thinking before writing: on the same pages a -high draft took 170–220 s
@@ -360,12 +361,15 @@ export class Director {
       let r = await this.send(s, pagePrompt(sb, id, t, this.o.brief.lang, this.o.brief.replyLang, !!fix) + (fix ? revisionNote(id, fix, this.project.read(`pages/${id}.js`)) : '') + this.unseen(`page-${id}`), undefined, PAGE_THINKING);
       if (!this.project.exists(`pages/${id}.js`)) r = await this.send(s, `pages/${id}.js does not exist yet; write it, then stop.`, undefined, PAGE_THINKING);
       if (!this.project.exists(`pages/${id}.js`)) throw new Error(r.error || this.say('没有写出页面文件', 'No page file was written'));
-      if (unchanged()) r = await this.send(s, `pages/${id}.js is exactly as it was: the change was not made${r.error ? ` (${r.error})` : ''}. Make it now with edit. If an edit failed, its old_string must be copied exactly from the current file; read the file first if unsure.`, undefined, PAGE_THINKING);
+      // the agent found nothing to change (already so, or nothing this page can do): it says why instead of searching
+      const declined = unchanged() && /^FLAGGED/i.test(r.text.trim()) ? r.text.trim().replace(/^FLAGGED:?\s*/i, '') || this.say(NOT_MADE.zh, NOT_MADE.en) : undefined;
+      if (declined) { st.status = 'flagged'; st.issues = [declined]; }
+      else if (unchanged()) r = await this.send(s, `pages/${id}.js is exactly as it was: the change was not made${r.error ? ` (${r.error})` : ''}. Make it now with edit. If an edit failed, its old_string must be copied exactly from the current file; read the file first if unsure.`, undefined, PAGE_THINKING);
       st.ref = s.ref;
       await this.commit(this.say(`${id}：初稿`, `${id}: first draft`));
       let issues: LintIssue[] = [];
       const rounds = fix ? MAX.revisionRounds : MAX.pageRounds;   // a revision starts from a checked page
-      for (let round = 1; round <= rounds + 1; round++) {
+      for (let round = 1; !declined && round <= rounds + 1; round++) {
         st.status = 'checking'; st.rounds = round; this.setPage(id, st);
         // a page whose code throws cannot be checked; that is the first thing to fix, so it goes back to its agent
         // (one more round than usual is allowed for it) instead of failing the page
@@ -398,7 +402,10 @@ export class Director {
         st.issues = issues.map((i) => `${i.local}s：${i.msg}`);
       }
       // the change never landed: the page is as it was, which is not what the user asked for, whatever the checks said
-      if (unchanged()) { st.status = 'flagged'; st.issues = [this.say(NOT_MADE.zh, NOT_MADE.en)]; }
+      if (unchanged()) {
+        if (!declined) { st.status = 'flagged'; st.issues = [this.say(NOT_MADE.zh, NOT_MADE.en)]; }
+        this.unchanged.set(id, declined);
+      }
       await s.close();
       // one settled frame as the film-strip thumbnail (the check sheets are 4-up and read as noise at tile size)
       let thumb: string | undefined;
@@ -418,7 +425,8 @@ export class Director {
     const all = await this.project.lint(undefined, ['--determinism']);
     // defects: a frame that differs by where playback came from (it flickers), or page code that fails
     const issues = defectsOnly ? all.filter((i) => /^not deterministic|— at pages\//.test(i.msg)) : all;
-    const flagged = defectsOnly ? [] : Object.entries(this.state.pages).filter(([, s]) => s.status === 'flagged').map(([id, s]) => `${id}（${s.issues.join('，')}）`);
+    // a page a change left as it was, with the agent's reason (already so, nothing to do there), is no defect to chase
+    const flagged = defectsOnly ? [] : Object.entries(this.state.pages).filter(([id, s]) => s.status === 'flagged' && !this.unchanged.get(id)).map(([id, s]) => `${id}（${s.issues.join('，')}）`);
     if (!issues.length && !flagged.length) {
       this.emit({ type: 'stage', stage: 'review', status: 'skipped', detail: this.say('全片检查通过，各页自检通过', 'The whole film passed its checks, and every page passed its own') });
       return this.ready();
@@ -514,8 +522,10 @@ export class Director {
     await this.pages(ids);
     this.state.revision = undefined; this.save();
     const tPages = Date.now();
-    // pages the change never reached are said plainly, not left to a film that looks done
-    const missed = ids.filter((id) => this.state.pages[id]?.issues[0] === this.say(NOT_MADE.zh, NOT_MADE.en)).map((id) => sb.pages.findIndex((p) => p.id === id) + 1);
+    // pages the change never reached are said plainly, not left to a film that looks done: why, when the agent said
+    const num = (id: string) => sb.pages.findIndex((p) => p.id === id) + 1;
+    for (const [id, why] of this.unchanged) if (why) this.emit({ type: 'note', text: this.say(`第 ${num(id)} 页没有改：${why}`, `Page ${num(id)} was not changed: ${why}`) });
+    const missed = [...this.unchanged].filter(([, why]) => !why).map(([id]) => num(id));
     if (missed.length) this.emit({ type: 'note', text: this.say(`${missed.map((n) => `第 ${n} 页`).join('、')}没有改上，画面还是原来的。换个说法再告诉我一次？`, `${missed.length > 1 ? 'Pages' : 'Page'} ${missed.join(', ')} did not change; the picture is as it was. Could you ask again in other words?`) });
     // where the time went, in one line, so a slow step is seen (and can be fixed) instead of only felt
     const sec = (ms: number) => this.say(`${Math.max(1, Math.round(ms / 1000))} 秒`, `${Math.max(1, Math.round(ms / 1000))} s`);
@@ -523,8 +533,11 @@ export class Director {
       `这次改了 ${sec(Date.now() - t0)}：${direct ? '' : `想怎么改 ${sec(tPlan - t0)} · `}${tDraw - tPlan > 1500 ? `配音 ${sec(tDraw - tPlan)} · ` : ''}画和自检 ${sec(tPages - tDraw)} · 全片检查 ${sec(Date.now() - tPages)}`,
       `This change took ${sec(Date.now() - t0)}: ${direct ? '' : `planning ${sec(tPlan - t0)} · `}${tDraw - tPlan > 1500 ? `voice ${sec(tDraw - tPlan)} · ` : ''}drawing and checks ${sec(tPages - tDraw)} · whole-film check ${sec(Date.now() - tPages)}`) });
     await this.review();
+    this.unchanged.clear();
     this.state.change = undefined; this.save();
   }
+  /** pages a revision left as they were, with the agent's reason when it gave one */
+  private unchanged = new Map<string, string | undefined>();
   /** the revision in progress changed script.js */
   private wordsChanged = false;
   /** said just before the film is ready again (a revision's time line) */
