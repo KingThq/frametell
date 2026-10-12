@@ -23,7 +23,7 @@ interface Section {
 
 // Volcengine first in Chinese; in English ElevenLabs first, Volcengine's voices speaking only Chinese
 const VOICES = [
-  { id: 'volcengine', key: 'volcengine' as const, url: 'https://console.volcengine.com/speech/app', hint: 'API Key' },
+  { id: 'volcengine', key: 'volcengine' as const, url: 'https://console.volcengine.com/speech/app', hint: 'API Key / AppID:Token' },
   { id: 'elevenlabs', key: 'elevenlabs' as const, url: 'https://elevenlabs.io/app/settings/api-keys', hint: 'sk_…' },
 ];
 
