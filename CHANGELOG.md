@@ -7,10 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-12
+
+### Added
+
+- A film can draw its pages with another model than its director's. The director (storyboard, narration, planning a change) and the pages (drawing them, checking the whole film) each have a model in the new-film form, remembered for the next film; the pages are most of a film's tokens, so a faster, cheaper model there saves the most. Unset, the pages use the director's; the page model must be able to see images, and each turn is priced at the model that took it.
+- 「我的音色」: any Volcengine voice by its id (the 1.0 and 2.0 libraries, and cloned voices), pasted at the foot of a voice list or added in Settings. Adding one speaks a sample with it, so a wrong id or a voice the account hasn't enabled is said right there. 1.0 voices get word timings too. The built-in list is 18 explainer voices of TTS 2.0, with samples.
+- A film's voice can be switched from the composer: pick another in 「本片设置」 and send; the whole film is narrated again in that voice and nothing is redrawn (going back to a voice you had costs nothing).
+- A Volcengine key can also be an older app's `AppID:Access Token`.
+- The model picker lists providers on the left and their models on the right; search spans every provider, and arrow keys and Tab move between them.
+- `studio.resumeInterrupted()` continues the runs and exports a restart cut short, for a hosted service that restarts on every deploy. The desktop app and the CLI still leave it to you: the film shows as paused, with Continue.
+- `new Studio({ review: 'defects' })` runs the whole-film check only for what breaks a film (a frame that flickers, page code that fails), once and briefly. The default is unchanged.
+- The engine can split an export across machines (`render.mjs --plan` / `--segments`); a run that finds every segment already drawn only joins them and adds the sound.
+
 ### Fixed
 
 - A change to a finished film that never reached the page is no longer shown as done. When the page model's edits didn't land (or it only said it had made the change), the page passed its checks and showed "done", and the preview and the export kept the old picture. Now a page whose code is unchanged is asked once more, every check round restates the change, and if it still didn't land the page is marked for you to look at and the director says which page was not changed.
 - Continue answers at once. A paused film shows that it is getting ready the moment you continue, instead of staying paused until its next step began: getting ready fetched the model list of every provider with a key (12 seconds was seen, and a provider that hung held the film back with no end), so Continue seemed to do nothing until you left and came back. Now only the film's own providers' lists are fetched, and they get 15 seconds.
+- Relay is reached at relay.example.com.
+- Exports on a small machine no longer run out of memory adding subtitles: they are added to two segments at a time, not all at once.
 - Pause stops the film whenever you press it. Pressed while an agent was between two requests (checking a page, taking screenshots), it used to be missed, and the film went on for minutes.
 
 ## [0.2.0] - 2026-10-11
@@ -108,7 +123,8 @@ The first release of 画说 · Frametell: a local, open-source studio that turns
 - The npm packages are not published yet; install from source (see the README).
 - The Claude Agent SDK and Codex runtimes are in the code but not offered; every film runs on the built-in agent, which works with any provider.
 
-[Unreleased]: https://github.com/sitor-ai/frametell/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/sitor-ai/frametell/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/sitor-ai/frametell/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/sitor-ai/frametell/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/sitor-ai/frametell/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/sitor-ai/frametell/compare/v0.1.0...v0.1.1
