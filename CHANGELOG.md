@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-10-12
+
 ### Fixed
 
 - A film always has every page of its storyboard. The pages drawn are the ones the narration covers, and a model whose turn ended early had narrated only the first page of an eight-page storyboard: the film was then drawn, checked and shown as done, green all the way, one page long. Now the director asks for the narration of the missing pages, and if it still doesn't come, the film stops and says which pages have none.
@@ -153,7 +155,8 @@ The first release of Frametell: a local, open-source studio that turns an idea o
 - The npm packages are not published yet; install from source (see the README).
 - The Claude Agent SDK and Codex runtimes are in the code but not offered; every film runs on the built-in agent, which works with any provider.
 
-[Unreleased]: https://github.com/sitor-ai/frametell/compare/v0.2.3...HEAD
+[Unreleased]: https://github.com/sitor-ai/frametell/compare/v0.2.4...HEAD
+[0.2.4]: https://github.com/sitor-ai/frametell/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/sitor-ai/frametell/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/sitor-ai/frametell/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/sitor-ai/frametell/compare/v0.2.0...v0.2.1
