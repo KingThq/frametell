@@ -70,3 +70,24 @@ test('after a restart, a run cut short is picked up again, a paused one is left 
     assert.deepEqual(studio.resumeInterrupted(), []);
   } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
 });
+
+test('continuing a paused film says so at once, before the director is ready', async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'frametell-continue-'));
+  try {
+    const id = '2026-10-12-paused0000002', dir = path.join(dataDir, 'projects', id), now = new Date().toISOString();
+    fs.mkdirSync(path.join(dir, '.studio'), { recursive: true });
+    fs.writeFileSync(path.join(dir, '.studio', 'project.json'), JSON.stringify({ id, title: id, style: 'whiteboard', durationSec: 60, model: 'nowhere/none', runtime: 'pi', subtitles: true, materials: [], createdAt: now, updatedAt: now }));
+    fs.writeFileSync(path.join(dir, '.studio', 'state.json'), JSON.stringify({ stage: 'pages' }));
+    fs.writeFileSync(path.join(dir, '.studio', 'events.jsonl'), JSON.stringify({ type: 'paused', reason: 'error', stage: 'pages', seq: 1, at: 1 }) + '\n');
+    const studio = new Studio({ dataDir, config: memoryConfig() });
+    const seen: string[] = [];
+    const off = studio.subscribe(id, 1, (e) => seen.push(e.type));
+    const started = studio.start(id);
+    // before anything slow (materials, the model catalog): every client can stop showing it paused
+    assert.deepEqual(seen, ['resumed']);
+    await started;
+    // with no model here it stops again, with the reason
+    assert.deepEqual(seen, ['resumed', 'error', 'paused']);
+    off();
+  } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
+});

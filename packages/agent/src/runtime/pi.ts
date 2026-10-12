@@ -73,18 +73,24 @@ export function piRuntime(models: MutableModels, model: Model<Api>, opts: { thin
           o.onEvent?.({ type: 'tool_end', id: e.toolCallId, name: e.toolName, ok: !(e as any).isError });
         }
       });
-      if (o.signal) o.signal.addEventListener('abort', () => { stop = 'aborted'; agent.abort(); }, { once: true });
+      // a stop reaches a request in flight. Agent.abort() only cancels the request running now, so a stop that falls
+      // between two sends (lint, screenshots) or before the first is checked on each send instead: missed, it let the
+      // run go on for minutes after "Pause", and Continue was ignored meanwhile
+      const onAbort = () => { stop = 'aborted'; agent.abort(); };
       const save = () => { fs.mkdirSync(path.dirname(ref), { recursive: true }); fs.writeFileSync(ref, JSON.stringify(agent.state.messages)); };
       return {
         ref,
         async send(input: StageInput): Promise<TurnResult> {
           turns = 0; usage = emptyUsage(); lastText = ''; stop = 'done';
+          if (o.signal?.aborted) return { ok: false, text: '', turns, usage, error: 'aborted', stopReason: 'aborted' };
+          o.signal?.addEventListener('abort', onAbort, { once: true });
           const l = levelled(input.thinking);
           agent.state.model = l.model;
           agent.state.thinkingLevel = l.thinking;
           const images = (input.images || []).map((f) => ({ type: 'image' as const, data: fs.readFileSync(f).toString('base64'), mimeType: mimeOf(f) }));
           let error: string | undefined;
           try { await agent.prompt(input.text, images); } catch (e) { error = (e as Error).message; stop = stop === 'done' ? 'error' : stop; }
+          finally { o.signal?.removeEventListener('abort', onAbort); }
           const err = agent.state.errorMessage;
           if (err && stop === 'done') { error = err; stop = 'error'; }
           save();

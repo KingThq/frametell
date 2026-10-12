@@ -82,7 +82,7 @@ export function Workbench({ id, openSettings }: { id: string; openSettings: (sec
   useEffect(() => { document.title = project.data ? `${project.data.title} · ${t('workbench.brand')}` : t('workbench.brand'); }, [project.data?.title, locale]);
 
   const running = isWorking(run);
-  const status = run.revising ? t('workbench.status.revising') : run.exporting ? t('workbench.status.exporting') : finished(run) && !running ? t('workbench.status.done') : run.awaitingApproval ? t('workbench.status.awaitingApproval') : run.paused ? t('workbench.status.paused') : run.current ? t('workbench.status.stageRunning', { stage: STAGE_NAME[run.current] }) : t('workbench.status.preparing');
+  const status = run.revising ? t('workbench.status.revising') : run.exporting ? t('workbench.status.exporting') : run.resuming ? t('workbench.status.preparing') : finished(run) && !running ? t('workbench.status.done') : run.awaitingApproval ? t('workbench.status.awaitingApproval') : run.paused ? t('workbench.status.paused') : run.current ? t('workbench.status.stageRunning', { stage: STAGE_NAME[run.current] }) : t('workbench.status.preparing');
   const play = () => { setSelected(undefined); setPane('stage'); setPlayKey((k) => k + 1); };
 
   if (project.error) return (

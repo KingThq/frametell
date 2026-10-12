@@ -75,7 +75,10 @@ type Prices = { input: number; output: number; cacheRead: number; cacheWrite: nu
 async function buildRuntime(meta: ProjectMeta, cfg: Config): Promise<{ runtime: AgentRuntime; prices: Prices; pages?: { runtime: AgentRuntime; prices: Prices } }> {
   applyProxy(cfg.proxy);
   // the user's own base URL per provider and the model ids they typed in are applied by the catalog
-  const catalog = await createCatalog({ keys: Object.entries(cfg.keys).map(([providerId, apiKey]) => ({ providerId, apiKey })), custom: cfg.custom, baseUrls: cfg.baseUrls, models: cfg.models });
+  // only the film's own providers' lists: every keyed provider's took seconds (12 s seen), and one that hangs held the
+  // run from starting
+  const only = [meta.model, meta.pageModel].filter((m): m is string => !!m).map((m) => m.split('/')[0]);
+  const catalog = await createCatalog({ keys: Object.entries(cfg.keys).map(([providerId, apiKey]) => ({ providerId, apiKey })), custom: cfg.custom, baseUrls: cfg.baseUrls, models: cfg.models, only });
   const one = (ref: string) => {
     const [provider, ...rest] = ref.split('/');
     const model = catalog.get(provider, rest.join('/'));
@@ -231,6 +234,9 @@ class Runner {
     const dir = this.dir;
     linkProject(dir);
     this.abort = new AbortController();
+    // a paused run that continues says so at once: getting the director ready can take seconds (the model catalog), and
+    // until its first step every client still showed it paused, with a Continue that seemed to do nothing
+    if (this.status === 'stopped' || this.status === 'failed') this.emit({ type: 'resumed' });
     this.status = 'running';
     let director: Director;
     try {

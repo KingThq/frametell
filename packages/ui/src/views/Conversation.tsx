@@ -369,6 +369,7 @@ function NowBar({ run }: { run: RunView }) {
   const seconds = Math.round(run.ready?.duration ?? run.video?.duration ?? 0);
   const text = run.revising ? t('conversation.bar.revising')
     : run.exporting ? t('conversation.bar.exporting')
+    : run.resuming ? t('conversation.live.preparing')
     : finished(run) && !running ? t('conversation.bar.ready', { secs: seconds, stale: !!run.stale })
     : run.awaitingApproval ? t('conversation.bar.awaiting')
     : run.paused ? t('conversation.bar.paused')

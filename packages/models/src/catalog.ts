@@ -21,6 +21,10 @@ export interface CatalogOptions {
   baseUrls?: Record<string, string>;
   /** model ids the user typed in per provider, on top of what the provider lists */
   models?: Record<string, string[]>;
+  /** fetch the dynamic catalogs of these providers only (a run needs its own model's, not every keyed provider's) */
+  only?: string[];
+  /** how long the dynamic catalogs may take; a provider that hangs must not hold up what waits for the catalog */
+  timeoutMs?: number;
 }
 
 export interface ModelInfo {
@@ -112,10 +116,14 @@ export async function createCatalog(opts: CatalogOptions): Promise<Catalog> {
   for (const c of [...compat, ...(opts.custom || [])]) models.setProvider(customProvider(c));
   // dynamic catalogs (Relay, compatible and custom endpoints) are fetched only for providers the user has a key for
   const keyed = new Set(opts.keys.map((k) => k.providerId));
-  const dynamic = [RELAY_ID, ...compat.map((c) => c.id), ...(opts.custom || []).map((c) => c.id)].filter((id) => keyed.has(id));
+  const dynamic = [RELAY_ID, ...compat.map((c) => c.id), ...(opts.custom || []).map((c) => c.id)].filter((id) => keyed.has(id) && (!opts.only || opts.only.includes(id)));
   if (dynamic.length) {
-    const res = await models.refresh({ providers: dynamic });
-    for (const [provider, error] of res.errors) console.warn(`[models] ${provider}: ${error instanceof Error ? error.message : String(error)}`);
+    const wait = opts.timeoutMs ?? 15_000;
+    try {
+      const res = await models.refresh({ providers: dynamic, signal: AbortSignal.timeout(wait) });
+      if (res.aborted) console.warn(`[models] ${dynamic.join(', ')}: no model list within ${wait / 1000}s`);
+      for (const [provider, error] of res.errors) console.warn(`[models] ${provider}: ${error instanceof Error ? error.message : String(error)}`);
+    } catch (e) { console.warn(`[models] ${dynamic.join(', ')}: ${(e as Error).message}`); }
   }
   return new Catalog(models, { baseUrls: opts.baseUrls, models: opts.models });
 }

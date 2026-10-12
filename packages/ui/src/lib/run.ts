@@ -68,6 +68,8 @@ export interface RunView {
   error?: string;
   /** set while the run is stopped (paused by the user, interrupted, or failed); cleared when it continues */
   paused?: { reason: 'user' | 'interrupted' | 'error'; message?: string; at: number };
+  /** continued after a pause and getting ready, since when; cleared when its first step starts (or it stops again) */
+  resuming?: number;
   /** the stage that is running now */
   current?: Stage;
   /** set from a change request on a finished film until the redraw starts: the director is deciding which pages to redo */
@@ -122,6 +124,7 @@ function step(v: RunView, e: LoggedEvent): RunView {
         }
         return r;
       }
+      r.resuming = undefined;
       const s = { ...r.stages[e.stage] };
       if (e.status === 'start') { s.status = 'running'; s.startedAt = at; s.endedAt = undefined; r.current = e.stage; r.paused = undefined; r.revising = undefined; r.startedAt ??= at; }
       else { s.status = e.status; s.endedAt = at; s.detail = e.detail; if (r.current === e.stage) r.current = undefined; r.activity = undefined; }
@@ -232,12 +235,20 @@ function step(v: RunView, e: LoggedEvent): RunView {
       r.activity = undefined;
       r.revising = undefined;
       r.paused = { reason: e.reason, message: e.message, at };
+      r.resuming = undefined;
       r.pages = Object.fromEntries(Object.entries(r.pages).map(([k, p]) => [k, p.status === 'drawing' || p.status === 'checking' ? { ...p, status: 'queued' as PageStatus } : p]));
       if (e.reason === 'error' && r.feed.at(-1)?.kind === 'error') r.feed = r.feed.slice(0, -1);   // the paused card carries the message
       push({ kind: 'paused', key, reason: e.reason, message: e.message, at });
       return r;
     }
+    // continued: not paused any more, getting ready for the next step (the header reads "Preparing" until it starts)
+    case 'resumed':
+      r.paused = undefined;
+      r.error = undefined;
+      r.resuming = at;
+      return r;
     case 'ready':
+      r.resuming = undefined;
       r.ready = { duration: e.duration, at };
       r.stale = !!r.video;
       r.paused = undefined;
@@ -247,6 +258,7 @@ function step(v: RunView, e: LoggedEvent): RunView {
       push({ kind: 'ready', key, duration: e.duration, at });
       return r;
     case 'done': {
+      r.resuming = undefined;
       r.video = { path: e.video, noSubs: e.videoNoSubs, duration: e.duration };
       r.stale = false;
       r.exporting = undefined;
@@ -274,7 +286,7 @@ export const money = (c?: { amount: number; currency: 'CNY' | 'USD' }, currency:
 export const clock = (ms: number) => { const s = Math.max(0, Math.round(ms / 1000)); return s < 60 ? t('run.sec', { s }) : t('run.minSec', { m: Math.floor(s / 60), s: String(s % 60).padStart(2, '0') }); };
 
 /** something is being made right now (a stage, or the director planning a change to the finished film) */
-export const isWorking = (r: RunView) => (!!r.current && !r.awaitingApproval) || !!r.revising || !!r.exporting;
+export const isWorking = (r: RunView) => (!!r.current && !r.awaitingApproval) || !!r.revising || !!r.exporting || !!r.resuming;
 /** the film is finished (whether or not an mp4 of it exists) */
 export const finished = (r: RunView) => !!r.ready || !!r.video;
 /** the exported mp4, when it shows the film as it is now */

@@ -33,6 +33,8 @@ export type StudioEvent =
   | { type: 'note'; text: string }
   /** the run stopped: the user paused, the app was closed mid-run, or an error; completed work is kept */
   | { type: 'paused'; reason: 'user' | 'interrupted' | 'error'; stage?: string; message?: string }
+  /** a paused run was continued; its next step follows once the director is ready */
+  | { type: 'resumed' }
   | { type: 'narrate'; page: string; index: number; total: number; cached: boolean }
   /** the film's narrator from now on (the user switched it) */
   | { type: 'voice'; voice: { provider: 'volcengine' | 'elevenlabs'; id: string; name?: string } }
