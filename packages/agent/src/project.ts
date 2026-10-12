@@ -34,8 +34,15 @@ function tool(dir: string, name: string, args: string[], opts: { timeoutMs?: num
   });
 }
 
+/**
+ * Draws a project's film somewhere other than this process (a hosted service sends it to a render container). It must
+ * leave the two mp4s in <dir>/out as engine/tools/render.mjs names them, pass progress lines to onLine, and stop on
+ * signal. Without one, render.mjs runs here.
+ */
+export type Renderer = (dir: string, o: { fps: number; workers: number; onLine?: (l: string) => void; signal?: AbortSignal }) => Promise<void>;
+
 export class Project {
-  constructor(readonly dir: string) { linkProject(dir); }
+  constructor(readonly dir: string, private renderer?: Renderer) { linkProject(dir); }
 
   file(rel: string) { return path.join(this.dir, rel); }
   read(rel: string) { return fs.readFileSync(this.file(rel), 'utf8'); }
@@ -129,7 +136,11 @@ export class Project {
   }
 
   /** Render the film; progress lines are passed through. Resolves with the output files. */
-  render(o: { fps?: number; workers?: number; onLine?: (l: string) => void; signal?: AbortSignal } = {}): Promise<{ withSubs: string; noSubs: string }> {
+  async render(o: { fps?: number; workers?: number; onLine?: (l: string) => void; signal?: AbortSignal } = {}): Promise<{ withSubs: string; noSubs: string }> {
+    if (this.renderer) {
+      await this.renderer(this.dir, { fps: o.fps ?? 30, workers: o.workers ?? 4, onLine: o.onLine, signal: o.signal });
+      return this.films();
+    }
     return new Promise((resolve, reject) => {
       const child = spawn(process.execPath, [path.join(ENGINE_DIR, 'tools/render.mjs'), '--fps', String(o.fps ?? 30), '--workers', String(o.workers ?? 4)], { cwd: this.dir, signal: o.signal, env: nodeEnv() });
       let tail = '';
@@ -138,12 +149,17 @@ export class Project {
       child.on('error', reject);
       child.on('close', (code) => {
         if (code) return reject(new Error(`render failed (exit ${code}): ${tail.slice(-1500)}`));
-        const out = fs.readdirSync(this.file('out')).filter((f) => f.endsWith('.mp4'));
-        const withSubs = out.find((f) => /-(有字幕|with-subtitles)\.mp4$/.test(f)), noSubs = out.find((f) => /-(无字幕|no-subtitles)\.mp4$/.test(f));
-        if (!withSubs || !noSubs) return reject(new Error('render finished but no film was found'));
-        resolve({ withSubs: this.file('out/' + withSubs), noSubs: this.file('out/' + noSubs) });
+        try { resolve(this.films()); } catch (e) { reject(e); }
       });
     });
+  }
+
+  /** the two exported films in out/ */
+  private films(): { withSubs: string; noSubs: string } {
+    const out = fs.readdirSync(this.file('out')).filter((f) => f.endsWith('.mp4'));
+    const withSubs = out.find((f) => /-(有字幕|with-subtitles)\.mp4$/.test(f)), noSubs = out.find((f) => /-(无字幕|no-subtitles)\.mp4$/.test(f));
+    if (!withSubs || !noSubs) throw new Error('render finished but no film was found');
+    return { withSubs: this.file('out/' + withSubs), noSubs: this.file('out/' + noSubs) };
   }
 
   gate(file: string): FilmGateResult { return measure(file); }

@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createCatalog, PROVIDERS, type ProviderSpec } from '@frametell/models';
 import { bundledSample, elevenLabsTts, listElevenLabsVoices, volcengineTts, VOLCENGINE_VOICES } from '@frametell/voice';
-import { Project, STYLES, type Timeline } from '@frametell/agent';
+import { Project, STYLES, type Renderer, type Timeline } from '@frametell/agent';
 import { linkProject } from '@frametell/engine/tools/project.mjs';
 import { DATA_DIR, configFile, patchConfig, publicConfig, type ConfigStore } from './config.js';
 import { Projects } from './runner.js';
@@ -24,6 +24,8 @@ export interface StudioOptions {
    * each Studio its own. The proxy setting is the exception: it applies to the whole process.
    */
   config?: ConfigStore;
+  /** where exports are drawn (a hosted service's render containers); this process when absent */
+  renderer?: Renderer;
 }
 
 export class Studio {
@@ -34,7 +36,7 @@ export class Studio {
   constructor(o: StudioOptions = {}) {
     this.dataDir = o.dataDir ?? DATA_DIR;
     this.config = o.config ?? configFile(this.dataDir);
-    this.store = new Projects(path.join(this.dataDir, 'projects'), this.config);
+    this.store = new Projects(path.join(this.dataDir, 'projects'), this.config, o.renderer);
     applyProxy(this.config.load().proxy);
     // every project reaches the engine through links; point them at this install (it may have moved, or been renamed)
     try { for (const id of fs.readdirSync(this.store.root)) { try { linkProject(this.store.dir(id)); } catch {} } } catch {}

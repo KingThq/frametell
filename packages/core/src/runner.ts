@@ -7,7 +7,7 @@ import crypto from 'node:crypto';
 import { createProject, linkProject } from '@frametell/engine/tools/project.mjs';
 import { createCatalog, RELAY_BASE_URL } from '@frametell/models';
 import { elevenLabsTts, volcengineTts } from '@frametell/voice';
-import { Director, piRuntime, type AgentRuntime, type StudioEvent, type Storyboard, type UserRef } from '@frametell/agent';
+import { Director, piRuntime, type AgentRuntime, type Renderer, type StudioEvent, type Storyboard, type UserRef } from '@frametell/agent';
 import type { Config, ConfigStore } from './config.js';
 import { prepareMaterials } from './materials.js';
 import { applyProxy } from './net.js';
@@ -29,7 +29,7 @@ function writeMeta(dir: string, m: ProjectMeta) { m.updatedAt = new Date().toISO
 /** The projects under one directory and the settings their runs use: one per Studio, so several can share a process. */
 export class Projects {
   private runners = new Map<string, Runner>();
-  constructor(readonly root: string, readonly config: ConfigStore) {}
+  constructor(readonly root: string, readonly config: ConfigStore, private renderer?: Renderer) {}
 
   dir(id: string) { return path.join(this.root, id); }
 
@@ -64,7 +64,7 @@ export class Projects {
   runner(id: string): Runner {
     if (!fs.existsSync(studioFile(this.dir(id), 'project.json'))) throw new Error(tr('项目不存在', 'Project not found'));
     let r = this.runners.get(id);
-    if (!r) { r = new Runner(id, this.dir(id), this.config); this.runners.set(id, r); }
+    if (!r) { r = new Runner(id, this.dir(id), this.config, this.renderer); this.runners.set(id, r); }
     return r;
   }
 }
@@ -105,7 +105,7 @@ class Runner {
   /** the language of the user's latest message, which the director answers in */
   private replyLang?: 'zh' | 'en';
 
-  constructor(readonly id: string, private dir: string, private config: ConfigStore) {
+  constructor(readonly id: string, private dir: string, private config: ConfigStore, private renderer?: Renderer) {
     this.log = studioFile(dir, 'events.jsonl');
     if (fs.existsSync(this.log)) {
       const lines = fs.readFileSync(this.log, 'utf8').trim().split('\n').filter(Boolean);
@@ -218,7 +218,7 @@ class Runner {
       director = new Director({
         dir, runtime, style: meta.style, prices, tts, voice, concurrency: cfg.defaults.concurrency,
         brief: { durationSec: meta.durationSec, topic: meta.topic, notes: meta.notes, lang: meta.lang ?? 'zh', replyLang: this.replyLang ?? resolveLocale(cfg.locale) },
-        emit: this.emit, signal: this.abort.signal,
+        emit: this.emit, signal: this.abort.signal, renderer: this.renderer,
       });
     } catch (e) {
       this.status = 'failed';

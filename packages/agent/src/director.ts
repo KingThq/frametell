@@ -4,7 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { narrate, type TtsProvider } from '@frametell/voice';
-import { Project, type LintIssue, type PageTiming, type Storyboard } from './project.js';
+import { Project, type LintIssue, type PageTiming, type Storyboard, type Renderer } from './project.js';
 import { checkPrompt, langNote, pagePrompt, pageSystem, plannerSystem, replyNote, reviewPrompt, scriptPrompt, storyboardFixPrompt, storyboardPrompt, type Brief } from './prompts.js';
 import { addUsage, emptyUsage, type AgentRuntime, type AgentSession, type Thinking, type TokenUsage, type TurnResult } from './runtime/types.js';
 import type { PageStatus, Stage, StudioEvent } from './events.js';
@@ -24,6 +24,8 @@ export interface DirectorOptions {
   concurrency?: number;
   emit?: (e: StudioEvent) => void;
   signal?: AbortSignal;
+  /** where exports are drawn; this process when absent */
+  renderer?: Renderer;
 }
 
 interface PageState { status: PageStatus; rounds: number; issues: string[]; ref?: string }
@@ -84,7 +86,7 @@ export class Director {
   private commits: Promise<unknown> = Promise.resolve();
 
   constructor(private o: DirectorOptions) {
-    this.project = new Project(o.dir);
+    this.project = new Project(o.dir, o.renderer);
     const f = this.project.file('.studio/state.json');
     this.state = fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : { stage: 'storyboard', pages: {}, usage: emptyUsage() };
   }
