@@ -105,7 +105,7 @@ export function scriptPrompt(feedback?: string, brief?: Brief) {
   return [feedback ? `The user's changes to the storyboard: ${feedback}\nFirst update storyboard.json to match, then write the narration.` : 'The user approved the storyboard without changes.', 'Stage 2: write script.js, run node engine/tools/script.mjs to see the estimated length, then stop and report.' + withVoice('script', brief) + langNote('script', brief?.lang, brief?.replyLang)].join('\n');
 }
 
-export function pagePrompt(sb: Storyboard, id: string, t: PageTiming, lang: Lang | undefined = sb.lang, replyLang?: Lang) {
+export function pagePrompt(sb: Storyboard, id: string, t: PageTiming, lang: Lang | undefined = sb.lang, replyLang?: Lang, revising = false) {
   const p = sb.pages.find((x) => x.id === id);
   const outline = sb.pages.map((x) => `- ${x.id} ${x.section}`).join('\n');
   return `You own page **${id}**.
@@ -125,10 +125,10 @@ ${(p?.beats || []).map((b, i) => `  ${i + 1}. [${b.at}] ${b.object} — ${b.acti
 The page lasts ${(t.end - t.start).toFixed(2)}s; its narration ends at ${(t.speechEnd - t.start).toFixed(2)}s (P.endT).
 ${t.cues.map((c) => `- c${c.i}: at ${c.at}s in the page, "${c.text}"`).join('\n')}
 
-Stop once pages/${id}.js is written and say in one sentence what you drew.${langNote('page', lang, replyLang)}`;
+${revising ? `pages/${id}.js is already written; stop once the change below is made in it and say in one sentence what you changed.` : `Stop once pages/${id}.js is written and say in one sentence what you drew.`}${langNote('page', lang, replyLang)}`;
 }
 
-export function checkPrompt(round: number, issues: LintIssue[], times: { t: number; local: number }[]) {
+export function checkPrompt(round: number, issues: LintIssue[], times: { t: number; local: number }[], change?: string) {
   const lint = issues.length ? issues.map((i) => `- ${i.local}s: ${i.msg}`).join('\n') : '(lint found nothing)';
   return `Check round ${round}.
 
@@ -136,7 +136,7 @@ Lint:
 ${lint}
 
 The attached sheet shows the page at these moments within it (left to right, top to bottom): ${times.map((x) => x.local.toFixed(1) + 's').join(', ')}.
-Go through the checklist against the pictures. If something is wrong, fix the page file; if nothing is, reply only DONE; for a problem you keep on purpose, reply FLAGGED: <reason>.
+${change ? `The user asked for this change to the page: ${change}\nIf the pictures don't show it yet, make it now: that is what this round is for.\n` : ''}Go through the checklist against the pictures. If something is wrong, fix the page file; if nothing is, reply only DONE; for a problem you keep on purpose, reply FLAGGED: <reason>.
 Fix with edit, only where the problem is (a size, a position, a moment). **Never rewrite the whole file with write**: a full rewrite takes minutes, one edit takes seconds. No need to read the file again afterwards.
 **Put all of this round's edits in one reply** (one reply can call edit several times), each with finish: true: the round ends once they apply, no reply needed, and the server checks again and sends you new pictures.`;
 }

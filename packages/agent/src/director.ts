@@ -102,6 +102,8 @@ Change only what needs changing, with edit; **never rewrite the whole file with 
 // and a -medium one 37–74 s, with no worse a page (one was cleaner, with no lint issues); a check round dropped from
 // 26–153 s to about 6 s. The storyboard and the narration keep the model's own level.
 const PAGE_THINKING: Thinking = 'medium';
+/** a revised page whose code is as it was: the change never landed */
+const NOT_MADE = { zh: '这次没有改上：页面和改之前一样', en: 'The change was not made: the page is as it was' };
 const MAX = { pagesAtOnce: 10, storyboardFix: 2, planTurns: 30, pageTurns: 40, pageRounds: 3, revisionRounds: 2, reviewRounds: 2, reviewDefectsMs: 180_000 };
 
 export class Director {
@@ -351,9 +353,14 @@ export class Director {
     try {
       const s = await this.session(`page-${id}`, pageSystem(this.o.style, STYLE_EXTRAS[this.o.style] ?? []), MAX.pageTurns);
       const fix = this.state.revision?.[id];
-      let r = await this.send(s, pagePrompt(sb, id, t, this.o.brief.lang, this.o.brief.replyLang) + (fix ? revisionNote(id, fix, this.project.read(`pages/${id}.js`)) : '') + this.unseen(`page-${id}`), undefined, PAGE_THINKING);
+      // a revision's page already exists, so "is there a file" says nothing: what tells is whether the code changed
+      // (seen: a revision whose edits never landed was checked, passed and shown as done, on the old page)
+      const before = fix && !this.wordsChanged ? this.project.read(`pages/${id}.js`) : undefined;
+      const unchanged = () => before !== undefined && this.project.read(`pages/${id}.js`) === before;
+      let r = await this.send(s, pagePrompt(sb, id, t, this.o.brief.lang, this.o.brief.replyLang, !!fix) + (fix ? revisionNote(id, fix, this.project.read(`pages/${id}.js`)) : '') + this.unseen(`page-${id}`), undefined, PAGE_THINKING);
       if (!this.project.exists(`pages/${id}.js`)) r = await this.send(s, `pages/${id}.js does not exist yet; write it, then stop.`, undefined, PAGE_THINKING);
       if (!this.project.exists(`pages/${id}.js`)) throw new Error(r.error || this.say('没有写出页面文件', 'No page file was written'));
+      if (unchanged()) r = await this.send(s, `pages/${id}.js is exactly as it was: the change was not made${r.error ? ` (${r.error})` : ''}. Make it now with edit. If an edit failed, its old_string must be copied exactly from the current file; read the file first if unsure.`, undefined, PAGE_THINKING);
       st.ref = s.ref;
       await this.commit(this.say(`${id}：初稿`, `${id}: first draft`));
       let issues: LintIssue[] = [];
@@ -375,7 +382,7 @@ export class Director {
         const times = this.sheetTimes(sb, t);
         const sheet = await this.project.snap(`${id}-r${round}`, times.map((x) => x.t), [id]);
         this.setPage(id, { ...st, issues: issues.map((i) => i.msg) }, { sheet });
-        r = await this.send(s, checkPrompt(round, issues, times) + this.unseen(`page-${id}`), [sheet], PAGE_THINKING);
+        r = await this.send(s, checkPrompt(round, issues, times, unchanged() ? fix : undefined) + this.unseen(`page-${id}`), [sheet], PAGE_THINKING);
         await this.commit(this.say(`${id}：第 ${round} 轮修改`, `${id}: check round ${round}`));
         const reply = r.text.trim();
         if (/^FLAGGED/i.test(reply)) { st.status = 'flagged'; st.issues = [reply.replace(/^FLAGGED:?\s*/i, '')]; break; }
@@ -390,6 +397,8 @@ export class Director {
         st.status = issues.length ? 'flagged' : 'ok';
         st.issues = issues.map((i) => `${i.local}s：${i.msg}`);
       }
+      // the change never landed: the page is as it was, which is not what the user asked for, whatever the checks said
+      if (unchanged()) { st.status = 'flagged'; st.issues = [this.say(NOT_MADE.zh, NOT_MADE.en)]; }
       await s.close();
       // one settled frame as the film-strip thumbnail (the check sheets are 4-up and read as noise at tile size)
       let thumb: string | undefined;
@@ -470,6 +479,7 @@ export class Director {
    */
   async revise(request: string) {
     const t0 = Date.now();
+    const script = this.project.read('script.js');
     this.state.change = request; this.save();
     const sb = this.project.storyboard();
     const named = sb.pages.filter((p, i) => new RegExp(`\\b${p.id}\\b|第\\s*${i + 1}\\s*页|\\bpage\\s*${i + 1}\\b`, 'i').test(request)).map((p) => p.id);
@@ -486,6 +496,9 @@ export class Director {
       try { plan = JSON.parse(this.project.read('.studio/revision.json')); } catch { this.fail('pages', this.say('导演没有写出修改计划', 'The director did not write a plan for the change')); }
     }
     const tPlan = Date.now();
+    // a change to the narration can leave a page's code as it is (its timing follows the script): only a change to the
+    // picture must show in the page's code
+    this.wordsChanged = this.project.read('script.js') !== script;
     const ids = plan!.pages.map((p) => p.id).filter((id) => sb.pages.some((p) => p.id === id));
     if (!ids.length) this.fail('pages', this.say('修改计划里没有可以改的页', 'The plan for the change names no page to change'));
     const nums = ids.map((id) => sb.pages.findIndex((p) => p.id === id) + 1);
@@ -501,6 +514,9 @@ export class Director {
     await this.pages(ids);
     this.state.revision = undefined; this.save();
     const tPages = Date.now();
+    // pages the change never reached are said plainly, not left to a film that looks done
+    const missed = ids.filter((id) => this.state.pages[id]?.issues[0] === this.say(NOT_MADE.zh, NOT_MADE.en)).map((id) => sb.pages.findIndex((p) => p.id === id) + 1);
+    if (missed.length) this.emit({ type: 'note', text: this.say(`${missed.map((n) => `第 ${n} 页`).join('、')}没有改上，画面还是原来的。换个说法再告诉我一次？`, `${missed.length > 1 ? 'Pages' : 'Page'} ${missed.join(', ')} did not change; the picture is as it was. Could you ask again in other words?`) });
     // where the time went, in one line, so a slow step is seen (and can be fixed) instead of only felt
     const sec = (ms: number) => this.say(`${Math.max(1, Math.round(ms / 1000))} 秒`, `${Math.max(1, Math.round(ms / 1000))} s`);
     this.beforeReady = () => this.emit({ type: 'note', text: this.say(
@@ -509,6 +525,8 @@ export class Director {
     await this.review();
     this.state.change = undefined; this.save();
   }
+  /** the revision in progress changed script.js */
+  private wordsChanged = false;
   /** said just before the film is ready again (a revision's time line) */
   private beforeReady?: () => void;
   /** resolves the wait for the first page's first answer (the shared prompt is cached by then) */

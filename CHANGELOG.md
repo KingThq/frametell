@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A change to a finished film that never reached the page is no longer shown as done. When the page model's edits didn't land (or it only said it had made the change), the page passed its checks and showed "done", and the preview and the export kept the old picture. Now a page whose code is unchanged is asked once more, every check round restates the change, and if it still didn't land the page is marked for you to look at and the director says which page was not changed.
 - Continue answers at once. A paused film shows that it is getting ready the moment you continue, instead of staying paused until its next step began: getting ready fetched the model list of every provider with a key (12 seconds was seen, and a provider that hung held the film back with no end), so Continue seemed to do nothing until you left and came back. Now only the film's own providers' lists are fetched, and they get 15 seconds.
 - Pause stops the film whenever you press it. Pressed while an agent was between two requests (checking a page, taking screenshots), it used to be missed, and the film went on for minutes.
 
