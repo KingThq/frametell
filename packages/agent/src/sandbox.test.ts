@@ -100,3 +100,10 @@ test('engine tools run as they always have, and inside the sandbox when the netw
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('every engine tool is launched through engineCmd, so none can bypass the sandbox', () => {
+  const src = fs.readFileSync(new URL('../src/project.ts', import.meta.url), 'utf8');
+  const code = src.split('\n').filter((l) => l.includes('process.execPath') && !/^\s*(\/\/|\*|\/\*)/.test(l));
+  const outside = code.filter((l) => !l.includes('confine(dir, process.execPath, args)'));   // the one line that defines engineCmd
+  assert.deepEqual(outside, [], 'process.execPath may only appear in the engineCmd definition');
+});

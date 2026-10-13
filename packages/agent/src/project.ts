@@ -108,7 +108,8 @@ export class Project {
     const rel = (t: number) => `out/frames/live-${stamp}-${Math.round(t * 10)}.jpg`;
     const todo = [...new Set(ts.filter((t) => !fs.existsSync(path.join(this.dir, rel(t)))))];
     if (todo.length) {
-      await run(process.execPath, [path.join(ENGINE_DIR, 'tools', 'snap.mjs'), ...todo.map((t) => t.toFixed(1))], this.dir);
+      const [cmd, argv] = engineCmd(this.dir, [path.join(ENGINE_DIR, 'tools', 'snap.mjs'), ...todo.map((t) => t.toFixed(1))]);
+      await run(cmd, argv, this.dir);
       await Promise.all(todo.map(async (t) => {
         const png = this.file(`out/snap/snap-${t}.png`);
         await run(FFMPEG, ['-y', '-loglevel', 'error', '-i', png, '-q:v', '2', path.join(this.dir, rel(t))]);
