@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Captions, CaptionsOff, Check, ChevronLeft, ChevronRight, Download, Images, Maximize2, MessageSquareText, Quote, TriangleAlert } from 'lucide-react';
 import { client, downloadUrl, type PageTiming, type ProjectView, type Timeline } from '../lib/client';
 import { film, finished, relPath, STAGE_NAME, STAGES, type PageView, type RunView } from '../lib/run';
-import { issueText } from '../lib/lint';
+import { shownIssues } from '../lib/lint';
 import { ExportControls, RevealFile } from './Export';
 import { pageName } from '../lib/describe';
 import { Lightbox } from './Lightbox';
@@ -82,7 +82,7 @@ function useLivePlayer(version: string, url: string, from = 0) {
     return () => { removeEventListener('message', on); later.forEach(clearTimeout); };
   }, []);
   const frames = ({ className, ...props }: React.IframeHTMLAttributes<HTMLIFrameElement>) => (boot.current ??= from, docs.map((d, i) => (
-    <iframe key={keyOf(d)} ref={i === 0 ? frame : behind} data-v={d.v} src={`${url}?from=${(d.from ?? boot.current!).toFixed(2)}&lang=${locale}`} sandbox={sandboxFor(url)} {...props} tabIndex={i === 0 ? undefined : -1} aria-hidden={i > 0 || undefined}
+    <iframe key={keyOf(d)} ref={i === 0 ? frame : behind} data-v={d.v} src={`${url}?from=${(d.from ?? boot.current!).toFixed(2)}&lang=${locale}`} sandbox={sandboxFor(url)} allow="autoplay; fullscreen" {...props} tabIndex={i === 0 ? undefined : -1} aria-hidden={i > 0 || undefined}
       className={`${className ?? ''} ${i > 0 ? '!absolute inset-0 pointer-events-none !opacity-0' : ''}`} />
   )));
   return { frame, frames, ...st };
@@ -94,6 +94,8 @@ const RETRIES = 4, SILENT_MS = 20_000;
  * the whole engine again. When the film is served from another origin than this panel (the hosted studio's preview
  * domain) it may keep that origin: it stays cut off from the panel all the same, and its files are cached like any
  * site's. Served from the panel's own origin (a local studio), same-origin would undo the sandbox, so it stays opaque.
+ * It may also play sound (allow="autoplay"): "Play" in the panel is no click inside the frame, and without it the
+ * browser refused the narration and the film played silent.
  */
 const sandboxFor = (url: string) => { try { return new URL(url, location.href).origin !== location.origin ? 'allow-scripts allow-same-origin' : 'allow-scripts'; } catch { return 'allow-scripts'; } };
 const seekFrame = (frame: HTMLIFrameElement | null, t: number, play = true) => frame?.contentWindow?.postMessage({ type: 'studio:seek', t, play }, '*');
@@ -251,7 +253,6 @@ function Canvas({ run, project, ids, tl, onFocus, onWarm, onRef }: { run: RunVie
                     {pt && <span className="shrink-0 font-mono text-[11.5px] text-ink-3 tabular">{mmss(pt.start)}–{mmss(pt.end)}</span>}
                   </span>
                   <span className="mt-2 line-clamp-4 text-[12.5px] leading-[1.7] text-ink-2">{lines.map((l) => l.text).join('') || tr('stage.noPageNarration')}</span>
-                  {p?.status === 'flagged' && p.issues[0] && <span className="mt-2 text-[12px] leading-relaxed text-warn">{issueText(p.issues[0])}</span>}
                   {p && p.status !== 'ok' && p.status !== 'flagged' && <span className="mt-2 text-[12px] text-accent-ink">{statusText(p.status)}</span>}
                 </span>
               </button>
@@ -486,7 +487,7 @@ function Focus({ id, active: shown, run, project, ids, tl, onFocus, onBack, onRe
                 );
               }) : <li className="px-2.5 text-[13px] text-ink-3">{tr('stage.noNarration')}</li>}
             </ol>
-            {p?.status === 'flagged' && p.issues.length > 0 && <p className="mt-2 flex items-start gap-1.5 text-[12.5px] leading-relaxed text-warn"><TriangleAlert size={13} className="mt-0.5 shrink-0" aria-hidden />{p.issues.map(issueText).join(tr('stage.issueSep'))}</p>}
+            {p?.status === 'flagged' && shownIssues(p.issues).length > 0 && <p className="mt-2 flex items-start gap-1.5 text-[12.5px] leading-relaxed text-warn"><TriangleAlert size={13} className="mt-0.5 shrink-0" aria-hidden />{shownIssues(p.issues).join(tr('stage.issueSep'))}</p>}
           </div>
           <div className="flex items-start">
             <button className="fs-btn fs-btn-secondary" onClick={() => onRef(pageRef)} title={tr('stage.editPageTitle')}>{tr('stage.editPage')}</button>
@@ -512,9 +513,11 @@ export function Stage({ run, project, selected, onSelect, playKey, onRef }: { ru
   const tlKey = `${run.stages.script.status}-${run.stages.narrate.status}-${run.ready?.at ?? ''}-${run.video?.path ?? ''}`;
   const tl = useTimeline(project.id, tlKey);
   // “Play” from the conversation: the film view, playing. The request is taken once, so the film does not start by
-  // itself on a later visit
-  const wantPlay = useRef(false);
-  useEffect(() => { if (playKey) { wantPlay.current = true; onSelect(undefined); setView('film'); } }, [playKey]);
+  // itself on a later visit. It is noted while rendering, not in an effect: the film's own effect runs before this
+  // one, and found no request yet (seen: a click on Play did nothing while the film view was already open)
+  const wantPlay = useRef(false), playSeen = useRef(playKey);
+  if (playKey !== playSeen.current) { playSeen.current = playKey; if (playKey) wantPlay.current = true; }
+  useEffect(() => { if (playKey) { onSelect(undefined); setView('film'); } }, [playKey]);
   const takePlay = () => { const w = wantPlay.current; wantPlay.current = false; return w; };
   const focused = useMemo(() => (selected && ids.includes(selected) ? selected : undefined), [selected, ids]);
   // The close-up stays mounted once there is a drawn page to show: hidden behind the film or the canvas, its player

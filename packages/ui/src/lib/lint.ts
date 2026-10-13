@@ -2,6 +2,8 @@ import { getLocale } from '../i18n';
 
 // A page check's finding as the person reads it. The engine words its findings in English for the page agents, who fix
 // them; in a Chinese panel they are said in Chinese. A finding no rule knows is shown as the engine wrote it.
+// A page agent that gives up on a finding writes why (FLAGGED: …): that is a note to us, in the model's words and often
+// in English, and is not shown at all (seen: a paragraph about the "sparse" measure under a finished film's page).
 
 const q = (s: string) => `「${s}」`;
 
@@ -17,6 +19,7 @@ const ZH: [RegExp, (m: RegExpMatchArray) => string][] = [
   [/^small text \((\d+)px < (\d+)px\): "([^"]*)"/, (m) => `字太小：${q(m[3])}只有 ${m[1]} 像素，至少要 ${m[2]}`],
   [/^text overlap: "([^"]*)" × "([^"]*)"/, (m) => `文字重叠：${q(m[1])}和${q(m[2])}叠在了一起`],
   [/^(runtime error|unknown API|wrong API use)\b/, () => '这一页的代码出错了'],
+  [/^(这次没有改上|The change was not made)/, () => '这次没有改上：页面和改之前一样'],
 ];
 
 /** one finding, as the page reports it ("18.4s：text-dominated page: …"), in the panel's language */
@@ -29,4 +32,12 @@ export function issueText(issue: string): string {
     if (hit) return (at ? `${at} 秒 · ` : '') + say(hit);
   }
   return issue;
+}
+
+/** the findings worth showing: those the rules know, in the panel's language; an agent's own note is left out */
+export function shownIssues(issues: string[]): string[] {
+  return issues.filter((issue) => {
+    const msg = issue.replace(/^[\d.]+s[：:]\s*/, '');
+    return ZH.some(([re]) => re.test(msg));
+  }).map(issueText);
 }

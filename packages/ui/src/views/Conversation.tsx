@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronRight, CircleDashed, Clapperboard, Download, Loader2, Pause, Play, TriangleAlert } from 'lucide-react';
 import { client, downloadUrl, type ProjectView } from '../lib/client';
 import { clock, film, finished, relPath, STAGE_NAME, STAGES, type FeedItem, type PageView, type RunView, type Stage, type Storyboard, isWorking } from '../lib/run';
-import { issueText } from '../lib/lint';
 import { pageName, stepText, summarizeTools } from '../lib/describe';
 import { useNow } from '../lib/hooks';
 import { Crest } from '../components/Logo';
@@ -149,7 +148,6 @@ function Pages({ run, onSelect, selected }: { run: RunView; onSelect: (id: strin
               <span className="min-w-0 flex-1 truncate text-[13px]">{section}</span>
               <span className={`shrink-0 text-[12px] ${st.tone}`}>{st.text(p)}</span>
             </button>
-            {p?.status === 'flagged' && p.issues[0] && <p className="ml-[54px] pb-1 text-[12px] leading-relaxed text-warn">{issueText(p.issues[0])}</p>}
           </li>
         );
       })}

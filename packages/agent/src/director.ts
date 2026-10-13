@@ -356,6 +356,12 @@ export class Director {
     const todo = tl.pages.filter((p) => (!only || only.includes(p.id)) && !['ok', 'flagged'].includes(this.state.pages[p.id]?.status ?? ''));
     const failures = (id: string) => this.state.pages[id]?.failures ?? 0;
     this.redraw = new Set(this.o.pages ? todo.filter((p) => failures(p.id) > 0).map((p) => p.id) : []);
+    // A run that stopped while pages were in their checks (seen: the server restarted for a deploy): their drafts and
+    // conversations are kept, so each picks up at the check it was in. Drawn again from nothing, they were paid twice
+    this.inChecks = new Map(todo.flatMap((p) => {
+      const was = this.state.pages[p.id];
+      return was?.status === 'checking' && was.ref && was.rounds > 0 && !this.state.revision?.[p.id] && this.project.exists(`pages/${p.id}.js`) ? [[p.id, { ref: was.ref, rounds: was.rounds }]] : [];
+    }));
     for (const p of todo) this.setPage(p.id, { status: 'queued', rounds: 0, issues: [], failures: failures(p.id) });
     const queue = [...todo];
     const worker = async () => { for (let p = queue.shift(); p; p = queue.shift()) await this.page(sb, p); };
@@ -414,28 +420,32 @@ export class Director {
 
   private async page(sb: Storyboard, t: PageTiming) {
     const id = t.id;
+    const was = this.inChecks.get(id);
     const st: PageState = { status: 'drawing', rounds: 0, issues: [], failures: this.state.pages[id]?.failures };
     this.setPage(id, st);
     let s: AgentSession | undefined;
     try {
-      s = await this.session(`page-${id}`, pageSystem(this.o.style, styleExtras(this.o.style), this.o.brief.preferences, this.o.brief.styleNotes), MAX.pageTurns);
+      s = await this.session(`page-${id}`, pageSystem(this.o.style, styleExtras(this.o.style), this.o.brief.preferences, this.o.brief.styleNotes), MAX.pageTurns, was?.ref);
       const fix = this.state.revision?.[id];
       // a revision's page already exists, so "is there a file" says nothing: what tells is whether the code changed
       // (seen: a revision whose edits never landed was checked, passed and shown as done, on the old page)
       const before = fix && !this.wordsChanged ? this.project.read(`pages/${id}.js`) : undefined;
       const unchanged = () => before !== undefined && this.project.read(`pages/${id}.js`) === before;
-      let r = await this.send(s, pagePrompt(sb, id, t, this.o.brief.lang, this.o.brief.replyLang, !!fix) + (fix ? revisionNote(id, fix, this.project.read(`pages/${id}.js`)) : '') + this.unseen(`page-${id}`), undefined, PAGE_THINKING);
-      if (!this.project.exists(`pages/${id}.js`)) r = await this.send(s, `pages/${id}.js does not exist yet; write it, then stop.`, undefined, PAGE_THINKING);
-      if (!this.project.exists(`pages/${id}.js`)) throw new Error(r.error || this.say('没有写出页面文件', 'No page file was written'));
-      // the agent found nothing to change (already so, or nothing this page can do): it says why instead of searching
-      const declined = unchanged() && /^FLAGGED/i.test(r.text.trim()) ? r.text.trim().replace(/^FLAGGED:?\s*/i, '') || this.say(NOT_MADE.zh, NOT_MADE.en) : undefined;
-      if (declined) { st.status = 'flagged'; st.issues = [declined]; }
-      else if (unchanged()) r = await this.send(s, `pages/${id}.js is exactly as it was: the change was not made${r.error ? ` (${r.error})` : ''}. Make it now with edit. If an edit failed, its old_string must be copied exactly from the current file; read the file first if unsure.`, undefined, PAGE_THINKING);
+      let r: TurnResult | undefined, declined: string | undefined;
+      if (!was) {
+        r = await this.send(s, pagePrompt(sb, id, t, this.o.brief.lang, this.o.brief.replyLang, !!fix) + (fix ? revisionNote(id, fix, this.project.read(`pages/${id}.js`)) : '') + this.unseen(`page-${id}`), undefined, PAGE_THINKING);
+        if (!this.project.exists(`pages/${id}.js`)) r = await this.send(s, `pages/${id}.js does not exist yet; write it, then stop.`, undefined, PAGE_THINKING);
+        if (!this.project.exists(`pages/${id}.js`)) throw new Error(r.error || this.say('没有写出页面文件', 'No page file was written'));
+        // the agent found nothing to change (already so, or nothing this page can do): it says why instead of searching
+        declined = unchanged() && /^FLAGGED/i.test(r.text.trim()) ? r.text.trim().replace(/^FLAGGED:?\s*/i, '') || this.say(NOT_MADE.zh, NOT_MADE.en) : undefined;
+        if (declined) { st.status = 'flagged'; st.issues = [declined]; }
+        else if (unchanged()) r = await this.send(s, `pages/${id}.js is exactly as it was: the change was not made${r.error ? ` (${r.error})` : ''}. Make it now with edit. If an edit failed, its old_string must be copied exactly from the current file; read the file first if unsure.`, undefined, PAGE_THINKING);
+      }
       st.ref = s.ref;
-      await this.commit(this.say(`${id}：初稿`, `${id}: first draft`));
+      if (!was) await this.commit(this.say(`${id}：初稿`, `${id}: first draft`));
       let issues: LintIssue[] = [];
       const rounds = fix ? MAX.revisionRounds : MAX.pageRounds;   // a revision starts from a checked page
-      for (let round = 1; !declined && round <= rounds + 1; round++) {
+      for (let round = was?.rounds ?? 1; !declined && round <= rounds + 1; round++) {
         st.status = 'checking'; st.rounds = round; this.setPage(id, st);
         // a page whose code throws cannot be checked; that is the first thing to fix, so it goes back to its agent
         // (one more round than usual is allowed for it) instead of failing the page
@@ -628,6 +638,8 @@ export class Director {
   private firstTurn?: () => void;
   /** pages drawn again after failing, by the film's own model */
   private redraw = new Set<string>();
+  /** pages the last run left in their checks: the conversation to resume, and the check round it was in */
+  private inChecks = new Map<string, { ref: string; rounds: number }>();
   /** each session's last error from its model service */
   private lastError = new WeakMap<AgentSession, string>();
 

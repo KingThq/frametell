@@ -52,8 +52,9 @@
           if (a.paused) {
             if (a.readyState < 2) continue;
             a.currentTime = off;
-            // refused (no user gesture yet): leave it, rather than asking again every frame
-            a.play().catch(() => { c.done = true; });
+            // Refused for want of a click (play was asked from outside, by the Studio panel): the film stops and asks
+            // for one, rather than going on silent. Any other refusal: leave it, rather than asking every frame
+            a.play().catch((e) => { if (e?.name === 'NotAllowedError' && playing) needsClick(); else c.done = true; });
           }
         } else if (el && !el.paused && (!playing || off < 0 || off > c.d + 0.5)) el.pause();
       }
@@ -130,6 +131,11 @@
       requestAnimationFrame(loop);
     };
     const pause = () => { playing = false; syncAudio(); show(); };
+    const needsClick = () => {
+      pause();
+      hint.firstChild.textContent = say('点击画面播放（有声音）', 'Click the picture to play with sound');
+      hint.firstChild.style.opacity = '1';
+    };
     const toggle = () => (playing ? pause() : play());
     const jump = (to) => {
       t = Math.max(0, Math.min(dur, to)); wall = t; t0 = performance.now();

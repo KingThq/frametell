@@ -50,3 +50,21 @@ test('pages that keep failing ask the user how they should look', async () => {
   await assert.rejects(d.pages(), /点继续，会换用更强的模型/);
   await assert.rejects(d.pages(), /说说这几页想怎么画/);
 });
+
+test('a page the run left in its checks picks up there on Continue, not drawn again', async () => {
+  const sent: { resume?: string; text: string }[] = [];
+  const pages: AgentRuntime = {
+    id: 'pi', model: { provider: 'x', id: 'flash' },
+    async open(_s, resume) {
+      return { ref: resume ?? 'fresh', close: async () => {}, send: async ({ text }: { text: string }) => { sent.push({ resume, text }); return { text: 'DONE', stopReason: 'done', usage: {} } as never; } };
+    },
+  };
+  const d = film(pages, pages);
+  fs.writeFileSync(path.join((d as unknown as { o: { dir: string } }).o.dir, 'pages/p01.js'), PAGE);
+  d.state.pages.p01 = { status: 'checking', rounds: 2, issues: [], ref: 'session-p01' } as never;   // the server went down here
+  await d.pages();
+  assert.equal(d.state.pages.p01.status, 'ok');
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].resume, 'session-p01');
+  assert.doesNotMatch(sent[0].text, /does not exist yet/);
+});
