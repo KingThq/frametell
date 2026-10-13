@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/banner-en-dark.png">
-    <img alt="画说 Frametell: turn your ideas and material into vivid explainer videos" src="docs/brand/readme/banner-en-light.png" width="100%">
+    <img alt="帧言 Frametell: turn your ideas and material into vivid explainer videos" src="docs/brand/readme/banner-en-light.png" width="100%">
   </picture>
 </p>
 
@@ -9,7 +9,7 @@
   <b>English</b> · <a href="README.zh-CN.md">简体中文</a>
 </p>
 
-**Frametell** (画说, *huà shuō*) turns your ideas and your material into vivid explainer videos with pages that move. One sentence is enough to start ("explain the uncertainty principle"), or you can hand it notes, documents, PDFs, slides and images. A director agent first drafts a storyboard for you to sign off on. Then it writes the narration, voices it, draws each page and checks its own work. You get a 1080p video, with subtitles and publishing notes.
+**Frametell** (帧言, *zhēn yán*) turns your ideas and your material into vivid explainer videos with pages that move. One sentence is enough to start ("explain the uncertainty principle"), or you can hand it notes, documents, PDFs, slides and images. A director agent first drafts a storyboard for you to sign off on. Then it writes the narration, voices it, draws each page and checks its own work. You get a 1080p video, with subtitles and publishing notes.
 
 It's built for knowledge creators who explain history, science, technology, investing, psychology or books, and who'd rather tell the story than learn video editing.
 
@@ -77,4 +77,9 @@ For bugs and feature requests, open an [issue](../../issues).
 
 ## License
 
-[MIT](LICENSE) · Made by [**Sitor Team**](https://sitor.ai)
+Frametell is licensed under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0). You may use, modify and
+run it, including commercially. If you offer a modified version to others over a network, you must make your modified
+source available to them under the same license. For a commercial license without these obligations, contact us
+through [sitor.ai](https://sitor.ai).
+
+Copyright © 2026 Hangzhou Sitor Cloud Technology Co., Ltd. · Made by [**Sitor Team**](https://sitor.ai)

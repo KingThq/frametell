@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/banner-zh-dark.png">
-    <img alt="画说 Frametell：把想法和资料，画说成生动的视频" src="docs/brand/readme/banner-zh-light.png" width="100%">
+    <img alt="帧言 Frametell：把想法和资料，变成生动的视频" src="docs/brand/readme/banner-zh-light.png" width="100%">
   </picture>
 </p>
 
@@ -9,13 +9,13 @@
   <a href="README.md">English</a> · <b>简体中文</b>
 </p>
 
-**画说**（Frametell）把你的想法和资料，变成画面会动、生动好看的讲解视频。一句灵感就能开始，比如「讲讲量子力学测不准原理」；也可以交给它笔记、文档、PDF、PPT 和图片。导演 Agent 先出分镜给你拍板，再写口播、配音、逐页作画并自检，最后渲染成 1080p 成片，附带字幕和发布信息。
+**帧言**（Frametell）把你的想法和资料，变成画面会动、生动好看的讲解视频。一句灵感就能开始，比如「讲讲量子力学测不准原理」；也可以交给它笔记、文档、PDF、PPT 和图片。导演 Agent 先出分镜给你拍板，再写口播、配音、逐页作画并自检，最后渲染成 1080p 成片，附带字幕和发布信息。
 
 它是给知识创作者用的：讲历史、科学、技术、投资、心理学、读书的人。你只管把事情讲清楚，不用学剪辑。
 
 ## 看看效果
 
-下面两条片子都是画说从头做到尾的：分镜、口播、配音、每一页画面和渲染。点图片观看（有声音）。
+下面两条片子都是帧言从头做到尾的：分镜、口播、配音、每一页画面和渲染。点图片观看（有声音）。
 
 <table>
   <tr>
@@ -28,7 +28,7 @@
   </tr>
 </table>
 
-## 为什么用画说
+## 为什么用帧言
 
 - **先拍板，再动手。** 分镜确认之前一页都不画。哪一页不对，指着它说改什么就行。
 - **过程看得见。** Agent 边做边说在干什么、为什么这么做，花了多少钱、用了多久，任何时候一眼可见。
@@ -65,14 +65,16 @@ node apps/cli/dist/cli.js run 讲稿.pdf --style warm-story --duration 60
 
 ## 社区
 
-用画说做了片子、遇到问题、想要新风格，都欢迎来群里聊。扫码加入画说交流群：
+用帧言做了片子、遇到问题、想要新风格，都欢迎来群里聊。扫码加入帧言交流群：
 
 <p align="center">
-  <img src="docs/brand/community/wecom.png" alt="画说交流群（企业微信）二维码" width="220">
+  <img src="docs/brand/community/wecom.png" alt="帧言交流群（企业微信）二维码" width="220">
 </p>
 
 Bug 和功能建议也可以直接提 [Issue](../../issues)。
 
 ## 许可
 
-[MIT](LICENSE) · [**Sitor Team**](https://sitor.ai) 出品
+帧言以 [GNU Affero 通用公共许可证 v3.0](LICENSE)（AGPL-3.0）开源。你可以自由使用、修改和运行它，包括商用；但如果你把修改后的版本通过网络提供给别人使用，就要以同样的许可证向他们公开修改后的源码。如果需要不带这些义务的商业授权，请通过 [sitor.ai](https://sitor.ai) 联系我们。
+
+Copyright © 2026 Hangzhou Sitor Cloud Technology Co., Ltd. · [**Sitor Team**](https://sitor.ai) 出品

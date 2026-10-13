@@ -2,7 +2,7 @@
   "name": "@frametell/voice",
   "version": "0.3.2",
   "description": "Narration for Frametell: Volcengine TTS 2.0 and ElevenLabs, cut into cues with per-character timing.",
-  "license": "MIT",
+  "license": "AGPL-3.0-only",
   "author": "Sitor Team (https://sitor.ai)",
   "homepage": "https://github.com/sitor-ai/frametell#readme",
   "repository": {

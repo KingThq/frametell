@@ -58,4 +58,10 @@ CI runs the same three commands on every pull request.
 
 ## License
 
-By contributing, you agree that your contributions are licensed under the [MIT License](LICENSE).
+Frametell is licensed under the [AGPL-3.0](LICENSE).
+
+Before your first pull request can be merged, you'll be asked to accept our
+[Contributor License Agreement](CLA.md): a bot comments on the pull request, and you reply with one sentence. You do
+this once, and it covers all your later contributions. You keep the copyright in your work; the agreement lets Hangzhou
+Sitor Cloud Technology Co., Ltd. include it in Frametell and offer Frametell under other licenses as well, such as a
+commercial license.

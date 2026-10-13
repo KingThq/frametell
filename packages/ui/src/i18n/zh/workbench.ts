@@ -1,6 +1,6 @@
 // 工作台外框：顶栏状态、花费、对话 / 画面两栏
 export default {
-  brand: '画说',
+  brand: '帧言',
   spentTitle: '本项目已花费',
   costDetails: '花费明细',
   costHeading: '这条视频已花费',

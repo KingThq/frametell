@@ -1,7 +1,7 @@
 // 全局：产品名、顶栏、导出、风格名、通用按钮
 export default {
-  product: '画说',
-  home: '画说首页',
+  product: '帧言',
+  home: '帧言首页',
   toLight: '切换为浅色',
   toDark: '切换为深色',
   light: '浅色',

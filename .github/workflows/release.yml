@@ -95,7 +95,7 @@ jobs:
           v=${GITHUB_REF_NAME#v}
           awk -v v="$v" '$0 ~ "^## \\[" v "\\]" {on=1; next} on && /^## \[/ {exit} on' CHANGELOG.md > notes.md
           printf '\n## Checksum\n\n```\n%s\n```\n' "$(cat apps/desktop/release/Frametell-$v-arm64.dmg.sha256)" >> notes.md
-          gh release create "$GITHUB_REF_NAME" --draft --verify-tag --title "画说 · Frametell $v" --notes-file notes.md \
+          gh release create "$GITHUB_REF_NAME" --draft --verify-tag --title "帧言 · Frametell $v" --notes-file notes.md \
             "apps/desktop/release/Frametell-$v-arm64.dmg" "apps/desktop/release/Frametell-$v-arm64.dmg.sha256"
 
       - name: Remove the signing keychain

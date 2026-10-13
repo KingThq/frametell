@@ -27,7 +27,7 @@
     "vite": "7.1.7"
   },
   "description": "The Frametell panel (React). Talks to the core through StudioClient: HTTP + SSE in a browser, IPC inside the desktop app.",
-  "license": "MIT",
+  "license": "AGPL-3.0-only",
   "author": "Sitor Team (https://sitor.ai)",
   "homepage": "https://github.com/sitor-ai/frametell#readme",
   "repository": {

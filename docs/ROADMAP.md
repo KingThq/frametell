@@ -44,7 +44,7 @@ We go one step at a time, and each step can be verified on its own. Finished ite
 ## M4 · Release
 - [ ] `npx frametell`: install and launch with one command
 - [ ] Add a sample film to the README
-- [ ] Tag version 0.1.0 and make the repo public (MIT)
+- [ ] Tag version 0.1.0 and make the repo public (AGPL-3.0)
 
 ## M5 · Canvas (phase two)
 - [x] Keyframes for each narration line, linked both ways with the player and the narration

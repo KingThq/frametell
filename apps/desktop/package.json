@@ -3,7 +3,7 @@
   "version": "0.3.2",
   "private": true,
   "description": "Frametell for macOS and Windows: the core in Electron's main process, the panel in a window, IPC in between.",
-  "license": "MIT",
+  "license": "AGPL-3.0-only",
   "type": "module",
   "main": "dist/main.js",
   "scripts": {

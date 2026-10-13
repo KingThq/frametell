@@ -237,7 +237,7 @@ class Runner {
   private async launch(task: (d: Director) => Promise<unknown>, o: { exporting?: boolean } = {}) {
     if (this.status === 'running') return;
     const other = heldElsewhere(this.dir);
-    if (other) { this.emit({ type: 'error', message: tr(`这个项目正在另一个画说窗口里制作（进程 ${other}），请在那里继续`, `This project is being made in another Frametell window (process ${other}). Continue there.`) }); return; }
+    if (other) { this.emit({ type: 'error', message: tr(`这个项目正在另一个帧言窗口里制作（进程 ${other}），请在那里继续`, `This project is being made in another Frametell window (process ${other}). Continue there.`) }); return; }
     const lock = studioFile(this.dir, 'run.lock');
     fs.writeFileSync(lock, String(process.pid));
     const release = () => { try { if (+fs.readFileSync(lock, 'utf8') === process.pid) fs.rmSync(lock); } catch {} };
