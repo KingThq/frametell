@@ -96,7 +96,7 @@ export function fileTools(root: string, opts: { timeoutMs?: number } = {}): Agen
     executionMode: 'sequential',
     execute: (_id, p, signal) => new Promise((resolve, reject) => {
       if (/\brender\.mjs\b|\bnpm (i|install)\b|\bcurl\b|\bwget\b/.test(p.command)) return reject(new Error('this command is not allowed in a page session'));
-      const [cmd, argv]: [string, string[]] = process.platform === 'win32' ? ['cmd.exe', ['/d', '/s', '/c', p.command]] : confine(root, 'bash', ['-lc', p.command]);
+      const [cmd, argv]: [string, string[]] = process.platform === 'win32' && process.env.FRAMETELL_SANDBOX_REQUIRED !== '1' ? ['cmd.exe', ['/d', '/s', '/c', p.command]] : confine(root, 'bash', ['-lc', p.command]);
       // its own process group, ended whole on a stop or the timeout: killing the sandbox alone left what it had started
       // running (seen: a page's lint.mjs, and its Chrome, still going 17 minutes after the film was paused)
       const win = process.platform === 'win32';

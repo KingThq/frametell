@@ -6,6 +6,9 @@
 //   without either, the shell runs unconfined.
 // FRAMETELL_SANDBOX_HIDE adds folders to keep out (comma-separated): a hosted service names where every account's
 // projects live, so one film's agent cannot read another's.
+// FRAMETELL_SANDBOX_NONET=1 takes the network away too (and, under bubblewrap, every process but its own): the hosted
+// sandbox, where any request that leaves is sent with the run's credential. FRAMETELL_SANDBOX_REQUIRED=1 makes a missing
+// sandbox an error instead of a shell left unconfined.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -52,14 +55,18 @@ const hasBwrap = () => (bwrap ??= (() => { try { execFileSync('bwrap', ['--ro-bi
 
 const q = (p: string) => JSON.stringify(p);   // a Seatbelt string literal
 
+const nonet = () => process.env.FRAMETELL_SANDBOX_NONET === '1';
+const required = () => process.env.FRAMETELL_SANDBOX_REQUIRED === '1';
+
 /** the command that runs `cmd argv` confined to `root` (the same command where no sandbox is available) */
-export function confine(root: string, cmd: string, argv: string[]): [string, string[]] {
+export function confine(root: string, cmd: string, argv: string[], platform: NodeJS.Platform = process.platform): [string, string[]] {
   const r = real(root) ?? root;
-  if (process.platform === 'darwin') {
+  if (platform === 'darwin') {
     const hidden = [...new Set(['/Users', real(os.homedir()) ?? os.homedir(), '/Volumes', '/private/tmp', '/private/var/tmp', ...extraHidden().map((d) => real(d) ?? d)])];
     const profile = [
       '(version 1)',
       '(allow default)',
+      ...(nonet() ? ['(deny network*)'] : []),
       `(deny file-read-data file-write* ${hidden.map((d) => `(subpath ${q(d)})`).join(' ')})`,
       `(allow file-read-data ${readable(root).map((d) => `(subpath ${q(d)})`).join(' ')})`,
       `(allow file-read-data file-write* (subpath ${q(r)}))`,
@@ -67,10 +74,12 @@ export function confine(root: string, cmd: string, argv: string[]): [string, str
     ].join('\n');
     return ['/usr/bin/sandbox-exec', ['-p', profile, cmd, ...argv]];
   }
-  if (process.platform === 'linux' && hasBwrap()) {
+  if (platform === 'linux' && hasBwrap()) {
     const hidden = [...new Set([os.homedir(), ...extraHidden()])].filter((d) => d !== '/' && fs.existsSync(d));
     return ['bwrap', [
       '--ro-bind', '/', '/', '--dev', '/dev', '--proc', '/proc', '--tmpfs', '/tmp',
+      // no network, no other processes (their /proc, environment and memory), no shared IPC, no terminal to type into
+      ...(nonet() ? ['--unshare-net', '--unshare-pid', '--unshare-ipc', '--new-session', '--tmpfs', '/dev/shm'] : []),
       ...hidden.flatMap((d) => ['--tmpfs', d]),
       // what the project needs from a hidden folder comes back: the project itself (writable), the engine and Node
       ...readable(root).filter((d) => hidden.some((h) => inside(d, h))).flatMap((d) => ['--ro-bind', d, d]),
@@ -78,5 +87,6 @@ export function confine(root: string, cmd: string, argv: string[]): [string, str
       '--chdir', r, '--die-with-parent', cmd, ...argv,
     ]];
   }
+  if (required()) throw new Error('FRAMETELL_SANDBOX_REQUIRED is set, but there is no sandbox here (bubblewrap on Linux, sandbox-exec on macOS)');
   return [cmd, argv];
 }
