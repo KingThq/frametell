@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-13
+
+### Changed
+
+- The product has a new Chinese name, Zhenyan ("frames that speak"); the English name stays Frametell. The interface, the CLI, the README, its banners and the brand guide all use it.
+- Frametell is now licensed under the GNU Affero General Public License v3.0 (AGPL-3.0) instead of MIT. Using, modifying and running it, commercially too, stays free; offering a modified version to others over a network now means making that version's source available to them under the same license.
+- Contributors accept a Contributor License Agreement (CLA.md) once, by replying to a bot on their first pull request.
+- Home's style picker shows the chosen style and a few others in one row, ending in "Browse every style", which opens every style in a dialog, grouped into free styles and those for members.
+
 ### Fixed
 
 - A finished film exports even when the model it was made with can no longer be reached (its provider was removed from Settings, or its key deleted). Exporting needs no model, but it stopped with "Model … is not available" and offered Continue instead.
@@ -193,7 +202,8 @@ The first release of Frametell: a local, open-source studio that turns an idea o
 - The npm packages are not published yet; install from source (see the README).
 - The Claude Agent SDK and Codex runtimes are in the code but not offered; every film runs on the built-in agent, which works with any provider.
 
-[Unreleased]: https://github.com/sitor-ai/frametell/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/sitor-ai/frametell/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/sitor-ai/frametell/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/sitor-ai/frametell/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/sitor-ai/frametell/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/sitor-ai/frametell/compare/v0.2.4...v0.3.0
