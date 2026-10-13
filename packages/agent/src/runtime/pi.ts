@@ -29,11 +29,13 @@ export function piRuntime(models: MutableModels, model: Model<Api>, opts: { thin
     id: 'pi',
     model: { provider: model.provider, id: model.id },
     async open(o: SessionOptions, resume?: string): Promise<AgentSession> {
+      // which session a request comes from, for a gateway that meters each one (it decides nothing by it)
+      const named = (m: Model<Api>): Model<Api> => ({ ...m, headers: { ...m.headers, 'x-frametell-session': o.name } });
       const transcript = resume && fs.existsSync(resume) ? (JSON.parse(fs.readFileSync(resume, 'utf8')) as AgentMessage[]) : [];
       let answers: Answer[] = [];
       const tools = [...(o.tools === 'none' ? [] : fileTools(o.cwd)), ...answerTools(o.answers ?? [], (a) => answers.push(a))];
       const agent = new Agent({
-        initialState: { systemPrompt: o.system, model, thinkingLevel: opts.thinking ?? 'medium', tools, messages: transcript },
+        initialState: { systemPrompt: o.system, model: named(model), thinkingLevel: opts.thinking ?? 'medium', tools, messages: transcript },
         streamFn: models.streamSimple.bind(models),
         sessionId: o.name,
         toolExecution: 'sequential',
@@ -88,7 +90,7 @@ export function piRuntime(models: MutableModels, model: Model<Api>, opts: { thin
           if (o.signal?.aborted) return { ok: false, text: '', turns, usage, error: 'aborted', stopReason: 'aborted', answers };
           o.signal?.addEventListener('abort', onAbort, { once: true });
           const l = levelled(input.thinking);
-          agent.state.model = l.model;
+          agent.state.model = named(l.model);
           agent.state.thinkingLevel = l.thinking;
           const images = (input.images || []).map((f) => ({ type: 'image' as const, data: fs.readFileSync(f).toString('base64'), mimeType: mimeOf(f) }));
           let error: string | undefined;
