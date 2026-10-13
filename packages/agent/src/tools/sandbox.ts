@@ -3,12 +3,12 @@
 // and the whole home folder. Inside the sandbox the shell reads the project, the engine, Node and the system, and
 // writes only the project and its own temp folder; the studio's record of the run (.studio/) is out of its reach.
 //   macOS: Seatbelt (sandbox-exec). Linux: bubblewrap when installed (the hosted service installs it). Elsewhere, or
-//   without either, the shell runs unconfined.
+//   without either, the shell runs unconfined, unless FRAMETELL_SANDBOX_REQUIRED or FRAMETELL_SANDBOX_NONET is set.
 // FRAMETELL_SANDBOX_HIDE adds folders to keep out (comma-separated): a hosted service names where every account's
 // projects live, so one film's agent cannot read another's.
 // FRAMETELL_SANDBOX_NONET=1 takes the network away too (and, under bubblewrap, every process but its own): the hosted
 // sandbox, where any request that leaves is sent with the run's credential. FRAMETELL_SANDBOX_REQUIRED=1 makes a missing
-// sandbox an error instead of a shell left unconfined.
+// sandbox an error instead of a shell left unconfined; asking for no network implies it (no network is never left to chance).
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -87,6 +87,6 @@ export function confine(root: string, cmd: string, argv: string[], platform: Nod
       '--chdir', r, '--die-with-parent', cmd, ...argv,
     ]];
   }
-  if (required()) throw new Error('FRAMETELL_SANDBOX_REQUIRED is set, but there is no sandbox here (bubblewrap on Linux, sandbox-exec on macOS)');
+  if (required() || nonet()) throw new Error('FRAMETELL_SANDBOX_REQUIRED is set (FRAMETELL_SANDBOX_NONET requires it too), but there is no sandbox here (bubblewrap on Linux, sandbox-exec on macOS)');
   return [cmd, argv];
 }

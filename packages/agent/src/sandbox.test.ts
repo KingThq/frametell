@@ -22,9 +22,10 @@ test('the shell reads and writes its project, and nothing in a folder kept out n
   try {
     assert.equal(sh('cat page.js && echo new > out.txt && cat out.txt').out, 'mine\nnew');
     assert.notEqual(sh(`cat ${JSON.stringify(path.join(other, 'secret.txt'))}`).out, 'theirs');
-    assert.notEqual(sh(`echo x > ${JSON.stringify(path.join(other, 'planted.txt'))}`).code, 0);
+    sh(`echo x > ${JSON.stringify(path.join(other, 'planted.txt'))}`);   // under bubblewrap the write may succeed, into the empty tmpfs; it must not land
     assert.ok(!fs.existsSync(path.join(other, 'planted.txt')));
-    assert.notEqual(sh(`ls ${JSON.stringify(os.homedir())}`).code, 0);
+    const h = sh(`ls -A ${JSON.stringify(os.homedir())}`);   // bubblewrap hides home behind an empty tmpfs: the listing fails or shows nothing
+    assert.ok(h.code !== 0 || h.out === '', h.out);
     fs.mkdirSync(path.join(root, '.studio'), { recursive: true }); fs.writeFileSync(path.join(root, '.studio/events.jsonl'), 'history');
     assert.notEqual(sh('cat .studio/events.jsonl').out, 'history');
   } finally {
@@ -57,7 +58,9 @@ test('with no network asked for, the shell cannot reach even this machine', { sk
 });
 
 test('with no network asked for on Linux, the shell sees no process outside its own', { skip: (process.platform !== 'linux' || !sandboxed) && 'bubblewrap only' }, async () => {
-  assert.match(await confined(`test -e /proc/${process.pid} && echo seen || echo hidden`, { FRAMETELL_SANDBOX_NONET: '1' }), /hidden/);
+  const probe = `test -e /proc/${process.pid} && echo seen || echo hidden`;
+  assert.match(await confined(probe, {}), /seen/);
+  assert.match(await confined(probe, { FRAMETELL_SANDBOX_NONET: '1' }), /hidden/);
 });
 
 test('a sandbox that is required and missing is an error, not a shell left open', () => {
@@ -68,4 +71,16 @@ test('a sandbox that is required and missing is an error, not a shell left open'
     process.env.FRAMETELL_SANDBOX_REQUIRED = '1';
     assert.throws(() => confine('/tmp', 'bash', ['-c', 'true'], 'win32'), /FRAMETELL_SANDBOX_REQUIRED/);
   } finally { if (was === undefined) delete process.env.FRAMETELL_SANDBOX_REQUIRED; else process.env.FRAMETELL_SANDBOX_REQUIRED = was; }
+});
+
+test('asking for no network requires a sandbox too', () => {
+  const was = { r: process.env.FRAMETELL_SANDBOX_REQUIRED, n: process.env.FRAMETELL_SANDBOX_NONET };
+  try {
+    delete process.env.FRAMETELL_SANDBOX_REQUIRED;
+    process.env.FRAMETELL_SANDBOX_NONET = '1';
+    assert.throws(() => confine('/tmp', 'bash', ['-c', 'true'], 'win32'), /FRAMETELL_SANDBOX_REQUIRED/);
+  } finally {
+    if (was.r === undefined) delete process.env.FRAMETELL_SANDBOX_REQUIRED; else process.env.FRAMETELL_SANDBOX_REQUIRED = was.r;
+    if (was.n === undefined) delete process.env.FRAMETELL_SANDBOX_NONET; else process.env.FRAMETELL_SANDBOX_NONET = was.n;
+  }
 });
