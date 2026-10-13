@@ -34,20 +34,28 @@ export function preferencesSection(preferences?: string) {
   return p ? `---\n# The user's standing preferences\n\nThe user wrote these in Settings, for every film they make. Follow them wherever they bear on your part of the work. This film's own request, and anything the user says while it is made, come first; the technical rules above always hold.\n\n<preferences>\n${p}\n</preferences>` : '';
 }
 
-export function plannerSystem(style: string, preferences?: string) {
-  return [read('PLANNER.md'), '---\n# This film\'s style (the page agent draws to it, so the storyboard must be drawable in it)\n\n' + grammar(style), '---\n' + read('LIB.md'), preferencesSection(preferences)].filter(Boolean).join('\n\n');
+/** A film's own look on top of its style: notes the user keeps with a style they shaped (in Frametell Cloud, from their
+ *  own films). After the style card, so they are read as that style's details, not as a new style. */
+export function styleNotesSection(notes?: string) {
+  const n = notes?.trim();
+  return n ? `---\n# This film's own look\n\nThe user shaped the style above for their films, and keeps these notes with it: how they like it drawn and told. Follow them wherever they bear on your part of the work, as long as the style's rules above still hold. This film's own request, and anything the user says while it is made, come first.\n\n<style-notes>\n${n}\n</style-notes>` : '';
+}
+
+export function plannerSystem(style: string, preferences?: string, styleNotes?: string) {
+  return [read('PLANNER.md'), '---\n# This film\'s style (the page agent draws to it, so the storyboard must be drawable in it)\n\n' + grammar(style), styleNotesSection(styleNotes), '---\n' + read('LIB.md'), preferencesSection(preferences)].filter(Boolean).join('\n\n');
 }
 /** the page agent's system prompt: process, the style's grammar, the drawing API, the style's components with a worked
  *  example page, and the wider component library (the stable part of every page session, so it caches well) */
-export function pageSystem(style: string, extras: string[] = [], preferences?: string) {
-  return [read('PAGE.md'), '---\n# This film\'s style\n\n' + grammar(style), '---\n' + read('API.md'), '---\n' + pagePack(style, extras), '---\n' + read('LIB.md'), preferencesSection(preferences)].filter(Boolean).join('\n\n');
+export function pageSystem(style: string, extras: string[] = [], preferences?: string, styleNotes?: string) {
+  return [read('PAGE.md'), '---\n# This film\'s style\n\n' + grammar(style), styleNotesSection(styleNotes), '---\n' + read('API.md'), '---\n' + pagePack(style, extras), '---\n' + read('LIB.md'), preferencesSection(preferences)].filter(Boolean).join('\n\n');
 }
 
 /** the film's language (narration, on-screen text) and the language the director reports in (the user's) */
 export type Lang = 'zh' | 'en';
 /** `voice`: the service that voices the narration; absent when the film has no voice. `preferences`: what the user
- *  wants in every film (Settings), read by every session */
-export interface Brief { topic?: string; audience?: string; durationSec: number; notes?: string; lang?: Lang; replyLang?: Lang; voice?: 'volcengine' | 'elevenlabs'; preferences?: string }
+ *  wants in every film (Settings), read by every session. `styleNotes`: the user's notes for the style this film is
+ *  drawn in (a style they shaped), read after the style card */
+export interface Brief { topic?: string; audience?: string; durationSec: number; notes?: string; lang?: Lang; replyLang?: Lang; voice?: 'volcengine' | 'elevenlabs'; preferences?: string; styleNotes?: string }
 
 const LANG_NAME: Record<Lang, string> = { zh: 'Simplified Chinese', en: 'English' };
 /** the language everything said to the user is written in: the user's own, never the prompts' */
