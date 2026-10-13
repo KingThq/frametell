@@ -158,8 +158,11 @@ class Runner {
         this.interrupted = 'export';
       }
       // a run that was in progress when its process went away (app closed, crash): say so in the log, so every client
-      // shows it as paused with a way to continue, instead of a stage that never ends
-      if (this.status === 'stopped' && last && last.type !== 'paused' && !heldElsewhere(this.dir)) {
+      // shows it as paused with a way to continue, instead of a stage that never ends. What tells is whether it was
+      // paused since it last started, not the last line: pages that wound down after a pause wrote lines after it, and
+      // a film the user had paused was taken for cut short and went on by itself after a restart
+      const mark = lines.map((l) => JSON.parse(l) as Logged).findLast((e) => e.type === 'paused' || e.type === 'resumed');
+      if (this.status === 'stopped' && last && mark?.type !== 'paused' && !heldElsewhere(this.dir)) {
         this.emit({ type: 'paused', reason: 'interrupted', stage: this.stateStage() });
         this.interrupted = 'run';
       }

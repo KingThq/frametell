@@ -75,15 +75,17 @@ test('after a restart, a run cut short is picked up again, a paused one is left 
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'frametell-resume-'));
   try {
     const now = new Date().toISOString();
-    const make = (id: string, last: object) => {
+    const make = (id: string, ...after: object[]) => {
       const dir = path.join(dataDir, 'projects', id);
       fs.mkdirSync(path.join(dir, '.studio'), { recursive: true });
       fs.writeFileSync(path.join(dir, '.studio', 'project.json'), JSON.stringify({ id, title: id, style: 'whiteboard', durationSec: 60, model: 'nowhere/none', runtime: 'pi', subtitles: true, materials: [], createdAt: now, updatedAt: now }));
       fs.writeFileSync(path.join(dir, '.studio', 'state.json'), JSON.stringify({ stage: 'pages' }));
-      fs.writeFileSync(path.join(dir, '.studio', 'events.jsonl'), [{ type: 'stage', stage: 'pages', status: 'start', seq: 1, at: 1 }, { ...last, seq: 2, at: 2 }].map((e) => JSON.stringify(e)).join('\n') + '\n');
+      fs.writeFileSync(path.join(dir, '.studio', 'events.jsonl'), [{ type: 'stage', stage: 'pages', status: 'start' }, ...after].map((e, i) => JSON.stringify({ ...e, seq: i + 1, at: i + 1 })).join('\n') + '\n');
     };
     make('2026-10-12-cut000000001', { type: 'agent', session: 'page-p01', event: { type: 'text', text: '…' } });
     make('2026-10-12-paused0000001', { type: 'paused', reason: 'user', stage: 'pages' });
+    // paused, with pages that wound down after it (seen on a deploy: such a film went on by itself)
+    make('2026-10-12-paused0000002', { type: 'paused', reason: 'user', stage: 'pages' }, { type: 'page', id: 'p04', status: 'checking', round: 2, issues: [] });
     const studio = new Studio({ dataDir, config: memoryConfig() });
     assert.deepEqual(studio.resumeInterrupted(), ['2026-10-12-cut000000001']);
     // it tried to continue (and, with no model here, stopped with an error rather than staying silently paused)
