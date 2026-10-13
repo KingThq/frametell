@@ -169,6 +169,15 @@ function Film({ run, project, ids, tl, subs, playKey, takePlay, onFocus }: { run
   const cur = tl?.pages.find((p) => t >= p.start && t < p.end) ?? tl?.pages[0];
   const line = cur?.cues.filter((c) => c.abs <= t + 0.05).at(-1) ?? cur?.cues[0];
   const curIndex = cur ? ids.indexOf(cur.id) : -1;
+  // when the pages don't all fit, the lane scrolls sideways and keeps the page on screen in view (by its own
+  // scrollLeft, so the panel around it never moves)
+  const lane = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = lane.current, c = cur && el?.querySelector<HTMLElement>(`[data-id="${cur.id}"]`);
+    if (!el || !c || el.scrollWidth <= el.clientWidth) return;
+    if (c.offsetLeft < el.scrollLeft || c.offsetLeft + c.offsetWidth > el.scrollLeft + el.clientWidth)
+      el.scrollTo({ left: c.offsetLeft - (el.clientWidth - c.offsetWidth) / 2, behavior: 'smooth' });
+  }, [cur?.id]);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -181,8 +190,9 @@ function Film({ run, project, ids, tl, subs, playKey, takePlay, onFocus }: { run
       {pages.length > 0 && (
         <div className="mx-auto w-full max-w-[1280px] px-6 pb-5 pt-4">
           {/* the page lane: each page as wide as its share of the film, its name beneath; the playhead walks inside the
-              page on screen, which stands out while the others rest a step back */}
-          <div className="flex gap-[3px]" role="list" aria-label={tr('stage.pageLane')}>
+              page on screen, which stands out while the others rest a step back. A page is never narrower than a small
+              16:9 frame: past that (a dozen pages or so) the lane scrolls instead of squeezing */}
+          <div ref={lane} className="relative -mx-1 flex gap-[3px] overflow-x-auto px-1 pb-2 pt-0.5" role="list" aria-label={tr('stage.pageLane')}>
             {pages.map((pt, i) => {
               const share = total && pt.end != null ? (pt.end - pt.start!) / total : 1 / pages.length;
               const on = cur?.id === pt.id && total > 0;
@@ -190,7 +200,7 @@ function Film({ run, project, ids, tl, subs, playKey, takePlay, onFocus }: { run
               const pos = on && pt.end != null ? Math.min(1, Math.max(0, (t - pt.start!) / (pt.end - pt.start!))) : 0;
               const st = run.pages[pt.id]?.status;
               return (
-                <div role="listitem" key={pt.id} style={{ flexGrow: share, flexBasis: 0 }} className="min-w-[44px]">
+                <div role="listitem" key={pt.id} data-id={pt.id} style={{ flexGrow: share, flexBasis: 0 }} className="min-w-[112px]">
                   <button onClick={() => (pt.start != null ? seek(pt.start + 0.6) : onFocus(pt.id))} aria-label={tr('stage.jumpTo', { n: i + 1, section })} aria-current={on || undefined} title={section}
                     className="group block w-full text-left outline-none">
                     <span className={`relative block h-[60px] overflow-hidden rounded-[9px] bg-paper-2 transition-[filter,box-shadow] duration-200 group-focus-visible:shadow-[0_0_0_2px_rgb(var(--fs-accent))] ${on ? '' : 'brightness-[0.62] saturate-[0.85] group-hover:brightness-90'}`}>
