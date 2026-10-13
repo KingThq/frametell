@@ -263,7 +263,7 @@ class Runner {
     fs.writeFileSync(lock, String(process.pid));
     const release = () => { try { if (+fs.readFileSync(lock, 'utf8') === process.pid) fs.rmSync(lock); } catch {} };
     const meta = readMetaAt(this.dir);
-    const cfg = this.config.load();
+    const cfg = this.config.load({ project: this.id });
     const dir = this.dir;
     linkProject(dir);
     this.abort = new AbortController();
@@ -380,7 +380,7 @@ class Runner {
    * it also took care of `then`, the rest of the message (a change to the finished film, made after the new voice).
    */
   private switchVoice(v: Extract<UserRef, { kind: 'voice' }>, then?: string): boolean {
-    const meta = readMetaAt(this.dir), cfg = this.config.load();
+    const meta = readMetaAt(this.dir), cfg = this.config.load({ project: this.id });
     const name = v.name || v.id;
     // the same voice again: nothing to do, unless the narration on disk is still another's (a switch cut short)
     let spoken: string | undefined;

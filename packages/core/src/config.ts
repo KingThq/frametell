@@ -50,9 +50,13 @@ const DEFAULTS: Config = {
   defaults: { runtime: 'pi', style: 'warm-story', durationSec: 60, subtitles: true, concurrency: 10, voice: { provider: 'volcengine', id: 'zh_male_yuanboxiaoshu_uranus_bigtts', name: '渊博小叔' } },
 };
 
+/** what a load is for: the run of one project, so a host can hand that run settings of its own (a key that only it
+ *  may use); absent for everything else (the panel's settings, voices, a new project) */
+export interface ConfigContext { project?: string }
+
 /** Where a Studio keeps its settings: config.json in its data directory, or whatever the host provides instead. */
 export interface ConfigStore {
-  load(): Config;
+  load(ctx?: ConfigContext): Config;
   save(c: Config): void;
 }
 

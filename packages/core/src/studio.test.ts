@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { withDefaults, type Config, type ConfigStore } from './config.js';
 import { Studio } from './studio.js';
+import type { NewProjectInput } from './types.js';
 
 /** settings a host keeps itself (in memory here) instead of a config.json */
 function memoryConfig(initial: Partial<Config> = {}): ConfigStore & { saved: Config[] } {
@@ -172,5 +173,20 @@ test('a new film keeps its style notes and look, the look checked', async () => 
     assert.equal(meta.styleNotes, '- 留白多一点');
     assert.deepEqual(meta.look, { palette: { red: '#A8301F' } });
     await new Promise((r) => setTimeout(r, 50));   // the run createProject started ends before its folder goes
+  } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
+});
+
+test('a run asks for its settings with its own project; everything else asks without one', async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'frametell-ctx-'));
+  const asked: (string | undefined)[] = [];
+  const base = withDefaults({ defaults: { model: 'anthropic/claude-opus-5-5' } as Config['defaults'] });
+  const config: ConfigStore = { load: (ctx) => { asked.push(ctx?.project); return structuredClone(base); }, save() {} };
+  try {
+    const studio = new Studio({ dataDir, config });
+    const p = studio.createProject({ topic: 'tides' } as NewProjectInput, []);
+    // the run starts by itself and stops at once: there is no key for its model
+    for (let i = 0; i < 200 && studio.project(p.id).status === 'running'; i++) await new Promise((r) => setTimeout(r, 20));
+    assert.ok(asked.includes(p.id), 'the run named its project');
+    assert.ok(asked.includes(undefined), 'creating the project did not');
   } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
 });
