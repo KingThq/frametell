@@ -302,7 +302,7 @@ export class Director {
     for (const [k, v] of Object.entries(fields)) {
       if (v === undefined) continue;
       const json = JSON.stringify(v);
-      const re = new RegExp(`(\\n\\s*)${k}:\\s*(\\{[^\\n]*\\}|\\[[^\\n]*\\]|'[^'\\n]*'|"[^"\\n]*"|[\\d.]+)\\s*,`);
+      const re = new RegExp(`(\\n\\s*)${k}:\\s*(\\{[^\\n]*\\}|\\[[^\\n]*\\]|'[^'\\n]*'|"[^"\\n]*"|[\\d.]+|true|false)\\s*,`);
       src = re.test(src) ? src.replace(re, `$1${k}: ${json},`) : src.replace(/const META = \{/, `const META = {\n    ${k}: ${json},`);
     }
     fs.writeFileSync(f, src);

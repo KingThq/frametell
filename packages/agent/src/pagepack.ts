@@ -15,6 +15,12 @@ export function componentDocs(file: string): string[] {
     const doc = m[1].split('\n').map((l) => l.replace(/^\s*\*\s?/, '').trim()).filter(Boolean).join(' ');
     out.push(`- \`P.${m[2]}(${m[3].trim()})\` — ${doc.replace(/^\w+\([^)]*\):?\s*/, '')}`);
   }
+  // the methods of what a component returns (a 3D scene's `D.city(…)`, documented inside it as /** D.city(args): … */)
+  const handle = /\/\*\*\s*([A-Z]\w*\.\w+)\(((?:(?!\*\/)[^)])*)\)\s*(?:→[^:]*)?:?((?:(?!\*\/)[\s\S])*)\*\//g;
+  for (let m = handle.exec(src); m; m = handle.exec(src)) {
+    const doc = m[3].split('\n').map((l) => l.replace(/^\s*\*\s?/, '').trim()).filter(Boolean).join(' ');
+    out.push(`  - \`${m[1]}(${m[2].trim()})\` — ${doc}`);
+  }
   return out;
 }
 
