@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - An export no longer hangs. A browser that stopped answering mid-export (now and then Chrome does, most often on a busy or just-woken Mac) left the export waiting for hours. Now a frame that takes more than a minute counts as stuck: that part of the film is drawn again in a new browser, and if it sticks a second time the export stops and says so.
 - Canceling an export stops its browsers too. They kept drawing in the background and slowed down every export after it.
+- Pages that couldn't be drawn now say why, and what to do next. The film used to stop on "These pages were not drawn: p16, p17…" and nothing more, though each page had its reason. Now the reason comes with it, and a model service's trouble is said in words to act on: the key's balance or quota ran out, the key was turned down, the service is limiting requests, or it couldn't be reached.
+- Continue draws failed pages with the film's own model when pages have a model of their own. It used to ask the same model the same way, and the same pages failed again on every Continue. Pages that fail more than once ask how they should look, so the next try is told something new.
+- Typing "continue" after a film stops on an error continues it. It used to be kept as a note for when work resumed, and saying it again and again did nothing; only the Continue button did. After an error, anything typed goes on with the film, and is followed.
+- Voicing no longer waits forever on a voice service that stops answering. Each take gives up after 90 seconds and is asked again, as it always meant to; making a film had dropped that deadline, so one silent request held the film on "Recording the voiceover" until it was paused.
+- Voicing no longer stops on a page whose recording begins (or ends) with a few milliseconds of noise before its silence. It used to call its own trim of that silence "dropped sound" and stop, and Continue stopped the same way every time.
 
 ## [0.3.0] - 2026-10-12
 
@@ -92,11 +97,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - English films no longer offer Volcengine's voices, which speak only Chinese. Since a film's language follows the panel's, the English panel doesn't show them by default, and its Settings list ElevenLabs first.
-
-### Fixed
-
-- Voicing no longer waits forever on a voice service that stops answering. Each take gives up after 90 seconds and is asked again, as it always meant to; making a film had dropped that deadline, so one silent request held the film on "Recording the voiceover" until it was paused.
-- Voicing no longer stops on a page whose recording begins (or ends) with a few milliseconds of noise before its silence. It used to call its own trim of that silence "dropped sound" and stop, and 「继续制作」 stopped the same way every time.
 
 ## [0.1.2] - 2026-10-11
 

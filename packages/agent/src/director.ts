@@ -41,7 +41,7 @@ export interface DirectorOptions {
   review?: 'full' | 'defects';
 }
 
-interface PageState { status: PageStatus; rounds: number; issues: string[]; ref?: string }
+interface PageState { status: PageStatus; rounds: number; issues: string[]; ref?: string; /** runs this page has failed in */ failures?: number }
 interface State {
   stage: Stage | 'approval' | 'done';
   planner?: string;
@@ -110,6 +110,15 @@ If this page already shows the change, or the change says nothing this page can 
 const PAGE_THINKING: Thinking = 'medium';
 /** a revised page whose code is as it was: the change never landed */
 const NOT_MADE = { zh: '这次没有改上：页面和改之前一样', en: 'The change was not made: the page is as it was' };
+/** a model service's trouble behind a failure, in words the user can act on (none: the trouble is the page's own) */
+export function serviceTrouble(text: string): { zh: string; en: string } | undefined {
+  if (/\b402\b|insufficient|balance|quota|credit|billing|余额|额度|欠费/i.test(text)) return { zh: '模型账户的余额或额度用完了：充值，或在设置里换一个 key，再点继续。', en: 'The model account is out of balance or quota. Top it up or use another key in Settings, then continue.' };
+  if (/\b40[13]\b|unauthori[sz]ed|invalid.{0,20}(api[ _-]?key|key|token)|authentication|forbidden/i.test(text)) return { zh: '模型的 key 无效或没有权限：在设置里检查 key，再点继续。', en: 'The model key is invalid or not allowed. Check it in Settings, then continue.' };
+  if (/\b(429|529|503)\b|rate.?limit|too many requests|overloaded|capacity|限流/i.test(text)) return { zh: '模型服务这会儿太忙，限流了：等几分钟再点继续。', en: 'The model service is busy and limiting requests. Wait a few minutes, then continue.' };
+  if (/fetch failed|ECONN|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket hang up|network error|terminated/i.test(text)) return { zh: '连不上模型服务：检查网络或代理，再点继续。', en: "Couldn't reach the model service. Check the network or proxy, then continue." };
+  return undefined;
+}
+
 const MAX = { pagesAtOnce: 10, storyboardFix: 2, scriptFix: 2, planTurns: 30, pageTurns: 40, pageRounds: 3, revisionRounds: 2, reviewRounds: 2, reviewDefectsMs: 180_000 };
 
 export class Director {
@@ -171,6 +180,9 @@ export class Director {
   }
   /** the page model draws the pages and checks the whole film; the director's takes everything else */
   private model(name: string) {
+    // a page that failed before is drawn again by the film's own model: the same model, asked the same way, failed the
+    // same pages again on every Continue
+    if (name.startsWith('page-') && this.redraw.has(name.slice(5))) return { runtime: this.o.runtime, prices: this.o.prices };
     return this.o.pages && (name.startsWith('page-') || name === 'review') ? this.o.pages : { runtime: this.o.runtime, prices: this.o.prices };
   }
   private async session(name: string, system: string, maxTurns: number, resume?: string, signal = this.o.signal): Promise<AgentSession> {
@@ -183,6 +195,7 @@ export class Director {
   private async send(s: AgentSession, text: string, images?: string[], thinking?: Thinking) {
     const r = await s.send({ text, images, thinking });
     if (r.stopReason === 'aborted') throw new DOMException('aborted', 'AbortError');
+    if (r.error) this.lastError.set(s, r.error);
     return r;
   }
   private fail(stage: Stage, message: string): never {
@@ -325,7 +338,9 @@ export class Director {
     const sb = this.project.storyboard();
     const tl = await this.project.timeline();
     const todo = tl.pages.filter((p) => (!only || only.includes(p.id)) && !['ok', 'flagged'].includes(this.state.pages[p.id]?.status ?? ''));
-    for (const p of todo) this.setPage(p.id, { status: 'queued', rounds: 0, issues: [] });
+    const failures = (id: string) => this.state.pages[id]?.failures ?? 0;
+    this.redraw = new Set(this.o.pages ? todo.filter((p) => failures(p.id) > 0).map((p) => p.id) : []);
+    for (const p of todo) this.setPage(p.id, { status: 'queued', rounds: 0, issues: [], failures: failures(p.id) });
     const queue = [...todo];
     const worker = async () => { for (let p = queue.shift(); p; p = queue.shift()) await this.page(sb, p); };
     // Up to 10 pages at once. Every page session opens with the same long system prompt (the style's component pack).
@@ -340,10 +355,29 @@ export class Director {
     if (n > 1 && paysToCache) await Promise.race([warm, first]);   // a first page that fails early does not hold the rest back
     await Promise.all([first, ...Array.from({ length: n - 1 }, worker)]);
     this.firstTurn = undefined;
-    const bad = Object.entries(this.state.pages).filter(([, s]) => s.status === 'failed').map(([id]) => id);
-    this.emit({ type: 'stage', stage: 'pages', status: bad.length ? 'failed' : 'done', detail: bad.length ? this.say(`失败：${bad.join('、')}`, `Failed: ${bad.join(', ')}`) : undefined });
-    if (bad.length) throw new Error(this.say(`这些页没有画出来：${bad.join('、')}`, `These pages were not drawn: ${bad.join(', ')}`));
+    const bad = Object.entries(this.state.pages).filter(([, s]) => s.status === 'failed');
+    const ids = bad.map(([id]) => id);
+    this.emit({ type: 'stage', stage: 'pages', status: bad.length ? 'failed' : 'done', detail: bad.length ? this.say(`失败：${ids.join('、')}`, `Failed: ${ids.join(', ')}`) : undefined });
+    if (bad.length) throw new Error(this.notDrawn(bad));
     this.state.stage = 'review'; this.save();
+  }
+
+  /**
+   * Why pages were not drawn, and what to do: the reasons pages share said once, a model service's trouble (key,
+   * balance, limits, network) in words the user can act on, and the way forward when the pages themselves defeat it.
+   */
+  private notDrawn(bad: [string, PageState][]): string {
+    const ids = bad.map(([id]) => id), byReason = new Map<string, string[]>();
+    for (const [id, s] of bad) { const r = (s.issues[0] ?? '').split('\n')[0].slice(0, 240); byReason.set(r, [...(byReason.get(r) ?? []), id]); }
+    const reasons = [...byReason].map(([r, of]) => (byReason.size > 1 ? `${of.join(this.say('、', ', '))}: ` : '') + (r || this.say('原因不明', 'no reason given')));
+    const all = bad.map(([, s]) => s.issues.join(' ')).join(' ');
+    const service = serviceTrouble(all);
+    const again = bad.every(([, s]) => (s.failures ?? 0) >= 2);
+    const next = service ? this.say(service.zh, service.en)
+      : again ? this.say('这几页试了几次都没画成。可以在下面说说这几页想怎么画（比如“p16 画得简单些”），再点继续。', 'These pages failed more than once. Say below how they should look (say, "keep p16 simple"), then continue.')
+      : this.o.pages ? this.say('点继续，会换用更强的模型重画这几页。', 'Continue, and a stronger model draws these pages again.')
+      : this.say('点继续，会重画这几页。', 'Continue, and these pages are drawn again.');
+    return this.say(`这些页没有画出来：${ids.join('、')}。原因：${reasons.join('；')}\n${next}`, `These pages were not drawn: ${ids.join(', ')}. Why: ${reasons.join('; ')}\n${next}`);
   }
 
   private setPage(id: string, s: PageState, extra: { sheet?: string; thumb?: string; note?: string } = {}) {
@@ -364,10 +398,11 @@ export class Director {
 
   private async page(sb: Storyboard, t: PageTiming) {
     const id = t.id;
-    const st: PageState = { status: 'drawing', rounds: 0, issues: [] };
+    const st: PageState = { status: 'drawing', rounds: 0, issues: [], failures: this.state.pages[id]?.failures };
     this.setPage(id, st);
+    let s: AgentSession | undefined;
     try {
-      const s = await this.session(`page-${id}`, pageSystem(this.o.style, styleExtras(this.o.style), this.o.brief.preferences), MAX.pageTurns);
+      s = await this.session(`page-${id}`, pageSystem(this.o.style, styleExtras(this.o.style), this.o.brief.preferences), MAX.pageTurns);
       const fix = this.state.revision?.[id];
       // a revision's page already exists, so "is there a file" says nothing: what tells is whether the code changed
       // (seen: a revision whose edits never landed was checked, passed and shown as done, on the old page)
@@ -437,7 +472,9 @@ export class Director {
       this.setPage(id, st, { thumb });
     } catch (e) {
       if ((e as Error).name === 'AbortError') throw e;
-      this.setPage(id, { ...st, status: 'failed', issues: [(e as Error).message] });
+      // what the model service said last, when the page then failed for want of an answer
+      const said = s && this.lastError.get(s), msg = (e as Error).message;
+      this.setPage(id, { ...st, status: 'failed', issues: [said && !msg.includes(said) ? `${msg} (${said})` : msg], failures: (st.failures ?? 0) + 1 });
     }
   }
 
@@ -573,6 +610,10 @@ export class Director {
   private beforeReady?: () => void;
   /** resolves the wait for the first page's first answer (the shared prompt is cached by then) */
   private firstTurn?: () => void;
+  /** pages drawn again after failing, by the film's own model */
+  private redraw = new Set<string>();
+  /** each session's last error from its model service */
+  private lastError = new WeakMap<AgentSession, string>();
 
   /** the planner's half of a revision: which pages, and what to change on each (written to .studio/revision.json) */
   private async planRevision(request: string, sb: Storyboard, named: string[]) {

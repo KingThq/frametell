@@ -81,6 +81,9 @@ export class Projects {
 type Prices = { input: number; output: number; cacheRead: number; cacheWrite: number; currency: 'CNY' | 'USD' };
 
 /** the director's runtime, and the pages' when the film draws them with another model */
+/** a message that only says to go on */
+const GO_ON = /^(继续|接着|继续制作|接着做|继续做|继续吧|go on|continue|resume|keep going)[\s.!。！~～]*$/i;
+
 async function buildRuntime(meta: ProjectMeta, cfg: Config): Promise<{ runtime: AgentRuntime; prices: Prices; pages?: { runtime: AgentRuntime; prices: Prices } }> {
   applyProxy(cfg.proxy);
   // the user's own base URL per provider and the model ids they typed in are applied by the catalog
@@ -331,6 +334,13 @@ class Runner {
       return true;
     }
     if (this.status === 'done' || this.stateStage() === 'done') { void this.revise(text); return true; }
+    // after an error, what the user writes is how to go on: they typed 「继续」 again and again, and nothing moved. A run
+    // the user paused goes on when asked to; anything else waits for it, as a note.
+    if (this.status === 'failed' || (this.status === 'stopped' && GO_ON.test(said))) {
+      if (!GO_ON.test(said)) this.parked.push(text);
+      void this.start();
+      return true;
+    }
     this.parked.push(text);
     this.emit({ type: 'note', text: tr('记下了，继续制作时会照这个来', 'Noted. I’ll follow this when work resumes.') });
     return true;
