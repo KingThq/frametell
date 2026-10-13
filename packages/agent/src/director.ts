@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { narrate, type TtsProvider } from '@frametell/voice';
 import { Project, type LintIssue, type PageTiming, type Storyboard, type Renderer } from './project.js';
-import { checkPrompt, langNote, voiceNote, pagePrompt, pageSystem, plannerSystem, replyNote, reviewPrompt, scriptPrompt, storyboardFixPrompt, storyboardPrompt, type Brief } from './prompts.js';
+import { checkPrompt, hardIssue, langNote, voiceNote, pagePrompt, pageSystem, plannerSystem, replyNote, reviewPrompt, scriptPrompt, stillThere, storyboardFixPrompt, storyboardPrompt, type Brief } from './prompts.js';
 import { addUsage, emptyUsage, type AgentRuntime, type AgentSession, type Thinking, type TokenUsage, type TurnResult } from './runtime/types.js';
 import type { PageStatus, Stage, StudioEvent } from './events.js';
 import type { Look } from './look.js';
@@ -129,7 +129,7 @@ export function serviceTrouble(text: string): { zh: string; en: string } | undef
 
 /** a stop (Pause), not a failure */
 const stopped = (e: unknown) => (e as Error)?.name === 'AbortError';
-const MAX = { pagesAtOnce: 10, storyboardFix: 2, scriptFix: 2, planTurns: 30, pageTurns: 40, pageRounds: 3, revisionRounds: 2, reviewRounds: 2, reviewDefectsMs: 180_000 };
+const MAX = { pageLintMs: 90_000, pagesAtOnce: 10, storyboardFix: 2, scriptFix: 2, planTurns: 30, pageTurns: 40, pageRounds: 3, revisionRounds: 2, reviewRounds: 2, reviewDefectsMs: 180_000 };
 
 export class Director {
   readonly project: Project;
@@ -450,21 +450,24 @@ export class Director {
       st.ref = s.ref;
       if (!was) await this.commit(this.say(`${id}：初稿`, `${id}: first draft`));
       let issues: LintIssue[] = [];
+      // the page's code as it was when `issues` were found: a round that changes nothing is not checked again (the
+      // same code gives the same lint and the same pictures), and the page is settled on what is already known
+      const code = () => this.project.read(`pages/${id}.js`);
+      let linted: string | undefined;
+      const lint = async () => { issues = await this.project.lint([id], [], MAX.pageLintMs); linted = code(); };
       const rounds = fix ? MAX.revisionRounds : MAX.pageRounds;   // a revision starts from a checked page
-      for (let round = was?.rounds ?? 1; !declined && round <= rounds + 1; round++) {
+      for (let round = was?.rounds ?? 1; !declined && round <= rounds; round++) {
         st.status = 'checking'; st.rounds = round; this.setPage(id, st);
         // a page whose code throws cannot be checked; that is the first thing to fix, so it goes back to its agent
-        // (one more round than usual is allowed for it) instead of failing the page
+        // instead of failing the page (on the last round too: the settling lint below decides)
         let crash: string | undefined;
-        try { issues = await this.project.lint([id]); } catch (e) { if (stopped(e)) throw e; crash = crashText((e as Error).message, id); }
+        try { await lint(); } catch (e) { if (stopped(e)) throw e; crash = crashText((e as Error).message, id); linted = undefined; }
         if (crash) {
-          if (round > rounds) throw new Error(crash);
           this.setPage(id, { ...st, issues: [crash] });
           r = await this.send(s, crashPrompt(id, crash) + this.unseen(`page-${id}`), undefined, PAGE_THINKING);
           await this.commit(this.say(`${id}：修运行错误`, `${id}: fix a runtime error`));
           continue;
         }
-        if (round > rounds) break;
         const times = this.sheetTimes(sb, t);
         // a page can pass lint and still not build in the browser (seen: "h1.hide is not a function" logged to the
         // console, then the screenshot timed out): that is a crash too, and goes back to its agent the same way
@@ -480,18 +483,31 @@ export class Director {
         this.setPage(id, { ...st, issues: issues.map((i) => i.msg) }, { sheet });
         r = await this.send(s, checkPrompt(round, issues, times, unchanged() ? fix : undefined) + this.unseen(`page-${id}`), [sheet], PAGE_THINKING);
         await this.commit(this.say(`${id}：第 ${round} 轮修改`, `${id}: check round ${round}`));
-        const reply = r.text.trim();
-        if (/^FLAGGED/i.test(reply)) { st.status = 'flagged'; st.issues = [reply.replace(/^FLAGGED:?\s*/i, '')]; break; }
-        if (/^DONE\b/i.test(reply) && !issues.length) { st.status = 'ok'; st.issues = []; break; }
-        if (r.stopReason === 'max_turns') break;
+        const flagged = (reply: string) => { st.status = 'flagged'; st.issues = [reply.replace(/^FLAGGED:?\s*/i, '')]; };
+        let reply = r.text.trim();
+        if (/^FLAGGED/i.test(reply)) { flagged(reply); break; }
+        // advice (a sparse page, small text…) never holds a page the agent has looked at and called done
+        const hard = issues.filter((i) => hardIssue(i.msg));
+        if (/^DONE\b/i.test(reply) && code() === linted) {
+          if (!hard.length) { st.status = 'ok'; st.issues = []; break; }
+          // done, with a must-fix problem still there: asked once, in words (no new pictures); standing by it settles
+          // the page as it is rather than checking the same code again
+          r = await this.send(s, stillThere(hard) + this.unseen(`page-${id}`), undefined, PAGE_THINKING);
+          await this.commit(this.say(`${id}：第 ${round} 轮修改`, `${id}: check round ${round}`));
+          reply = r.text.trim();
+          if (/^FLAGGED/i.test(reply)) { flagged(reply); break; }
+        }
+        // nothing changed this round: checking it again would show the same thing
+        if (code() === linted || r.stopReason === 'max_turns') break;
       }
       if (st.status !== 'ok' && st.status !== 'flagged') {
-        try { issues = await this.project.lint([id]); } catch (e) { throw stopped(e) ? e : new Error(crashText((e as Error).message, id)); }
+        if (code() !== linted) try { await lint(); } catch (e) { throw stopped(e) ? e : new Error(crashText((e as Error).message, id)); }
         // still throwing, or calling what the engine does not have: the page is not drawn, whatever else it shows
         const broken = issues.filter((i) => /^(runtime error|unknown API|wrong API use)/.test(i.msg));
         if (broken.length) throw new Error(broken.map((i) => i.msg).join('\n'));
-        st.status = issues.length ? 'flagged' : 'ok';
-        st.issues = issues.map((i) => `${i.local}s：${i.msg}`);
+        const hard = issues.filter((i) => hardIssue(i.msg));
+        st.status = hard.length ? 'flagged' : 'ok';
+        st.issues = hard.map((i) => `${i.local}s：${i.msg}`);
       }
       // the change never landed: the page is as it was, which is not what the user asked for, whatever the checks said
       if (unchanged()) {
@@ -517,8 +533,9 @@ export class Director {
     this.state.stage = 'review'; this.save();
     const defectsOnly = this.o.review === 'defects';
     const all = await this.project.lint(undefined, ['--determinism']);
-    // defects: a frame that differs by where playback came from (it flickers), or page code that fails
-    const issues = defectsOnly ? all.filter((i) => /^not deterministic|— at pages\//.test(i.msg)) : all;
+    // defects: a frame that differs by where playback came from (it flickers), or page code that fails; a full review
+    // also takes what is plainly wrong on screen, never lint's advice (a sparse or wordy page is the pages' own call)
+    const issues = all.filter((i) => /^not deterministic|— at pages\//.test(i.msg) || (!defectsOnly && hardIssue(i.msg)));
     // a page a change left as it was, with the agent's reason (already so, nothing to do there), is no defect to chase
     const flagged = defectsOnly ? [] : Object.entries(this.state.pages).filter(([id, s]) => s.status === 'flagged' && !this.unchanged.get(id)).map(([id, s]) => `${id}（${s.issues.join('，')}）`);
     if (!issues.length && !flagged.length) {
@@ -535,7 +552,7 @@ export class Director {
     let timedOut = false;
     try {
       for (let round = 1; round <= (defectsOnly ? 1 : MAX.reviewRounds); round++) {
-        const r = await this.send(s, reviewPrompt(round === 1 ? issues : await this.project.lint(), flagged, this.o.brief.replyLang), [sheet]);
+        const r = await this.send(s, reviewPrompt(round === 1 ? issues : (await this.project.lint()).filter((i) => hardIssue(i.msg)), flagged, this.o.brief.replyLang), [sheet]);
         await this.commit(this.say(`全片检查：第 ${round} 轮`, `Whole-film check: round ${round}`));
         if (/^DONE\b/i.test(r.text.trim())) break;
       }

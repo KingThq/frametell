@@ -146,17 +146,31 @@ ${t.cues.map((c) => `- c${c.i}: at ${c.at}s in the page, "${c.text}"`).join('\n'
 ${revising ? `pages/${id}.js is already written; stop once the change below is made in it and say in one sentence what you changed.` : `Stop once pages/${id}.js is written and say in one sentence what you drew.`}${langNote('page', lang, replyLang)}`;
 }
 
+/** what lint reports that is plainly wrong on screen or in the code: a page is not done while one of these is there.
+ * The rest (a sparse or wordy page, small or touching text) is advice: some styles mean it, and the pictures decide */
+export const hardIssue = (msg: string) => /^(runtime error|unknown API|wrong API use|off-canvas|subtitle band|raw markup|empty opening|empty ending)/.test(msg);
+
+const lintLines = (issues: LintIssue[]) => issues.map((i) => `- ${i.local}s: ${i.msg}`).join('\n');
+
 export function checkPrompt(round: number, issues: LintIssue[], times: { t: number; local: number }[], change?: string) {
-  const lint = issues.length ? issues.map((i) => `- ${i.local}s: ${i.msg}`).join('\n') : '(lint found nothing)';
+  const hard = issues.filter((i) => hardIssue(i.msg)), soft = issues.filter((i) => !hardIssue(i.msg));
+  const lint = !issues.length ? 'Lint found nothing.'
+    : (hard.length ? `Lint, must fix:\n${lintLines(hard)}\n` : '') + (soft.length ? `Lint, advice only (fix it if the pictures agree; if the page is right as it is, ignore it):\n${lintLines(soft)}` : '');
   return `Check round ${round}.
 
-Lint:
-${lint}
+${lint.trim()}
 
 The attached sheet shows the page at these moments within it (left to right, top to bottom): ${times.map((x) => x.local.toFixed(1) + 's').join(', ')}.
-${change ? `The user asked for this change to the page: ${change}\nIf the pictures don't show it yet, make it now: that is what this round is for.\n` : ''}Go through the checklist against the pictures. If something is wrong, fix the page file; if nothing is, reply only DONE; for a problem you keep on purpose, reply FLAGGED: <reason>.
+${change ? `The user asked for this change to the page: ${change}\nIf the pictures don't show it yet, make it now: that is what this round is for.\n` : ''}Go through the checklist against the pictures. If something is wrong, fix the page file; if nothing is (advice included), reply only DONE; for a must-fix problem you keep on purpose, or that is a false alarm, reply FLAGGED: <reason>.
 Fix with edit, only where the problem is (a size, a position, a moment). **Never rewrite the whole file with write**: a full rewrite takes minutes, one edit takes seconds. No need to read the file again afterwards.
 **Put all of this round's edits in one reply** (one reply can call edit several times), each with finish: true: the round ends once they apply, no reply needed, and the server checks again and sends you new pictures.`;
+}
+
+/** the agent said DONE with a must-fix problem still on the page: once, plainly, before the page is settled as it is */
+export function stillThere(issues: LintIssue[]) {
+  return `You replied DONE, but lint still reports these on the page:
+${lintLines(issues)}
+Fix them now with edit (all edits in one reply, each with finish: true), or if one is intended or a false alarm, reply FLAGGED: <reason>. Don't reply DONE again.`;
 }
 
 export function reviewPrompt(issues: LintIssue[], flagged: string[], replyLang?: Lang) {

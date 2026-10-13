@@ -128,8 +128,9 @@ export class Project {
     return JSON.parse(r.out);
   }
 
-  async lint(only?: string[], extra: string[] = []): Promise<LintIssue[]> {
-    const r = await tool(this.dir, 'lint.mjs', ['--json', ...(only ? ['--only', only.join(',')] : []), ...extra], { signal: this.signal });
+  /** `timeoutMs`: a lint that takes longer is given up and reports nothing (a page's own check must not hold the film) */
+  async lint(only?: string[], extra: string[] = [], timeoutMs?: number): Promise<LintIssue[]> {
+    const r = await tool(this.dir, 'lint.mjs', ['--json', ...(only ? ['--only', only.join(',')] : []), ...extra], { signal: this.signal, timeoutMs });
     const last = r.out.split('\n').pop() || '[]';
     try { return JSON.parse(last); } catch { throw new Error(`lint failed: ${r.err || r.out}`.slice(0, 2000)); }
   }
