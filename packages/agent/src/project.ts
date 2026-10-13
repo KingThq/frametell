@@ -128,8 +128,8 @@ export class Project {
   }
 
   /** A contact sheet of the given absolute times → path of the jpg. */
-  async snap(name: string, times: number[], only?: string[], tile = 480): Promise<string> {
-    const r = await tool(this.dir, 'snap.mjs', [...(only ? ['--only', only.join(',')] : []), '--sheet', name, ...times.map((t) => t.toFixed(2))], { env: { SNAP_TILE: String(tile) } });
+  async snap(name: string, times: number[], only?: string[], tile = 480, label = true): Promise<string> {
+    const r = await tool(this.dir, 'snap.mjs', [...(only ? ['--only', only.join(',')] : []), '--sheet', name, ...times.map((t) => t.toFixed(2))], { env: { SNAP_TILE: String(tile), SNAP_LABEL: label ? '1' : '0' } });
     const f = this.file(`out/snap/${name}.jpg`);
     if (r.code || !fs.existsSync(f)) throw new Error(`screenshot failed: ${r.err || r.out}`.slice(0, 2000));
     return f;

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A page's thumbnail (in the film strip and on the finished film's card) no longer carries a time label in its corner.
+
 ## [0.4.0] - 2026-10-13
 
 ### Changed

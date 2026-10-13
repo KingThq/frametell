@@ -468,7 +468,7 @@ export class Director {
       await s.close();
       // one settled frame as the film-strip thumbnail (the check sheets are 4-up and read as noise at tile size)
       let thumb: string | undefined;
-      try { thumb = await this.project.snap(`${id}-thumb`, [Math.max(t.start + 0.5, t.end - 0.4)], [id], 480); } catch {}
+      try { thumb = await this.project.snap(`${id}-thumb`, [Math.max(t.start + 0.5, t.end - 0.4)], [id], 480, false); } catch {}
       this.setPage(id, st, { thumb });
     } catch (e) {
       if ((e as Error).name === 'AbortError') throw e;

@@ -1,6 +1,7 @@
 // Stills for checking a page. Usage (from a project dir): node engine/tools/snap.mjs [--only p01,p02] [--subs] [--sheet name] 1.5 4 6.4 ...
 //   add --portrait for the portrait canvas (pages-portrait/)
-// → out/snap/snap-<t>.png, or with --sheet one contact sheet out/snap/<name>.jpg (3 per row, each frame labelled with its time)
+// → out/snap/snap-<t>.png, or with --sheet one contact sheet out/snap/<name>.jpg (3 per row, each frame labelled with its time;
+//   SNAP_LABEL=0 leaves the labels off, for a thumbnail)
 import fs from 'fs';
 import { execFileSync } from 'child_process';
 import path from 'path';
@@ -22,7 +23,7 @@ console.log('duration', duration.toFixed(1));
 const shots = [];
 for (const t of args.map(Number)) {
   await page.evaluate(async (x) => { ENGINE.renderAt(x); if (window.__frameReady) await window.__frameReady(x); }, t);
-  if (sheet) await page.evaluate((x) => {
+  if (sheet && process.env.SNAP_LABEL !== '0') await page.evaluate((x) => {
     const tag = document.getElementById('__t') || Object.assign(document.createElement('div'), { id: '__t' });
     Object.assign(tag.style, { position: 'absolute', left: '16px', bottom: '12px', zIndex: 99, font: '700 44px monospace', color: '#B2452F', background: '#fffc', padding: '2px 12px' });
     tag.textContent = x.toFixed(1) + 's';
