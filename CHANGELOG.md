@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-12
+
 ### Fixed
 
 - An export no longer hangs. A browser that stopped answering mid-export (now and then Chrome does, most often on a busy or just-woken Mac) left the export waiting for hours. Now a frame that takes more than a minute counts as stuck: that part of the film is drawn again in a new browser, and if it sticks a second time the export stops and says so.
@@ -181,7 +183,8 @@ The first release of Frametell: a local, open-source studio that turns an idea o
 - The npm packages are not published yet; install from source (see the README).
 - The Claude Agent SDK and Codex runtimes are in the code but not offered; every film runs on the built-in agent, which works with any provider.
 
-[Unreleased]: https://github.com/sitor-ai/frametell/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/sitor-ai/frametell/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/sitor-ai/frametell/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/sitor-ai/frametell/compare/v0.2.4...v0.3.0
 [0.2.4]: https://github.com/sitor-ai/frametell/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/sitor-ai/frametell/compare/v0.2.2...v0.2.3

@@ -1,6 +1,6 @@
 {
   "name": "@frametell/core",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Frametell's application core: settings, projects and their runs, events. Transport-agnostic; the CLI serves it over HTTP and the desktop app over IPC.",
   "license": "MIT",
   "author": "Sitor Team (https://sitor.ai)",
