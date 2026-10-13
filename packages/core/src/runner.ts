@@ -15,6 +15,10 @@ import { withRefs } from './refs.js';
 import type { LoggedEvent, ProjectMeta, ProjectSummary, RunStatus } from './types.js';
 import { resolveLocale, tr } from './i18n.js';
 
+/** the language someone wrote in, if it can be told: Chinese as soon as there is a Chinese character, English from a
+ * word of Latin letters; undefined for a link, numbers or nothing */
+const langOf = (text: string): 'zh' | 'en' | undefined => (/[\u3400-\u9fff]/.test(text) ? 'zh' : /[a-z]{3}/i.test(text.replace(/https?:\/\/\S+/g, '')) ? 'en' : undefined);
+
 export type Logged = LoggedEvent;
 
 const studioFile = (dir: string, name: string) => path.join(dir, '.studio', name);
@@ -141,6 +145,14 @@ class Runner {
   private log: string;
   /** the language of the user's latest message, which the director answers in */
   private replyLang?: 'zh' | 'en';
+  /** what this film says to the user is in their language: what they last wrote, else what they wrote the film's topic
+   * in, else the interface language (a hosted service's is its own, not the user's) */
+  private replyIn(meta?: ProjectMeta): 'zh' | 'en' {
+    if (this.replyLang) return this.replyLang;
+    try { meta ??= readMetaAt(this.dir); } catch {}
+    return langOf(`${meta?.topic ?? ''} ${meta?.notes ?? ''}`) ?? resolveLocale(this.config.load().locale);
+  }
+  private tr(zh: string, en: string) { return this.replyIn() === 'zh' ? zh : en; }
 
   constructor(readonly id: string, private dir: string, private config: ConfigStore, private renderer?: Renderer, private review?: 'full' | 'defects') {
     this.log = studioFile(dir, 'events.jsonl');
@@ -154,7 +166,7 @@ class Runner {
       const renders = lines.map((l) => JSON.parse(l) as Logged).filter((e) => e.type === 'stage' && e.stage === 'render');
       const cut = renders.at(-1)?.type === 'stage' && (renders.at(-1) as Extract<Logged, { type: 'stage' }>).status === 'start';
       if (this.status === 'done' && cut && !heldElsewhere(this.dir)) {
-        this.emit({ type: 'stage', stage: 'render', status: 'failed', detail: tr('导出被打断了，可以重新导出', 'The export was interrupted. You can export again.') });
+        this.emit({ type: 'stage', stage: 'render', status: 'failed', detail: this.tr('导出被打断了，可以重新导出', 'The export was interrupted. You can export again.') });
         this.interrupted = 'export';
       }
       // a run that was in progress when its process went away (app closed, crash): say so in the log, so every client
@@ -240,7 +252,7 @@ class Runner {
   private async launch(task: (d: Director) => Promise<unknown>, o: { exporting?: boolean } = {}) {
     if (this.status === 'running') return;
     const other = heldElsewhere(this.dir);
-    if (other) { this.emit({ type: 'error', message: tr(`这个项目正在另一个帧言窗口里制作（进程 ${other}），请在那里继续`, `This project is being made in another Frametell window (process ${other}). Continue there.`) }); return; }
+    if (other) { this.emit({ type: 'error', message: this.tr(`这个项目正在另一个帧言窗口里制作（进程 ${other}），请在那里继续`, `This project is being made in another Frametell window (process ${other}). Continue there.`) }); return; }
     const lock = studioFile(this.dir, 'run.lock');
     fs.writeFileSync(lock, String(process.pid));
     const release = () => { try { if (+fs.readFileSync(lock, 'utf8') === process.pid) fs.rmSync(lock); } catch {} };
@@ -258,7 +270,7 @@ class Runner {
       // PDF/Word/PPT/EPUB → Markdown the director can read (skipped when already done); a file that cannot be read is
       // reported but does not stop the run
       const { files } = await prepareMaterials(path.join(dir, 'materials'), meta.lang ?? 'zh');
-      for (const f of files) if (f.kind === 'document' && !f.parsedTo) this.emit({ type: 'error', message: tr(`资料 ${f.name} 读不了：${f.warning}`, `Couldn't read ${f.name}: ${f.warning}`) });
+      for (const f of files) if (f.kind === 'document' && !f.parsedTo) this.emit({ type: 'error', message: this.tr(`资料 ${f.name} 读不了：${f.warning}`, `Couldn't read ${f.name}: ${f.warning}`) });
       // an export draws the film the pages already are: it needs no model, so one that is gone (its provider removed, its
       // key deleted) must not hold it; a model that is asked for anyway says why it can't answer
       const { runtime, prices, pages } = await buildRuntime(meta, cfg).catch((e: Error) => {
@@ -270,7 +282,7 @@ class Runner {
       const { tts, voice, provider } = voiceFor(meta, cfg);
       director = new Director({
         dir, runtime, pages, style: meta.style, look: meta.look, prices, tts, voice, concurrency: cfg.defaults.concurrency,
-        brief: { durationSec: meta.durationSec, topic: meta.topic, notes: meta.notes, styleNotes: meta.styleNotes, lang: meta.lang ?? 'zh', replyLang: this.replyLang ?? resolveLocale(cfg.locale), voice: provider, preferences: cfg.preferences },
+        brief: { durationSec: meta.durationSec, topic: meta.topic, notes: meta.notes, styleNotes: meta.styleNotes, lang: meta.lang ?? 'zh', replyLang: this.replyIn(meta), voice: provider, preferences: cfg.preferences },
         emit: this.emit, signal: this.abort.signal, renderer: this.renderer, review: this.review,
       });
     } catch (e) {
@@ -298,7 +310,7 @@ class Runner {
           const aborted = e.name === 'AbortError' || !!this.abort?.signal.aborted;
           this.status = 'done';
           if (!aborted) this.emit({ type: 'error', message: e.message });
-          this.emit({ type: 'stage', stage: 'render', status: 'failed', detail: aborted ? tr('已取消导出', 'Export canceled') : tr(`导出失败：${e.message}`, `Export failed: ${e.message}`) });
+          this.emit({ type: 'stage', stage: 'render', status: 'failed', detail: aborted ? this.tr('已取消导出', 'Export canceled') : this.tr(`导出失败：${e.message}`, `Export failed: ${e.message}`) });
           next();
           return;
         }
@@ -325,7 +337,7 @@ class Runner {
     if (!said && !refs.length) return false;
     this.emit({ type: 'user', text: said, ...(refs.length ? { refs } : {}) });
     // answer in the language the user writes in: the saved interface language can differ from the panel they type into
-    this.replyLang = /[\u3400-\u9fff]/.test(said) ? 'zh' : /[a-z]{3}/i.test(said) ? 'en' : this.replyLang;
+    this.replyLang = langOf(said) ?? this.replyLang;
     const text = withRefs(said, refs);   // what the director reads: the references, then the words
     const voice = refs.find((r): r is Extract<UserRef, { kind: 'voice' }> => r.kind === 'voice');
     if (voice) {
@@ -335,12 +347,12 @@ class Runner {
     if (this.gate || this.status === 'awaiting_approval') return this.approve(text);
     if (this.status === 'running' && this.exporting) {
       this.afterExport.push(text);
-      this.emit({ type: 'note', text: tr('记下了，导出完就接着改', 'Noted. I’ll make the change once the export finishes.') });
+      this.emit({ type: 'note', text: this.tr('记下了，导出完就接着改', 'Noted. I’ll make the change once the export finishes.') });
       return true;
     }
     if (this.status === 'running' && this.director) {
       this.director.message(text);
-      this.emit({ type: 'note', text: tr('收到，接下来的步骤会照这个来', 'Got it. The next steps will follow this.') });
+      this.emit({ type: 'note', text: this.tr('收到，接下来的步骤会照这个来', 'Got it. The next steps will follow this.') });
       return true;
     }
     if (this.status === 'done' || this.stateStage() === 'done') { void this.revise(text); return true; }
@@ -352,7 +364,7 @@ class Runner {
       return true;
     }
     this.parked.push(text);
-    this.emit({ type: 'note', text: tr('记下了，继续制作时会照这个来', 'Noted. I’ll follow this when work resumes.') });
+    this.emit({ type: 'note', text: this.tr('记下了，继续制作时会照这个来', 'Noted. I’ll follow this when work resumes.') });
     return true;
   }
 
@@ -368,11 +380,11 @@ class Runner {
     let spoken: string | undefined;
     try { spoken = /"speaker":"([^"]*)"/.exec(fs.readFileSync(path.join(this.dir, 'voice.js'), 'utf8'))?.[1]; } catch { /* not narrated yet */ }
     if (meta.voice?.provider === v.provider && meta.voice.id === v.id && (!spoken || spoken === v.id || this.director)) {
-      this.emit({ type: 'note', text: tr(`这部片子用的已经是「${name}」了`, `This film already uses ${name}.`) });
+      this.emit({ type: 'note', text: this.tr(`这部片子用的已经是「${name}」了`, `This film already uses ${name}.`) });
       return false;
     }
     if (!(v.provider === 'elevenlabs' ? cfg.tts.elevenlabs : cfg.tts.volcengine)) {
-      this.emit({ type: 'error', message: tr(`「${name}」需要先在设置里连接${v.provider === 'elevenlabs' ? ' ElevenLabs' : '火山引擎'}`, `${name} needs ${v.provider === 'elevenlabs' ? 'ElevenLabs' : 'Volcengine'} connected in Settings first.`) });
+      this.emit({ type: 'error', message: this.tr(`「${name}」需要先在设置里连接${v.provider === 'elevenlabs' ? ' ElevenLabs' : '火山引擎'}`, `${name} needs ${v.provider === 'elevenlabs' ? 'ElevenLabs' : 'Volcengine'} connected in Settings first.`) });
       return false;
     }
     meta.voice = { provider: v.provider, id: v.id, name };
@@ -384,17 +396,17 @@ class Runner {
     if (this.director) {
       this.director.setVoice(tts, voice, provider);
       if (!early) this.revoiceAfter = true;
-      this.emit({ type: 'note', text: early ? tr(`好，配音会用「${name}」`, `OK, the narration will use ${name}.`)
-        : this.exporting ? tr(`好，导出完就用「${name}」重新配音`, `OK. Once the export is done, I’ll narrate it again with ${name}.`)
-        : tr(`好，这一步做完就用「${name}」重新配音`, `OK. Once this step is done, I’ll narrate it again with ${name}.`) });
+      this.emit({ type: 'note', text: early ? this.tr(`好，配音会用「${name}」`, `OK, the narration will use ${name}.`)
+        : this.exporting ? this.tr(`好，导出完就用「${name}」重新配音`, `OK. Once the export is done, I’ll narrate it again with ${name}.`)
+        : this.tr(`好，这一步做完就用「${name}」重新配音`, `OK. Once this step is done, I’ll narrate it again with ${name}.`) });
       return false;
     }
     if (this.status === 'done' || stage === 'done') {
-      this.emit({ type: 'note', text: tr(`用「${name}」把整部片子重新配一遍，画面不用重画`, `Narrating the whole film again with ${name}; the pictures stay as they are.`) });
+      this.emit({ type: 'note', text: this.tr(`用「${name}」把整部片子重新配一遍，画面不用重画`, `Narrating the whole film again with ${name}; the pictures stay as they are.`) });
       void this.launch((d) => d.revoice().then(() => (then ? d.revise(then) : undefined)));
       return true;
     }
-    this.emit({ type: 'note', text: early ? tr(`好，配音会用「${name}」`, `OK, the narration will use ${name}.`) : tr(`好，继续制作时先用「${name}」重新配音`, `OK. When work resumes, I’ll narrate it again with ${name} first.`) });
+    this.emit({ type: 'note', text: early ? this.tr(`好，配音会用「${name}」`, `OK, the narration will use ${name}.`) : this.tr(`好，继续制作时先用「${name}」重新配音`, `OK. When work resumes, I’ll narrate it again with ${name} first.`) });
     return false;
   }
 }
