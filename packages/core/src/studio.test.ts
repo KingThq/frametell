@@ -146,7 +146,7 @@ test('a finished film exports even when the model it was made with is gone', asy
     // made with a provider this version no longer has: drawing more would need a model, exporting does not
     const id = '2026-10-12-export0000001', dir = path.join(dataDir, 'projects', id), now = new Date().toISOString();
     fs.mkdirSync(path.join(dir, '.studio'), { recursive: true });
-    fs.writeFileSync(path.join(dir, '.studio', 'project.json'), JSON.stringify({ id, title: id, style: 'whiteboard', durationSec: 60, model: 'relay/gemini-3.7-flash-high', runtime: 'pi', subtitles: true, materials: [], createdAt: now, updatedAt: now }));
+    fs.writeFileSync(path.join(dir, '.studio', 'project.json'), JSON.stringify({ id, title: id, style: 'whiteboard', durationSec: 60, model: 'retired/gemini-3.7-flash-high', runtime: 'pi', subtitles: true, materials: [], createdAt: now, updatedAt: now }));
     fs.writeFileSync(path.join(dir, '.studio', 'state.json'), JSON.stringify({ stage: 'done' }));
     fs.writeFileSync(path.join(dir, 'script.js'), "const SCRIPT = {\n  META: { style: 'whiteboard', lang: 'zh' },\n  PAGES: [],\n};\n");
     let rendered = 0;
