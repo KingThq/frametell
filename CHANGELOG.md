@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- An export no longer hangs. A browser that stopped answering mid-export (now and then Chrome does, most often on a busy or just-woken Mac) left the export waiting for hours. Now a frame that takes more than a minute counts as stuck: that part of the film is drawn again in a new browser, and if it sticks a second time the export stops and says so.
+- Canceling an export stops its browsers too. They kept drawing in the background and slowed down every export after it.
+
 ## [0.3.0] - 2026-10-12
 
 ### Added

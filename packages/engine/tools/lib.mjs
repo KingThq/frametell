@@ -49,8 +49,15 @@ export async function openStage(query, launchArgs = []) {
   });
   await page.goto(pageUrl(query), { timeout: 120000 });
   if (missing.length) console.log(`pages with no visual yet (shown as a title): ${missing.join(' ')}`);
-  const duration = await page.evaluate(() => window.__ready);
+  const duration = await within(page.evaluate(() => window.__ready), 120_000, 'the film did not load in the browser in 2 minutes');
   return { browser, page, duration };
+}
+
+/** `p`, or a rejection once `ms` pass without it: a browser that stops answering (Chrome stalls now and then, most often
+ *  on a busy or just-woken Mac) would otherwise leave a tool waiting for ever */
+export function within(p, ms, what) {
+  let t;
+  return Promise.race([p, new Promise((_, rej) => { t = setTimeout(() => rej(Object.assign(new Error(what), { stalled: true })), ms); })]).finally(() => clearTimeout(t));
 }
 
 /** close a stage's browser without ever hanging: Playwright's close() can stall after system Chrome has already exited */

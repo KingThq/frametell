@@ -44,9 +44,19 @@ if (fs.existsSync(lock) && alive(+fs.readFileSync(lock, 'utf8'))) {
 fs.writeFileSync(lock, String(process.pid));
 const unlock = () => fs.rmSync(lock, { force: true });
 process.on('exit', unlock);
+// stopped (an export cancelled in the app is a SIGTERM): the browsers and encoders it started stop with it, instead of
+// drawing on in the background and slowing every export after it
+const kids = new Set();
+process.on('exit', () => { for (const k of kids) k.kill('SIGTERM'); });
 process.on('SIGINT', () => process.exit(130));
+process.on('SIGTERM', () => process.exit(143));
 
-const run = (cmd, args) => new Promise((res, rej) => spawn(cmd, args, { stdio: 'inherit' }).on('close', (c) => (c ? rej(new Error(cmd + ' ' + c)) : res())));
+const spawned = (cmd, args) => new Promise((res) => {
+  const k = spawn(cmd, args, { stdio: 'inherit' });
+  kids.add(k);
+  k.on('close', (c) => { kids.delete(k); res(c); });
+});
+const run = (cmd, args) => spawned(cmd, args).then((c) => { if (c) throw new Error(cmd + ' ' + c); });
 const [NO, WITH] = META.lang === 'en' ? ['no-subtitles', 'with-subtitles'] : ['无字幕', '有字幕'];
 const nosub = path.join(OUT, `${name}-${NO}.mp4`), withsub = path.join(OUT, `${name}-${WITH}.mp4`);
 const subsDir = path.join(OUT, PORTRAIT ? 'subs-portrait' : 'subs');
@@ -111,7 +121,12 @@ if (!has('skip-video')) {
   await Promise.all(groups.map((w, i) => {
     const list = path.join(chunkDir, `.jobs-${i}.json`);
     fs.writeFileSync(list, JSON.stringify(w.jobs.map((j) => ({ ...j, out: j.out + '.part.mp4' }))));
-    return run(process.execPath, [path.join(dir, 'render-chunk.mjs'), '--jobs', list, FPS]).then(() => {
+    // a browser that stopped answering (render-chunk's exit 3) is closed and the share drawn again in a new one, once
+    const draw = (tries) => spawned(process.execPath, [path.join(dir, 'render-chunk.mjs'), '--jobs', list, FPS]).then((c) => {
+      if (c === 3 && tries > 1) { console.log(`a browser stopped answering; drawing its ${w.jobs.length} segment(s) again`); return draw(tries - 1); }
+      if (c) throw new Error(c === 3 ? 'the browser stopped answering twice while drawing the film' : `render-chunk ${c}`);
+    });
+    return draw(2).then(() => {
       for (const j of w.jobs) fs.renameSync(j.out + '.part.mp4', j.out);   // only a finished segment enters the cache
       fs.rmSync(list, { force: true });
     });

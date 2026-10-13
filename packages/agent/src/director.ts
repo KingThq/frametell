@@ -495,7 +495,12 @@ export class Director {
     this.serverMeta();
     // a narrated film must carry its narration: check before spending minutes on frames
     if (this.o.voice && !/\bvoice:\s*\{/.test(this.project.read('script.js'))) this.fail('render', this.say('口播脚本里丢了配音设置，已停止渲染', 'The narration script lost its voice settings; rendering stopped'));
-    const out = await this.project.render({ workers: o.workers, signal: this.o.signal, onLine: (line) => { if (!/^\[(chunk|seg)-/.test(line)) this.emit({ type: 'render', line }); } });
+    const out = await this.project.render({ workers: o.workers, signal: this.o.signal, onLine: (line) => { if (!/^\[(chunk|seg)-/.test(line)) this.emit({ type: 'render', line }); } })
+      .catch((e: Error) => {
+        // render.mjs draws a share again when its browser stops answering; a second stall ends the export, in words
+        if (/stopped answering twice/.test(e.message)) throw new Error(this.say('浏览器两次没有响应，导出停下了。再导出一次通常就好，已经画好的片段会直接用上', 'The browser stopped responding twice, so the export stopped. Exporting again usually works, and the parts already drawn are reused'));
+        throw e;
+      });
     const g = this.project.gate(out.withSubs);
     this.emit({ type: 'gate', red: g.red, blank: g.gates.find((x) => x.key === 'blank')?.value ?? [], report: g.report.map((r) => ({ name: r.name, value: r.value, unit: r.unit })) });
     this.state.video = out.withSubs; this.state.exported = true; this.save();

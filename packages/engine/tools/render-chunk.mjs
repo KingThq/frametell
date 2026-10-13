@@ -1,16 +1,26 @@
 // Renders frames [f0, f1) at FPS to an mp4 chunk. Usage (from a project dir): node engine/tools/render-chunk.mjs <f0> <f1> <fps> <out.mp4>
 //   or: render-chunk.mjs --jobs <list.json> <fps> — several chunks [{ a, b, out }] in one browser, one after another
 // HW=1 (render.mjs --hw): encode on the Mac's media engine (h264_videotoolbox) so every CPU core is left for the browsers.
+// A browser that stops answering exits with STALLED (3) instead of waiting for ever; render.mjs draws that share again.
 import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
-import { openStage, closeStage } from './lib.mjs';
+import { openStage, closeStage, within } from './lib.mjs';
 import { FFMPEG } from './bins.mjs';
 const jobsMode = process.argv[2] === '--jobs';
 const fps = +process.argv[4];
 const jobs = jobsMode ? JSON.parse(fs.readFileSync(process.argv[3], 'utf8')) : [{ a: +process.argv[2], b: +process.argv[3], out: process.argv[5] }];
 
-const { browser, page } = await openStage('render', ['--disable-gpu-vsync', '--force-color-profile=srgb']);
+const STALLED = 3;   // render.mjs knows this exit code
+// a frame takes well under a second; one that takes this long is a browser that stopped answering
+const FRAME_MS = +(process.env.RENDER_FRAME_TIMEOUT_MS || 60_000);
+const stalled = (e) => {
+  if (!e?.stalled) throw e;
+  console.error(`✗ ${e.message}`);
+  process.exit(STALLED);   // Playwright closes the browser it launched as this process exits
+};
+
+const { browser, page } = await openStage('render', ['--disable-gpu-vsync', '--force-color-profile=srgb']).catch(stalled);
 // WATERMARK=1 (render.mjs --watermark): the Frametell mark, small and quiet in the bottom right, on every frame. It sits
 // outside the stage the pages draw on, so no page can cover or move it.
 if (process.env.WATERMARK === '1') {
@@ -34,16 +44,21 @@ let code = 0;
 for (const { a: f0, b: f1, out } of jobs) {
   const ff = spawn(FFMPEG, ['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', String(fps), '-c:v', 'mjpeg', '-i', '-',
     ...enc, '-pix_fmt', 'yuv420p', '-r', String(fps), '-f', 'mp4', out], { stdio: ['pipe', 'inherit', 'inherit'] });
+  // an encoder that quits takes no more frames: stop drawing for it, and never wait on a pipe it will not drain
+  const closed = new Promise((r) => ff.on('close', r));
+  ff.stdin.on('error', () => {});
   const t0 = Date.now();
-  for (let f = f0; f < f1; f++) {
+  for (let f = f0; f < f1 && ff.exitCode === null; f++) {
     // window.__frameReady (optional, set by an episode's extras): wait until everything this frame needs (e.g. images) is ready
-    await page.evaluate(async (t) => { ENGINE.renderAt(t); if (window.__frameReady) await window.__frameReady(t); }, f / fps);
-    const buf = await grab();
-    if (!ff.stdin.write(buf)) await new Promise((r) => ff.stdin.once('drain', r));
+    const buf = await within((async () => {
+      await page.evaluate(async (t) => { ENGINE.renderAt(t); if (window.__frameReady) await window.__frameReady(t); }, f / fps);
+      return grab();
+    })(), FRAME_MS, `frame ${f} (${(f / fps).toFixed(2)}s) was not drawn in ${FRAME_MS / 1000}s: the browser stopped answering`).catch(stalled);
+    if (!ff.stdin.write(buf)) await Promise.race([new Promise((r) => ff.stdin.once('drain', r)), closed]);
     if ((f - f0) % 600 === 0) console.log(`[${path.basename(out)}] ${f - f0}/${f1 - f0}  ${((Date.now() - t0) / 1000) | 0}s`);
   }
   ff.stdin.end();
-  await new Promise((r) => ff.on('close', r));
+  await closed;
   if (ff.exitCode) { code = ff.exitCode; break; }
 }
 // a page whose code threw draws a placeholder: never let that into a film
