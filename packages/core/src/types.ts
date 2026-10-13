@@ -4,7 +4,8 @@ import type { StudioEvent, Storyboard } from '@frametell/agent';
 import type { CustomProviderConfig, ModelInfo, ProviderSpec } from '@frametell/models';
 
 export type { StudioEvent, Storyboard, ModelInfo, ProviderSpec, CustomProviderConfig };
-export type { Timeline, PageTiming, UserRef } from '@frametell/agent';
+export type { Timeline, PageTiming, UserRef, Look } from '@frametell/agent';
+import type { Look } from '@frametell/agent';
 export type RuntimeId = 'pi' | 'claude-agent-sdk' | 'codex';
 /** interface language; 'auto' follows the system */
 export type Locale = 'zh' | 'en';
@@ -51,6 +52,10 @@ export interface ProjectMeta {
   lang?: Locale;
   topic?: string;
   notes?: string;
+  /** notes for the style this film is drawn in (a style the user shaped), read after its style card */
+  styleNotes?: string;
+  /** this film's own colours and fonts over its style's (script.js META.look) */
+  look?: Look;
   materials: string[];
 }
 /** `stale`: the exported mp4 is older than the film (a revision changed it since); the preview shows the film as it is */
@@ -71,6 +76,10 @@ export interface NewProjectInput {
   lang?: Locale;
   topic?: string;
   notes?: string;
+  /** notes for the style this film is drawn in (a style the user shaped), read after its style card */
+  styleNotes?: string;
+  /** this film's own colours and fonts over its style's (script.js META.look) */
+  look?: Look;
 }
 
 /** settings as clients see them: keys are masked hints, never the secrets */

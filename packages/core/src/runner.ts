@@ -266,8 +266,8 @@ class Runner {
       });
       const { tts, voice, provider } = voiceFor(meta, cfg);
       director = new Director({
-        dir, runtime, pages, style: meta.style, prices, tts, voice, concurrency: cfg.defaults.concurrency,
-        brief: { durationSec: meta.durationSec, topic: meta.topic, notes: meta.notes, lang: meta.lang ?? 'zh', replyLang: this.replyLang ?? resolveLocale(cfg.locale), voice: provider, preferences: cfg.preferences },
+        dir, runtime, pages, style: meta.style, look: meta.look, prices, tts, voice, concurrency: cfg.defaults.concurrency,
+        brief: { durationSec: meta.durationSec, topic: meta.topic, notes: meta.notes, styleNotes: meta.styleNotes, lang: meta.lang ?? 'zh', replyLang: this.replyLang ?? resolveLocale(cfg.locale), voice: provider, preferences: cfg.preferences },
         emit: this.emit, signal: this.abort.signal, renderer: this.renderer, review: this.review,
       });
     } catch (e) {

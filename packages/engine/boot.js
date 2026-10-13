@@ -1,5 +1,5 @@
 /* Boot: an episode's index.html loads its script.js, then this file. Writes the stage DOM and loads, in order:
- * engine runtime → third-party libs (SCRIPT.META.libs, paths under engine_modules; .css or classic/UMD .js)
+ * engine runtime → the film's look (META.look) → third-party libs (SCRIPT.META.libs, paths under engine_modules; .css or classic/UMD .js)
  * → episode extras (SCRIPT.META.extras) → one pages/<id>.js per SCRIPT.PAGES entry → main.
  * META.vendor: ESM-only libs bundled by esbuild into classic IIFE files under engine/vendor/ (e.g. 'three' → vendor/three.js, global THREE).
  * Not ES modules + import map: Chromium blocks module scripts on file:// (CORS, origin null), in preview and in render. */
@@ -22,9 +22,12 @@
   // style pack: META.style = 'warm-story' → styles/warm-story/style.css (after base.css) + style.js (before the runtime)
   const style = meta.style || 'study';
   css.push(`${KIT}styles/${style}/style.css`);
+  // META.look: a film's own colours and fonts over its style's (runtime/look.js); its font stylesheets come after the style's
+  const look = meta.look || {};
+  css.push(...(look.css || []).map((f) => `${KIT}styles/${f}`));
   const libs = (meta.libs || []).map((f) => NM + f);
   css.push(...libs.filter((f) => f.endsWith('.css')));
-  const js = [NM + 'roughjs/bundled/rough.js', `${KIT}styles/${style}/style.js`]
+  const js = [NM + 'roughjs/bundled/rough.js', `${KIT}styles/${style}/style.js`, `${KIT}runtime/look.js`]
     .concat(['timing', 'core', 'text', 'doodles', 'widgets', 'live', 'tokens', 'shell3d', 'three', 'media', 'player'].map((f) => `${KIT}runtime/${f}.js`))
     .concat((meta.vendor || []).map((v) => `${KIT}vendor/${v}.js`))
     .concat(libs.filter((f) => !f.endsWith('.css')))

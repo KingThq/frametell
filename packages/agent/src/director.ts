@@ -8,6 +8,7 @@ import { Project, type LintIssue, type PageTiming, type Storyboard, type Rendere
 import { checkPrompt, langNote, voiceNote, pagePrompt, pageSystem, plannerSystem, replyNote, reviewPrompt, scriptPrompt, storyboardFixPrompt, storyboardPrompt, type Brief } from './prompts.js';
 import { addUsage, emptyUsage, type AgentRuntime, type AgentSession, type Thinking, type TokenUsage, type TurnResult } from './runtime/types.js';
 import type { PageStatus, Stage, StudioEvent } from './events.js';
+import type { Look } from './look.js';
 import { ENGINE_DIR } from '@frametell/engine/tools/project.mjs';
 
 export interface Prices { input: number; output: number; cacheRead: number; cacheWrite: number; currency: 'CNY' | 'USD' }
@@ -27,6 +28,8 @@ export interface DirectorOptions {
    * change) keeps the stronger one
    */
   pages?: { runtime: AgentRuntime; prices?: Prices };
+  /** this film's own colours and fonts (META.look), written into script.js with the other server-owned fields */
+  look?: Look;
   /** page sessions running at once */
   concurrency?: number;
   emit?: (e: StudioEvent) => void;
@@ -276,7 +279,7 @@ export class Director {
     // a style component copied into extras/ by use-extra is the same file: load it once, from the engine
     const base = new Set(styleExtras(this.o.style).map((e) => path.basename(e)));
     const list = [...extras].filter((e) => !(e.startsWith('extras/') && base.has(path.basename(e))));
-    this.setMeta({ style: this.o.style, lang: this.o.brief.lang ?? 'zh', voice: this.o.voice, gap: 0.8, pace: { maxHold: 1.0, gap: 0.8 }, extras: list });
+    this.setMeta({ style: this.o.style, lang: this.o.brief.lang ?? 'zh', voice: this.o.voice, gap: 0.8, pace: { maxHold: 1.0, gap: 0.8 }, extras: list, look: this.o.look });
   }
 
   /** Server-owned META fields, rewritten in place in script.js (the planner must not change them). */

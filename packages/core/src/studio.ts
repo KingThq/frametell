@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createCatalog, PROVIDERS, type ProviderSpec } from '@frametell/models';
 import { bundledSample, ELEVENLABS_DEFAULT_VOICES, ElevenLabsError, elevenLabsTts, listElevenLabsVoices, volcengineTts, VoiceNotFound, VOLCENGINE_VOICES } from '@frametell/voice';
-import { Project, STYLES, type Renderer, type Timeline } from '@frametell/agent';
+import { Project, STYLES, cleanLook, type Renderer, type Timeline } from '@frametell/agent';
 import { linkProject } from '@frametell/engine/tools/project.mjs';
 import { DATA_DIR, configFile, patchConfig, publicConfig, type ConfigStore } from './config.js';
 import { Projects } from './runner.js';
@@ -175,6 +175,7 @@ export class Studio {
       style: input.style || d.style, durationSec: input.durationSec || d.durationSec, model, pageModel: pages && pages !== model ? pages : undefined,
       runtime: input.runtime || d.runtime, voice: input.voice === null ? undefined : input.voice ?? d.voice, subtitles: input.subtitles ?? d.subtitles,
       lang: input.lang ?? resolveLocale(cfg.locale), topic, notes: topic ? undefined : input.notes,
+      styleNotes: input.styleNotes?.trim().slice(0, 4000) || undefined, look: cleanLook(input.look),
     }, files.map((f) => ({ name: f.name, data: Buffer.from(f.data) })));
     void this.store.runner(meta.id).start();
     return meta;

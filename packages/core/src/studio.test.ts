@@ -159,3 +159,16 @@ test('a finished film exports even when the model it was made with is gone', asy
     off();
   } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
 });
+
+test('a new film keeps its style notes and look, the look checked', async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'frametell-look-'));
+  try {
+    const studio = new Studio({ dataDir, config: memoryConfig({ defaults: { model: 'anthropic/x' } as Config['defaults'] }) });
+    const p = studio.createProject({ topic: '鲲鹏', styleNotes: '  - 留白多一点  ', look: { palette: { red: '#a8301f', nope: 'x' } } }, []);
+    studio.stop(p.id);
+    const meta = JSON.parse(fs.readFileSync(path.join(studio.projectsDir, p.id, '.studio', 'project.json'), 'utf8'));
+    assert.equal(meta.styleNotes, '- 留白多一点');
+    assert.deepEqual(meta.look, { palette: { red: '#A8301F' } });
+    await new Promise((r) => setTimeout(r, 50));   // the run createProject started ends before its folder goes
+  } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
+});

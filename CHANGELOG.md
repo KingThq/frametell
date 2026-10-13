@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- A film can carry notes for its style (`styleNotes` on a new project): the director and the page agents read them right after the style card.
+- A film can carry its own look (`look` on a new project, written to `META.look` in `script.js`): palette colours by the runtime's names, the hand and latin font stacks, and the stylesheets that bring those fonts. `runtime/look.js` applies it over the style.
+
 ### Fixed
 
 - A page's thumbnail (in the film strip and on the finished film's card) no longer carries a time label in its corner.
