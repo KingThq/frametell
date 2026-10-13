@@ -7,6 +7,7 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { execFile, execFileSync, spawnSync } from 'node:child_process';
 import { confine } from './tools/sandbox.js';
+import { engineCmd } from './project.js';
 
 const sandboxed = process.platform === 'darwin' || (process.platform === 'linux' && (() => { try { execFileSync('bwrap', ['--ro-bind', '/', '/', '--dev', '/dev', '--proc', '/proc', 'true'], { stdio: 'ignore' }); return true; } catch { return false; } })());
 
@@ -82,5 +83,20 @@ test('asking for no network requires a sandbox too', () => {
   } finally {
     if (was.r === undefined) delete process.env.FRAMETELL_SANDBOX_REQUIRED; else process.env.FRAMETELL_SANDBOX_REQUIRED = was.r;
     if (was.n === undefined) delete process.env.FRAMETELL_SANDBOX_NONET; else process.env.FRAMETELL_SANDBOX_NONET = was.n;
+  }
+});
+
+test('engine tools run as they always have, and inside the sandbox when the network is taken away', { skip: !sandboxed && 'no sandbox here' }, async () => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ft-engine-')));
+  const was = process.env.FRAMETELL_SANDBOX_NONET;
+  try {
+    delete process.env.FRAMETELL_SANDBOX_NONET;
+    assert.deepEqual(engineCmd(root, ['tool.mjs', '--x']), [process.execPath, ['tool.mjs', '--x']]);
+    process.env.FRAMETELL_SANDBOX_NONET = '1';
+    const [cmd] = engineCmd(root, ['tool.mjs']);
+    assert.ok(cmd === 'bwrap' || cmd === '/usr/bin/sandbox-exec', cmd);
+  } finally {
+    if (was === undefined) delete process.env.FRAMETELL_SANDBOX_NONET; else process.env.FRAMETELL_SANDBOX_NONET = was;
+    fs.rmSync(root, { recursive: true, force: true });
   }
 });

@@ -7,6 +7,7 @@ import { ENGINE_DIR, linkProject } from '@frametell/engine/tools/project.mjs';
 import { lintStoryboard, type StoryboardIssue } from '@frametell/engine/tools/storyboard-lint.mjs';
 import { measure, type FilmGateResult } from '@frametell/engine/tools/film-gate.mjs';
 import { FFMPEG } from '@frametell/engine/tools/bins.mjs';
+import { confine } from './tools/sandbox.js';
 
 export interface Cue { i: number; at: number; abs: number; text: string }
 export interface PageTiming { id: string; start: number; end: number; speechEnd: number; cues: Cue[] }
@@ -30,6 +31,11 @@ export const nodeEnv = (extra: Record<string, string | undefined> = {}) => ({ ..
 /** run a program to completion without blocking the process */
 const run = (cmd: string, args: string[], cwd?: string) => new Promise<void>((ok, fail) => execFile(cmd, args, { cwd, timeout: 120_000, env: nodeEnv() }, (e, _o, err) => (e ? fail(new Error(String(err || e.message).slice(0, 1000))) : ok())));
 
+/** how an engine tool is run: as Node, and inside the shell's sandbox when the network is taken away (the hosted
+ *  sandbox), since the pages it opens in Chrome run code the agent wrote */
+export const engineCmd = (dir: string, args: string[]): [string, string[]] =>
+  process.env.FRAMETELL_SANDBOX_NONET === '1' ? confine(dir, process.execPath, args) : [process.execPath, args];
+
 /** run an engine tool and collect its output. Never synchronously: lint and snapshots drive Chrome for seconds, and in the
  *  desktop app this process is also the one answering the panel (ten pages checking themselves froze every click).
  *  A stop kills it at once and rejects with an AbortError: Pause used to wait for every screenshot in flight to end on
@@ -37,7 +43,8 @@ const run = (cmd: string, args: string[], cwd?: string) => new Promise<void>((ok
 function tool(dir: string, name: string, args: string[], opts: { timeoutMs?: number; env?: Record<string, string>; signal?: AbortSignal } = {}) {
   return new Promise<{ code: number; out: string; err: string }>((ok, fail) => {
     if (opts.signal?.aborted) return fail(new DOMException('aborted', 'AbortError'));
-    execFile(process.execPath, [path.join(ENGINE_DIR, 'tools', name), ...args], {
+    const [cmd, argv] = engineCmd(dir, [path.join(ENGINE_DIR, 'tools', name), ...args]);
+    execFile(cmd, argv, {
       cwd: dir, encoding: 'utf8', timeout: opts.timeoutMs ?? 240_000, maxBuffer: 64 << 20, env: nodeEnv(opts.env), signal: opts.signal,
     }, (e, stdout, stderr) => {
       if (opts.signal?.aborted) return fail(new DOMException('aborted', 'AbortError'));
@@ -170,7 +177,8 @@ export class Project {
       return this.films();
     }
     return new Promise((resolve, reject) => {
-      const child = spawn(process.execPath, [path.join(ENGINE_DIR, 'tools/render.mjs'), '--fps', String(o.fps ?? 30), '--workers', String(o.workers ?? 4)], { cwd: this.dir, signal: o.signal, env: nodeEnv() });
+      const [cmd, argv] = engineCmd(this.dir, [path.join(ENGINE_DIR, 'tools/render.mjs'), '--fps', String(o.fps ?? 30), '--workers', String(o.workers ?? 4)]);
+      const child = spawn(cmd, argv, { cwd: this.dir, signal: o.signal, env: nodeEnv() });
       let tail = '';
       const onData = (d: Buffer) => { for (const l of d.toString().split('\n')) if (l.trim()) { tail = (tail + '\n' + l).slice(-4000); o.onLine?.(l); } };
       child.stdout.on('data', onData); child.stderr.on('data', onData);
