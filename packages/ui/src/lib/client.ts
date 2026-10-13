@@ -56,9 +56,11 @@ export interface Hosted {
   signOut(): void;
   /** the account's credits, shown in the top bar and linking to where they are managed; absent: no billing */
   credits?: {
-    read(): Promise<{ available: number; perMinute: number; plan?: string; styles?: string[] | null } | null>; url: string;
-    /** the credits one film has spent so far, shown instead of what it cost in money; null when nothing is metered */
-    spent?(project: string): Promise<number | null>;
+    /** `available` already leaves out `held`: what is set aside for films being made */
+    read(): Promise<{ available: number; held?: number; perMinute: number; plan?: string; styles?: string[] | null } | null>; url: string;
+    /** the credits one film has spent so far, shown instead of what it cost in money, and what is still set aside for
+     * it while it is being made; null when nothing is metered */
+    spent?(project: string): Promise<{ spent: number; held: number } | null>;
   };
 }
 

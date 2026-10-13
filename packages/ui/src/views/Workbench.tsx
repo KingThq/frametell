@@ -8,7 +8,7 @@ import { Conversation } from './Conversation';
 import { Stage } from './Stage';
 import { offerRef } from '../lib/refs';
 import { useT } from '../i18n';
-import { useSpent } from '../components/Credits';
+import { FilmCredits } from '../components/Credits';
 import { hosted } from '../lib/client';
 
 const fmtK = (n: number) => (n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'K' : String(n));
@@ -16,7 +16,6 @@ const fmtK = (n: number) => (n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? 
 /** what this film has cost; the details (model, tokens, cache) open on click instead of crowding the workbench */
 function CostChip({ run, project }: { run: RunView; project: ProjectView }) {
   const { t } = useT();
-  const spent = useSpent(project.id, run);
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLSpanElement>(null);
   useEffect(() => {
@@ -28,7 +27,7 @@ function CostChip({ run, project }: { run: RunView; project: ProjectView }) {
   const u = run.cost?.usage;
   const seen = u ? u.input + u.cacheRead : 0;
   // a hosted service counts in credits alone: no money, models or tokens
-  if (hosted) return spent ? <span className="px-2 font-mono text-[12.5px] text-ink-3 tabular" title={t('workbench.spentTitle')}>{spent}</span> : null;
+  if (hosted) return <span className="px-2"><FilmCredits project={project.id} run={run} /></span>;
   return (
     <span ref={box} className="relative">
       <button className="fs-btn fs-btn-ghost fs-btn-sm font-mono tabular" aria-expanded={open} onClick={() => setOpen(!open)} title={t('workbench.spentTitle')}>{money(run.cost)}</button>
@@ -58,6 +57,7 @@ export function Workbench({ id, openSettings }: { id: string; openSettings: (sec
   const { run, conn } = useRun(project.data);
   const [selected, setSelected] = useState<string>();
   const [playKey, setPlayKey] = useState(0);
+  const [pagePlay, setPagePlay] = useState(0);
   const [pane, setPane] = useState<'talk' | 'stage'>('talk');   // narrow windows show one pane at a time
   const main = useRef<HTMLElement>(null);
   const [box, setBox] = useState(0);
@@ -93,6 +93,8 @@ export function Workbench({ id, openSettings }: { id: string; openSettings: (sec
   const pause = (pid: string) => { setPausing(true); client.stop(pid).catch(() => setPausing(false)); };
   const status = pausing && running ? t('workbench.status.pausing') : run.revising ? t('workbench.status.revising') : run.exporting ? t('workbench.status.exporting') : run.resuming ? t('workbench.status.preparing') : finished(run) && !running ? t('workbench.status.done') : run.awaitingApproval ? t('workbench.status.awaitingApproval') : run.paused ? t('workbench.status.paused') : run.current ? t('workbench.status.stageRunning', { stage: STAGE_NAME[run.current] }) : t('workbench.status.preparing');
   const play = () => { setSelected(undefined); setPane('stage'); setPlayKey((k) => k + 1); };
+  // a page double-clicked in the conversation: its close-up, playing from the page's start
+  const playPage = (pid: string) => { setSelected(pid); setPane('stage'); setPagePlay((k) => k + 1); };
 
   if (project.error) return (
     <div className="flex h-full flex-col"><TopBar onSettings={openSettings} /><main className="flex flex-1 items-center justify-center text-[13px] text-ink-3">{project.error} · <a className="ml-1 text-accent-ink" href="#/">{t('workbench.backHome')}</a></main></div>
@@ -121,10 +123,10 @@ export function Workbench({ id, openSettings }: { id: string; openSettings: (sec
       {!p ? <div className="flex-1" /> : (
         <main ref={main} style={{ '--fs-left': `${width}px` } as React.CSSProperties} className={`relative grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[var(--fs-left)_minmax(0,1fr)] ${drag ? 'select-none [&_iframe]:pointer-events-none' : ''}`}>
           <aside className={`min-h-0 min-w-0 border-line bg-paper-2 lg:block lg:border-r ${pane === 'talk' ? 'block' : 'hidden'}`} aria-label={t('workbench.conversationAria')}>
-            <Conversation run={run} project={p} onSelectPage={(pid) => { setSelected(pid); setPane('stage'); }} selected={selected} onPlay={play} openSettings={openSettings} />
+            <Conversation run={run} project={p} onSelectPage={(pid) => { setSelected(pid); setPane('stage'); }} onPlayPage={playPage} selected={selected} onPlay={play} openSettings={openSettings} />
           </aside>
           <section className={`min-h-0 min-w-0 lg:block ${pane === 'stage' ? 'block' : 'hidden'}`} aria-label={t('workbench.workbenchAria')}>
-            <Stage run={run} project={p} selected={selected} onSelect={setSelected} playKey={playKey}
+            <Stage run={run} project={p} selected={selected} onSelect={setSelected} playKey={playKey} pagePlay={pagePlay}
               onRef={(r) => { setPane('talk'); offerRef(r); }} />
           </section>
           <div role="separator" aria-orientation="vertical" aria-label={t('workbench.resize')} aria-valuenow={width} aria-valuemin={LEFT_MIN} aria-valuemax={Math.round(maxLeft)} tabIndex={0}

@@ -343,7 +343,7 @@ function useFrames(project: ProjectView, times: number[], enabled: boolean, vers
  * One page, close up. It stays mounted while the workbench is open (Stage): when you go back to all pages it is only
  * hidden, its player paused, so opening a page again is a jump within a film already loaded, not a new boot.
  */
-function Focus({ id, active: shown, run, project, ids, tl, onFocus, onBack, onRef }: { id: string; active: boolean; run: RunView; project: ProjectView; ids: string[]; tl: Timeline | null; onFocus: (id: string) => void; onBack: () => void; onRef: (r: Ref) => void }) {
+function Focus({ id, active: shown, playKey, wantPlay, run, project, ids, tl, onFocus, onBack, onRef }: { id: string; active: boolean; playKey?: number; wantPlay?: React.MutableRefObject<boolean>; run: RunView; project: ProjectView; ids: string[]; tl: Timeline | null; onFocus: (id: string) => void; onBack: () => void; onRef: (r: Ref) => void }) {
   useT();
   const screenBox = useRef<HTMLDivElement>(null);
   const strip = useRef<HTMLDivElement>(null);
@@ -390,6 +390,13 @@ function Focus({ id, active: shown, run, project, ids, tl, onFocus, onBack, onRe
     if (follow.current) { follow.current = false; return; }
     if (!inPage(pt)) seekFrame(frame.current, Math.min(pt.start + 0.6, pt.end - 0.1), running);   // past the cross-fade from the page before
   }, [ready, id, pt?.start]);
+  // a page double-clicked in the conversation plays from its start, once the player is ready on that page (after the
+  // jump above). The request is the stage's: this close-up may only mount with the click that asks for it
+  useEffect(() => {
+    if (!wantPlay?.current || !shown || !ready || !pt) return;
+    wantPlay.current = false;
+    seekFrame(frame.current, pt.start, true);
+  }, [playKey, shown, ready, id, pt?.start]);
   useEffect(() => {
     if (!running || !tl || inPage(pt)) return;
     const now = tl.pages.find((x) => t >= x.start && t < x.end);
@@ -515,7 +522,7 @@ function Focus({ id, active: shown, run, project, ids, tl, onFocus, onBack, onRe
 
 // ── the workbench ──────────────────────────────────────────────────────────────────────────────────────────────────
 
-export function Stage({ run, project, selected, onSelect, playKey, onRef }: { run: RunView; project: ProjectView; selected?: string; onSelect: (id?: string) => void; playKey?: number; onRef: (r: Ref) => void }) {
+export function Stage({ run, project, selected, onSelect, playKey, pagePlay, onRef }: { run: RunView; project: ProjectView; selected?: string; onSelect: (id?: string) => void; playKey?: number; pagePlay?: number; onRef: (r: Ref) => void }) {
   useT();
   const [view, setView] = useState<'film' | 'pages'>('film');
   const [subs, setSubs] = useState(true);
@@ -529,6 +536,9 @@ export function Stage({ run, project, selected, onSelect, playKey, onRef }: { ru
   if (playKey !== playSeen.current) { playSeen.current = playKey; if (playKey) wantPlay.current = true; }
   useEffect(() => { if (playKey) { onSelect(undefined); setView('film'); } }, [playKey]);
   const takePlay = () => { const w = wantPlay.current; wantPlay.current = false; return w; };
+  // a page double-clicked in the conversation: noted the same way, carried out by the close-up
+  const wantPagePlay = useRef(false), pagePlaySeen = useRef(pagePlay);
+  if (pagePlay !== pagePlaySeen.current) { pagePlaySeen.current = pagePlay; if (pagePlay) wantPagePlay.current = true; }
   const focused = useMemo(() => (selected && ids.includes(selected) ? selected : undefined), [selected, ids]);
   // The close-up stays mounted once there is a drawn page to show: hidden behind the film or the canvas, its player
   // already booted on the page last opened (or rested on), so opening a page is instant and coming back costs nothing.
@@ -571,7 +581,7 @@ export function Stage({ run, project, selected, onSelect, playKey, onRef }: { ru
         {/* hidden by opacity, not visibility or display: the player keeps drawing (a browser stops frames it thinks unseen) */}
         {close && (
           <div className={focused ? 'h-full' : 'pointer-events-none absolute inset-0 -z-10 opacity-0'} inert={!focused || undefined} aria-hidden={!focused || undefined}>
-            <Focus id={close} active={!!focused} run={run} project={project} ids={ids} tl={tl} onFocus={onSelect} onBack={() => { onSelect(undefined); setView('pages'); }} onRef={onRef} />
+            <Focus id={close} active={!!focused} playKey={pagePlay} wantPlay={wantPagePlay} run={run} project={project} ids={ids} tl={tl} onFocus={onSelect} onBack={() => { onSelect(undefined); setView('pages'); }} onRef={onRef} />
           </div>
         )}
       </div>

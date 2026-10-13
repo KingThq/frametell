@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronRight, CircleDashed, Clapperboard, Download, Loader2, Pause, Play, TriangleAlert } from 'lucide-react';
-import { client, downloadUrl, type ProjectView } from '../lib/client';
+import { client, downloadUrl, hosted, type ProjectView } from '../lib/client';
 import { clock, film, finished, relPath, STAGE_NAME, STAGES, type FeedItem, type PageView, type RunView, type Stage, type Storyboard, isWorking } from '../lib/run';
 import { pageName, stepText, summarizeTools } from '../lib/describe';
 import { useNow } from '../lib/hooks';
 import { Crest } from '../components/Logo';
-import { useSpent } from '../components/Credits';
+import { FilmCredits, useSpent } from '../components/Credits';
 import { STYLE_NAME } from '../lib/styles';
 import { Composer, RefChip } from './Composer';
 import { ExportControls, RevealFile } from './Export';
@@ -131,7 +131,7 @@ const PAGE_STATE: Record<PageView['status'], { text: (p?: PageView) => string; i
   failed: { text: () => t('conversation.page.failed'), icon: <TriangleAlert size={14} />, tone: 'text-seal' },
 };
 
-function Pages({ run, onSelect, selected }: { run: RunView; onSelect: (id: string) => void; selected?: string }) {
+function Pages({ run, onSelect, onPlay, selected }: { run: RunView; onSelect: (id: string) => void; onPlay: (id: string) => void; selected?: string }) {
   useT();
   const ids = run.pageOrder.length ? run.pageOrder : run.storyboard?.pages.map((p) => p.id) || [];
   return (
@@ -139,14 +139,27 @@ function Pages({ run, onSelect, selected }: { run: RunView; onSelect: (id: strin
       {ids.map((id) => {
         const p = run.pages[id], st = PAGE_STATE[p?.status ?? 'queued'];
         const section = run.storyboard?.pages.find((x) => x.id === id)?.section;
+        // a page being drawn or checked has nothing steady to show yet: it opens once it is done
+        const busy = p?.status === 'drawing' || p?.status === 'checking';
+        // a drawn page plays where it is shown, on a double click (one click only opens it). The hint takes the status's
+        // place in the row once the pointer has rested there (never while it merely passes by): no layer over the rows
+        // either side, nothing that moves
+        const playable = p?.status === 'ok' || p?.status === 'flagged';
         return (
           <li key={id}>
-            <button onClick={() => onSelect(id)} aria-pressed={selected === id}
-              className={`-mx-2 flex w-[calc(100%+16px)] items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-ink/[0.04] ${selected === id ? 'bg-accent-soft/50' : ''}`}>
+            <button onClick={() => onSelect(id)} onDoubleClick={playable ? () => onPlay(id) : undefined} aria-pressed={selected === id} disabled={busy}
+              className={`group/page -mx-2 flex w-[calc(100%+16px)] items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors ${busy ? 'cursor-default' : 'hover:bg-ink/[0.04]'} ${selected === id ? 'bg-accent-soft/50' : ''}`}>
               <span className={`shrink-0 ${st.tone}`} aria-hidden>{st.icon}</span>
               <span className="w-[42px] shrink-0 text-[12.5px] text-ink-3 tabular">{pageName(id)}</span>
               <span className="min-w-0 flex-1 truncate text-[13px]">{section}</span>
-              <span className={`shrink-0 text-[12px] ${st.tone}`}>{st.text(p)}</span>
+              {playable ? (
+                <span className="relative grid shrink-0 justify-items-end text-[12px]">
+                  <span className={`col-start-1 row-start-1 transition-opacity duration-150 group-hover/page:opacity-0 group-hover/page:delay-500 ${st.tone}`}>{st.text(p)}</span>
+                  <span className="col-start-1 row-start-1 flex items-center gap-1 text-accent-ink opacity-0 transition-opacity duration-150 group-hover/page:opacity-100 group-hover/page:delay-500" aria-hidden>
+                    <Play size={10} className="fill-current" />{t('conversation.page.playHint')}
+                  </span>
+                </span>
+              ) : <span className={`shrink-0 text-[12px] ${st.tone}`}>{st.text(p)}</span>}
             </button>
           </li>
         );
@@ -246,9 +259,15 @@ function blocks(feed: FeedItem[]): Block[] {
     if (last?.kind === 'chapter' && last.stage === stage) last.items.push(it);
     else out.push({ kind: 'chapter', stage, items: [it], key: `c-${it.key}` });
   }
-  // a stage can run again (a revision redraws pages): only its latest chapter is live, earlier ones are history
+  // a stage can run again (a revision redraws pages, a new voice narrates again): only its latest chapter is live,
+  // earlier ones are history. A run that has started but said nothing yet has no chapter of its own: the old one must
+  // not take its spinner.
   const seen = new Set<Stage>();
-  for (let i = out.length - 1; i >= 0; i--) { const b = out[i]; if (b.kind === 'chapter' && !seen.has(b.stage)) { b.latest = true; seen.add(b.stage); } }
+  for (let i = out.length - 1; i >= 0; i--) {
+    const b = out[i];
+    if (b.kind === 'item' && b.item.kind === 'stage' && b.item.status === 'running') seen.add(b.item.stage);
+    else if (b.kind === 'chapter' && !seen.has(b.stage)) { b.latest = true; seen.add(b.stage); }
+  }
   return out;
 }
 
@@ -316,7 +335,7 @@ function LiveLine({ run }: { run: RunView }) {
   );
 }
 
-function Chapter({ b, run, project, onSelectPage, selected }: { b: Extract<Block, { kind: 'chapter' }>; run: RunView; project: ProjectView; onSelectPage: (id: string) => void; selected?: string }) {
+function Chapter({ b, run, project, onSelectPage, onPlayPage, selected }: { b: Extract<Block, { kind: 'chapter' }>; run: RunView; project: ProjectView; onSelectPage: (id: string) => void; onPlayPage: (id: string) => void; selected?: string }) {
   useT();
   const live = run.stages[b.stage];
   const st = b.latest ? live : { ...live, status: 'done' as const, startedAt: undefined, endedAt: undefined };
@@ -341,7 +360,7 @@ function Chapter({ b, run, project, onSelectPage, selected }: { b: Extract<Block
             : <p key={it.key} className="text-[12.5px] leading-relaxed text-ink-3">{t('conversation.chapter.checkIssues', { reds: it.reds, yellows: it.yellows })}</p>;
           if (it.kind === 'approval') return <Approval key={it.key} sb={it.storyboard} project={project} active={run.awaitingApproval && approvals.at(-1) === it} />;
           if (it.kind === 'pages' && !b.latest) return <p key={it.key} className="text-[12.5px] text-ink-3">{t('conversation.chapter.pagesDone', { n: run.pageOrder.length })}</p>;
-          if (it.kind === 'pages') return <Pages key={it.key} run={run} onSelect={onSelectPage} selected={selected} />;
+          if (it.kind === 'pages') return <Pages key={it.key} run={run} onSelect={onSelectPage} onPlay={onPlayPage} selected={selected} />;
           if (it.kind === 'error') return <p key={it.key} className="flex items-start gap-1.5 text-[12.5px] leading-relaxed text-seal"><TriangleAlert size={13} className="mt-0.5 shrink-0" aria-hidden />{it.message}</p>;
           return null;
         })}
@@ -387,12 +406,12 @@ function NowBar({ run, project }: { run: RunView; project: ProjectView }) {
       <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${running ? 'animate-breathe bg-accent' : run.awaitingApproval ? 'bg-accent' : finished(run) ? 'bg-jade' : 'bg-line-2'}`} aria-hidden />
       <span className={`min-w-0 flex-1 truncate ${run.awaitingApproval ? 'text-accent-ink' : 'text-ink-2'}`}>{text}</span>
       {running && left > 0 && <span className="shrink-0 text-ink-3 tabular">{t('conversation.bar.left', { min: left < 90 ? 1 : Math.round(left / 60) })}</span>}
-      {spent && <span className="shrink-0 font-mono text-ink-3 tabular" title={t('conversation.bar.spent')}>{spent}</span>}
+      {hosted ? <FilmCredits project={project.id} run={run} /> : spent && <span className="shrink-0 font-mono text-ink-3 tabular" title={t('conversation.bar.spent')}>{spent}</span>}
     </div>
   );
 }
 
-export function Conversation({ run, project, onSelectPage, selected, onPlay, openSettings }: { run: RunView; project: ProjectView; onSelectPage: (id: string) => void; selected?: string; onPlay: () => void; openSettings?: (section?: string) => void }) {
+export function Conversation({ run, project, onSelectPage, onPlayPage, selected, onPlay, openSettings }: { run: RunView; project: ProjectView; onSelectPage: (id: string) => void; onPlayPage: (id: string) => void; selected?: string; onPlay: () => void; openSettings?: (section?: string) => void }) {
   const { locale } = useT();
   const box = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
@@ -423,7 +442,7 @@ export function Conversation({ run, project, onSelectPage, selected, onPlay, ope
           </div>
           {list.map((b) => {
             if (b.kind === 'work') return <WorkChapter key={b.key} b={b} live={!!run.revising && b === list.filter((x) => x.kind === 'work').at(-1)} />;
-            if (b.kind === 'chapter') return <Chapter key={b.key} b={b} run={run} project={project} onSelectPage={onSelectPage} selected={selected} />;
+            if (b.kind === 'chapter') return <Chapter key={b.key} b={b} run={run} project={project} onSelectPage={onSelectPage} onPlayPage={onPlayPage} selected={selected} />;
             const it = b.item;
             if (it.kind === 'user') return (
               <div key={it.key} className="ml-auto flex w-fit max-w-[88%] flex-col items-end gap-1.5 animate-rise">

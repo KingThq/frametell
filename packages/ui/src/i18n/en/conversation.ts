@@ -9,7 +9,7 @@ const en: typeof zh = {
   times: '×{n}',
   pagesCount: (v) => `${v.n} ${v.n === 1 ? 'page' : 'pages'}`,
   scriptDetail: (v) => `${v.pages} pages · ${v.cues} lines · about ${v.min ? `${v.min}m ` : ''}${v.sec}s`,
-  voiceDetail: 'Voiceover {s}s',
+  voiceDetail: '{s}s of audio',
   doing: { storyboard: 'Planning the storyboard', script: 'Writing the narration', narrate: 'Recording the voiceover', pages: 'Drawing page by page', review: 'Checking the whole film', render: 'Rendering the film' },
   approval: { hint: 'Want changes? Say so below', approve: 'Approve and start making', approved: 'Approved' },
   page: {
@@ -20,6 +20,7 @@ const en: typeof zh = {
     flagged: 'Done, with one thing for you to look at',
     failed: 'Couldn’t draw it',
     progressLabel: 'Page progress',
+    playHint: 'Double-click to play this page',
   },
   paused: {
     whereStage: 'the {stage} step',
