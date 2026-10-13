@@ -23,6 +23,7 @@ export default {
   noPageNarration: '这一页的口播还没写好',
   sheetTitle: (v: { page: string; round: number }) => `${v.page} · 第 ${v.round} 轮自检截图`,
   sheetCaption: '导演检查这一页时看的截图，每格左下角是它在成片里的时间',
+  loadingPage: '正在载入这一页…',
   preview: '预览',
   fullscreen: '全屏看',
   notStarted: '还没开始画',

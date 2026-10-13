@@ -82,12 +82,20 @@ function useLivePlayer(version: string, url: string, from = 0) {
     return () => { removeEventListener('message', on); later.forEach(clearTimeout); };
   }, []);
   const frames = ({ className, ...props }: React.IframeHTMLAttributes<HTMLIFrameElement>) => (boot.current ??= from, docs.map((d, i) => (
-    <iframe key={keyOf(d)} ref={i === 0 ? frame : behind} data-v={d.v} src={`${url}?from=${(d.from ?? boot.current!).toFixed(2)}&lang=${locale}`} sandbox="allow-scripts" {...props} tabIndex={i === 0 ? undefined : -1} aria-hidden={i > 0 || undefined}
+    <iframe key={keyOf(d)} ref={i === 0 ? frame : behind} data-v={d.v} src={`${url}?from=${(d.from ?? boot.current!).toFixed(2)}&lang=${locale}`} sandbox={sandboxFor(url)} {...props} tabIndex={i === 0 ? undefined : -1} aria-hidden={i > 0 || undefined}
       className={`${className ?? ''} ${i > 0 ? '!absolute inset-0 pointer-events-none !opacity-0' : ''}`} />
   )));
   return { frame, frames, ...st };
 }
 const RETRIES = 4, SILENT_MS = 20_000;
+/**
+ * The player runs the agent's code, so it is sandboxed. With scripts alone its origin is opaque, and the browser gives
+ * an opaque frame a cache of its own each time: every player (every page opened, every return to the film) downloaded
+ * the whole engine again. When the film is served from another origin than this panel (the hosted studio's preview
+ * domain) it may keep that origin: it stays cut off from the panel all the same, and its files are cached like any
+ * site's. Served from the panel's own origin (a local studio), same-origin would undo the sandbox, so it stays opaque.
+ */
+const sandboxFor = (url: string) => { try { return new URL(url, location.href).origin !== location.origin ? 'allow-scripts allow-same-origin' : 'allow-scripts'; } catch { return 'allow-scripts'; } };
 const seekFrame = (frame: HTMLIFrameElement | null, t: number, play = true) => frame?.contentWindow?.postMessage({ type: 'studio:seek', t, play }, '*');
 
 function Thumb({ p, project, poster, className = '', badge = true }: { p?: PageView; project: ProjectView; poster?: string; className?: string; badge?: boolean }) {
@@ -213,8 +221,13 @@ function Film({ run, project, ids, tl, subs, playKey, takePlay, onFocus }: { run
 
 // ── the canvas: every page, its picture and its words ──────────────────────────────────────────────────────────────
 
-function Canvas({ run, project, ids, tl, onFocus, onRef }: { run: RunView; project: ProjectView; ids: string[]; tl: Timeline | null; onFocus: (id: string) => void; onRef: (r: Ref) => void }) {
+function Canvas({ run, project, ids, tl, onFocus, onWarm, onRef }: { run: RunView; project: ProjectView; ids: string[]; tl: Timeline | null; onFocus: (id: string) => void; onWarm: (id: string) => void; onRef: (r: Ref) => void }) {
   useT();
+  // resting on a card readies that page behind the canvas (the player moves there, its frames are cut), so the click opens
+  // it at once; sweeping across the cards readies nothing
+  const rest = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(rest.current), []);
+  const warm = (id: string) => { clearTimeout(rest.current); rest.current = setTimeout(() => onWarm(id), 140); };
   if (!ids.length) return <p className="px-6 py-10 text-center text-[13px] text-ink-3">{tr('stage.canvasEmpty')}</p>;
   return (
     <div className="h-full overflow-y-auto px-6 py-5">
@@ -228,7 +241,8 @@ function Canvas({ run, project, ids, tl, onFocus, onRef }: { run: RunView; proje
                 className="fs-lb-btn absolute right-2 top-2 z-10 h-7 w-auto gap-1 px-2.5 text-[11.5px] opacity-0 transition-opacity focus-visible:opacity-100 group-hover/c:opacity-100" title={tr('stage.addPageTitle')}>
                 <Quote size={11} aria-hidden /> {tr('stage.quote')}
               </button>
-              <button onClick={() => onFocus(id)} className="group flex h-full w-full flex-col overflow-hidden rounded-xl border border-line bg-surface text-left transition-[border-color,transform] duration-200 hover:-translate-y-px hover:border-line-2">
+              <button onClick={() => onFocus(id)} onPointerEnter={() => warm(id)} onPointerLeave={() => clearTimeout(rest.current)} onFocus={() => warm(id)}
+                className="group flex h-full w-full flex-col overflow-hidden rounded-xl border border-line bg-surface text-left transition-[border-color,transform] duration-200 hover:-translate-y-px hover:border-line-2">
                 <Thumb p={p} project={project} poster={tl?.posters?.[id]} className="aspect-video w-full border-b border-line" />
                 <span className="flex flex-1 flex-col px-3.5 pb-3.5 pt-3">
                   <span className="flex items-baseline gap-2">
@@ -251,27 +265,74 @@ function Canvas({ run, project, ids, tl, onFocus, onRef }: { run: RunView; proje
 
 // ── one page, close up ─────────────────────────────────────────────────────────────────────────────────────────────
 
+/** the player is on its way: said after a beat (a warm player never shows it), in the panel's live-text shimmer */
+function Loading() {
+  const [late, setLate] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setLate(true), 250); return () => clearTimeout(t); }, []);
+  if (!late) return null;
+  return (
+    <div className="pointer-events-none absolute inset-0 flex items-end justify-center bg-gradient-to-t from-black/45 via-black/10 to-transparent pb-6 animate-fade" role="status">
+      <span className="flex items-center gap-2.5 rounded-full bg-black/55 px-4 py-2 text-[12.5px] text-white/90 backdrop-blur-sm">
+        <span className="relative flex h-2 w-2" aria-hidden><span className="absolute inset-0 rounded-full bg-accent motion-safe:animate-halo" /><span className="relative h-2 w-2 rounded-full bg-accent" /></span>
+        {tr('stage.loadingPage')}
+      </span>
+    </div>
+  );
+}
+
 /** the moment that shows a line: a beat after it starts, once its picture has settled, before the next line */
 const momentOf = (lines: { abs?: number }[], j: number, end: number) => {
   const a = lines[j].abs ?? 0, b = lines[j + 1]?.abs ?? end;
   return Math.max(a, Math.min(a + 1.2, a + (b - a) / 2, b - 0.15));
 };
 
+/** the moments of a page's lines (where its key frames are cut), or none before its lines are timed */
+function momentsOf(id: string, tl: Timeline | null, run: RunView): number[] {
+  const pt = tl?.pages.find((x) => x.id === id), lines = linesOf(id, tl, run);
+  return pt && lines.some((l) => l.abs != null) ? lines.map((_, j) => momentOf(lines, j, pt.end)) : [];
+}
+
+// A page's key frames, kept for the session by film version and moments: opening a page again, or the page beside it,
+// shows them at once instead of asking the server and downloading them again. A request already on its way is shared.
+const frameCache = new Map<string, Promise<Record<string, string>>>();
+function loadFrames(project: ProjectView, times: number[], version: string) {
+  const ck = `${project.id}|${version}|${times.map((t) => t.toFixed(1)).join(',')}`;
+  let hit = frameCache.get(ck);
+  if (!hit) {
+    hit = client.frames(project.id, times).then((list) => {
+      // into the browser's cache too, so the strip and the screen paint them without a wait
+      for (const f of list) if (f) new Image().src = client.fileUrl(project, f);
+      return Object.fromEntries(times.map((t, i) => [t.toFixed(1), list[i]]));
+    });
+    hit.catch(() => frameCache.delete(ck));
+    frameCache.set(ck, hit);
+    if (frameCache.size > 120) frameCache.delete(frameCache.keys().next().value!);
+  }
+  return hit;
+}
+const settled = new Map<Promise<Record<string, string>>, Record<string, string>>();
+
 /** full-resolution frames of the film at the given times, cut in one go; again whenever the film changes */
 function useFrames(project: ProjectView, times: number[], enabled: boolean, version = '') {
-  const [paths, setPaths] = useState<Record<string, string>>({});
   const key = times.map((t) => t.toFixed(1)).join(',');
+  const cached = () => { const h = frameCache.get(`${project.id}|${version}|${key}`); return (h && settled.get(h)) || {}; };
+  const [paths, setPaths] = useState<Record<string, string>>(cached);
   useEffect(() => {
-    setPaths({});
+    setPaths(cached());
     if (!enabled || !times.length) return;
     let live = true;
-    client.frames(project.id, times).then((list) => live && setPaths(Object.fromEntries(times.map((t, i) => [t.toFixed(1), list[i]])))).catch(() => {});
+    const job = loadFrames(project, times, version);
+    job.then((p) => { settled.set(job, p); if (live) setPaths(p); }).catch(() => {});
     return () => { live = false; };
   }, [project.id, key, enabled, version]);
   return (t: number) => paths[t.toFixed(1)];
 }
 
-function Focus({ id, run, project, ids, tl, onFocus, onBack, onRef }: { id: string; run: RunView; project: ProjectView; ids: string[]; tl: Timeline | null; onFocus: (id: string) => void; onBack: () => void; onRef: (r: Ref) => void }) {
+/**
+ * One page, close up. It stays mounted while the workbench is open (Stage): when you go back to all pages it is only
+ * hidden, its player paused, so opening a page again is a jump within a film already loaded, not a new boot.
+ */
+function Focus({ id, active: shown, run, project, ids, tl, onFocus, onBack, onRef }: { id: string; active: boolean; run: RunView; project: ProjectView; ids: string[]; tl: Timeline | null; onFocus: (id: string) => void; onBack: () => void; onRef: (r: Ref) => void }) {
   useT();
   const screenBox = useRef<HTMLDivElement>(null);
   const strip = useRef<HTMLDivElement>(null);
@@ -289,17 +350,26 @@ function Focus({ id, run, project, ids, tl, onFocus, onBack, onRef }: { id: stri
   const live = useLivePlayer(version, client.fileUrl(project, 'index.html'), pt ? Math.min(pt.start + 0.6, pt.end - 0.1) : 0);
   const { frame, t, playing: running, ready } = live;
   const poster = p?.thumb ? relPath(p.thumb, project.id) : tl?.posters?.[id];
-  const moments = useMemo(() => (pt && timed ? lines.map((_, j) => momentOf(lines, j, pt.end)) : []), [pt?.start, pt?.end, lines.length, timed]);
+  const moments = useMemo(() => momentsOf(id, tl, run), [id, pt?.start, pt?.end, lines.length, timed]);
   const frameAt = useFrames(project, moments, finished(run), version);
+  const still = moments.length ? frameAt(moments[0]) : undefined;
   // the line on screen right now: words, its frame and the player all point at the same moment
   const active = timed ? Math.max(0, lines.filter((l) => l.abs != null && l.abs <= t + 0.05).length - 1) : -1;
   const inThis = !!pt && t >= pt.start - 0.01 && t < pt.end - 0.01;
-  useEffect(() => { setLight(null); }, [id]);
+  useEffect(() => { setLight(null); }, [id, shown]);
+  // hidden: the player pauses where it is
+  useEffect(() => { if (!shown && running) seekFrame(frame.current, t, false); }, [shown]);
+  // the pages either side: their frames cut and fetched while this one is looked at, so turning the page is instant
   useEffect(() => {
-    if (active < 0 || !inThis) return;
+    if (!shown || !finished(run)) return;
+    const timer = setTimeout(() => { for (const x of [next, prev]) { const m = x ? momentsOf(x, tl, run) : []; if (m.length) loadFrames(project, m, version).catch(() => {}); } }, 600);
+    return () => clearTimeout(timer);
+  }, [shown, id, tl, version]);
+  useEffect(() => {
+    if (!shown || active < 0 || !inThis) return;
     strip.current?.querySelector<HTMLElement>(`[data-i="${active}"]`)?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
     cueList.current?.querySelector<HTMLElement>(`[data-i="${active}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  }, [active, inThis]);
+  }, [active, inThis, shown]);
   // one player for the whole film: turning a page is a jump, not a reload. While it plays across a page boundary, the
   // focused page follows the picture; turning the page by hand jumps there and keeps playing if it was playing.
   const follow = useRef(false);
@@ -315,6 +385,7 @@ function Focus({ id, run, project, ids, tl, onFocus, onBack, onRef }: { id: stri
     if (now && now.id !== id) { follow.current = true; onFocus(now.id); }
   }, [t]);
   useEffect(() => {
+    if (!shown) return;
     const on = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.closest('input,textarea,select,dialog')) return;
       if (e.key === 'Escape') onBack();
@@ -323,7 +394,7 @@ function Focus({ id, run, project, ids, tl, onFocus, onBack, onRef }: { id: stri
     };
     addEventListener('keydown', on);
     return () => removeEventListener('keydown', on);
-  }, [prev, next, onBack, onFocus]);
+  }, [shown, prev, next, onBack, onFocus]);
 
   const pageLabel = tr('stage.pageLabel', { n: i + 1, section: sb?.section });
   const pageRef: Ref = { kind: 'page', page: id, label: pageLabel, thumb: p?.thumb ? relPath(p.thumb, project.id) : tl?.posters?.[id] };
@@ -335,8 +406,11 @@ function Focus({ id, run, project, ids, tl, onFocus, onBack, onRef }: { id: stri
   let screen: React.ReactNode;
   if (drawn) screen = (
     <div ref={screenBox} className="group relative h-full w-full overflow-hidden rounded-xl bg-paper-2">
-      {/* until the player has drawn this page, its picture stands in; the player then fades in already on it */}
-      {!ready && poster && <img src={client.fileUrl(project, poster)} alt="" className="absolute inset-0 h-full w-full object-contain" />}
+      {/* until the player has drawn this page, its picture stands in (the full-size key frame when there is one; the small
+          poster softened, so it reads as a stand-in rather than a blurry page) and says it is loading; the player then
+          fades in already on it */}
+      {!ready && (still || poster) && <img src={client.fileUrl(project, (still ?? poster)!)} alt="" className={`absolute inset-0 h-full w-full object-contain ${still ? '' : 'scale-[1.02] blur-[6px]'}`} />}
+      {!ready && <Loading />}
       {pt && live.frames({ title: tr('stage.preview'), allowFullScreen: true,
         className: `relative h-full w-full border-0 transition-opacity duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${ready ? 'opacity-100' : 'opacity-0'}` })}
       <button className="fs-lb-btn absolute right-3 top-3 opacity-0 transition-opacity duration-150 focus-visible:opacity-100 group-hover:opacity-100" onClick={() => void screenBox.current?.requestFullscreen?.()} aria-label={tr('stage.fullscreen')} title={tr('stage.fullscreen')}><Maximize2 size={15} /></button>
@@ -443,6 +517,16 @@ export function Stage({ run, project, selected, onSelect, playKey, onRef }: { ru
   useEffect(() => { if (playKey) { wantPlay.current = true; onSelect(undefined); setView('film'); } }, [playKey]);
   const takePlay = () => { const w = wantPlay.current; wantPlay.current = false; return w; };
   const focused = useMemo(() => (selected && ids.includes(selected) ? selected : undefined), [selected, ids]);
+  // The close-up stays mounted once there is a drawn page to show: hidden behind the film or the canvas, its player
+  // already booted on the page last opened (or rested on), so opening a page is instant and coming back costs nothing.
+  const [warm, setWarm] = useState<string>();
+  useEffect(() => { if (focused) setWarm(focused); }, [focused]);
+  const drawnIds = ids.filter((x) => ['ok', 'flagged'].includes(run.pages[x]?.status));
+  const ready = (x?: string) => (x && ids.includes(x) && (drawnIds.includes(x) || finished(run)) ? x : undefined);
+  // on the film view it waits a moment, so the film's own player boots first
+  const [settledIn, setSettledIn] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setSettledIn(true), 1500); return () => clearTimeout(t); }, []);
+  const close = focused ?? ready(warm) ?? (view === 'pages' || settledIn ? drawnIds[0] : undefined);
   const exported = film(run);
   const cut = exported ? (subs ? exported.path : exported.noSubs) : undefined;
 
@@ -468,10 +552,15 @@ export function Stage({ run, project, selected, onSelect, playKey, onRef }: { ru
           )}
         </div>
       )}
-      <div className="min-h-0 flex-1">
-        {focused ? <Focus id={focused} run={run} project={project} ids={ids} tl={tl} onFocus={onSelect} onBack={() => { onSelect(undefined); setView('pages'); }} onRef={onRef} />
-          : view === 'film' ? <Film run={run} project={project} ids={ids} tl={tl} subs={subs} playKey={playKey} takePlay={takePlay} onFocus={onSelect} />
-          : <Canvas run={run} project={project} ids={ids} tl={tl} onFocus={onSelect} onRef={onRef} />}
+      <div className="relative min-h-0 flex-1">
+        {!focused && (view === 'film' ? <Film run={run} project={project} ids={ids} tl={tl} subs={subs} playKey={playKey} takePlay={takePlay} onFocus={onSelect} />
+          : <Canvas run={run} project={project} ids={ids} tl={tl} onFocus={onSelect} onWarm={setWarm} onRef={onRef} />)}
+        {/* hidden by opacity, not visibility or display: the player keeps drawing (a browser stops frames it thinks unseen) */}
+        {close && (
+          <div className={focused ? 'h-full' : 'pointer-events-none absolute inset-0 -z-10 opacity-0'} inert={!focused || undefined} aria-hidden={!focused || undefined}>
+            <Focus id={close} active={!!focused} run={run} project={project} ids={ids} tl={tl} onFocus={onSelect} onBack={() => { onSelect(undefined); setView('pages'); }} onRef={onRef} />
+          </div>
+        )}
       </div>
     </div>
   );

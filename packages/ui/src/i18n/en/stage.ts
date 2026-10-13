@@ -24,6 +24,7 @@ const en: typeof zh = {
   noPageNarration: "This page's narration isn't written yet",
   sheetTitle: (v) => `${v.page} · self-check, round ${v.round}`,
   sheetCaption: 'What the director looked at while checking this page. Each tile shows its time in the film, bottom left.',
+  loadingPage: 'Loading this page…',
   preview: 'Preview',
   fullscreen: 'Full screen',
   notStarted: 'Not drawn yet',
