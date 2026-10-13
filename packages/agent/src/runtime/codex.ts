@@ -8,7 +8,7 @@ import { addUsage, emptyUsage, proxyEnv, type AgentRuntime, type AgentSession, t
 
 export interface CodexRuntimeOptions {
   apiKey: string;
-  /** OpenAI-compatible endpoint (e.g. https://relay.example.com/v1); omit for api.openai.com */
+  /** OpenAI-compatible endpoint (e.g. a relay's /v1); omit for api.openai.com */
   baseUrl?: string;
   model: string;
   effort?: 'low' | 'medium' | 'high';
@@ -18,11 +18,11 @@ export function codexRuntime(o: CodexRuntimeOptions): AgentRuntime {
   if (!o.apiKey) throw new Error('The Codex runtime needs an OpenAI-compatible API key');
   return {
     id: 'codex',
-    model: { provider: o.baseUrl?.includes('relay') ? 'relay' : 'openai', id: o.model },
+    model: { provider: 'openai', id: o.model },
     async open(s: SessionOptions, resume?: string): Promise<AgentSession> {
       const home = path.join(s.cwd, '.studio', 'codex');
       fs.mkdirSync(home, { recursive: true });
-      // a gateway (Relay, the user's own relay, any OpenAI-compatible base URL) is its own HTTP-only provider: Codex otherwise opens a
+      // a gateway (the user's own relay, any OpenAI-compatible base URL) is its own HTTP-only provider: Codex otherwise opens a
       // WebSocket to /v1/responses first, and gateways that only speak HTTP cost five failed reconnects per turn
       const env = { PATH: process.env.PATH || '', HOME: process.env.HOME || '', CODEX_HOME: home, STUDIO_CODEX_KEY: o.apiKey, ...proxyEnv() };
       const codex = o.baseUrl

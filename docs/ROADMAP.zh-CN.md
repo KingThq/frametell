@@ -25,7 +25,7 @@
 - [ ] 一页修两轮仍坏时，换更强的模型兜底
 
 ## M2 · Agent 与模型（packages/agent、packages/models、packages/voice）
-- [x] 模型目录：16 家 provider（Relay 推荐）+ 自填模型 id + 自定义 OpenAI / Anthropic 兼容端点 + 代理
+- [x] 模型目录：15 家 provider+ 自填模型 id + 自定义 OpenAI / Anthropic 兼容端点 + 代理
 - [x] 导演 Agent（基于 Pi）：分镜 → 口播 → 画面（最多 10 页并发）→ 全片检查，编排器强制 lint / 截图
 - [x] 修改走增量：只改点到的页，预览即时，mp4 只在导出时生成
 - [x] 配音：火山 TTS 2.0（内置试听）

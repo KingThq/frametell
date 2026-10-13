@@ -11,7 +11,7 @@ npx frametell          # start the local server and open http://localhost:5317
 ## Design principles
 
 - **A finished product, not a developer tool.** Installation, model setup, environment checks and error recovery all happen in the studio.
-- **Any model works; Relay is the recommended choice.** The model layer is built on Pi (`@earendil-works/pi-ai`). It supports OpenAI, Anthropic, Google, DeepSeek, OpenRouter, Vercel AI Gateway, Volcengine Ark and any OpenAI-compatible API. The default recommendation is Relay + Claude Opus 5.5.
+- **Any model works.** The model layer is built on Pi (`@earendil-works/pi-ai`). It supports OpenAI, Anthropic, Google, DeepSeek, OpenRouter, Vercel AI Gateway, Volcengine Ark and any OpenAI-compatible API. The default recommendation is Claude Opus 5.5.
 - **Engineering guardrails, not model discipline.** The orchestrator enforces layout checks, screenshot self-checks and the full-film check, and hands the results to the agent. Weaker models can still produce a film reliably.
 - **Local first.** Materials, projects and keys stay on the user's computer. Keys are only sent to the provider the user picked.
 - **Every step can be undone.** Each project is a git repository. Every agent change is a commit, so undo is `git revert`.
@@ -24,7 +24,7 @@ frametell/
 │   ├── engine/    @frametell/engine   video engine (from kit): page runtime, style packs, component library,
 │   │                                         rendering (Playwright + ffmpeg), lint / snap / pages tools
 │   ├── agent/     @frametell/agent    director agent: built on pi-agent-core; staged orchestration, tools, prompts
-│   ├── models/    @frametell/models   model catalog and providers: pi-ai built-ins + Relay + Volcengine Ark
+│   ├── models/    @frametell/models   model catalog and providers: pi-ai built-ins + Volcengine Ark
 │   └── voice/     @frametell/voice    voiceover: Volcengine TTS 2.0, ElevenLabs; alignment of user recordings
 └── apps/
     └── studio/    frametell           local server (HTTP + SSE) + web studio + CLI entry point
@@ -69,7 +69,6 @@ Each stage is a separate agent run. Context stays short, cache hit rates stay hi
 ## Models (packages/models)
 
 - All of `pi-ai`'s built-in providers are available. The user enters keys on the settings page.
-- **Relay** (first choice, recommended): `https://relay.example.com`. It mixes the Anthropic and OpenAI protocols. The model list is fetched live from `/v1/models`, and prices are shown at Relay's rates.
 - **Volcengine Ark**: OpenAI-compatible, added through `createProvider`.
 - **Custom**: any OpenAI- or Anthropic-compatible URL.
 - Usage and cost: token usage for each request is added up using the model's price table, and the studio shows the project's spend so far in real time.

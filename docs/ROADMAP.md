@@ -25,7 +25,7 @@ We go one step at a time, and each step can be verified on its own. Finished ite
 - [ ] When a page is still broken after two rounds of fixes, fall back to a stronger model
 
 ## M2 · Agent and models (packages/agent, packages/models, packages/voice)
-- [x] Model catalog: 16 providers (Relay recommended) + custom model ids + custom OpenAI- / Anthropic-compatible endpoints + proxy
+- [x] Model catalog: 15 providers + custom model ids + custom OpenAI- / Anthropic-compatible endpoints + proxy
 - [x] Director agent (built on Pi): storyboard → narration → pages (up to 10 in parallel) → full-film check, with the orchestrator enforcing lint / screenshots
 - [x] Edits are incremental: only the pages you point at change, the preview updates instantly, and the mp4 is only produced on export
 - [x] Voiceover: Volcengine TTS 2.0 (with built-in preview)

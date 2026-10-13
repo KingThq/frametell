@@ -1,4 +1,3 @@
-import { useId } from 'react';
 import claude from '../assets/providers/claude.svg';
 import gemini from '../assets/providers/gemini.svg';
 import deepseek from '../assets/providers/deepseek.svg';
@@ -27,28 +26,8 @@ const COLOR: Record<string, string> = {
 // drawn inline: one-colour marks, and Kimi, whose letter is drawn in the text colour beside its blue dot
 const MONO: Record<string, string> = { 'moonshotai-cn': kimi, openai, xai: grok, openrouter, xiaomi, ollama, elevenlabs };
 
-/** the Relay crest: a disc cut by a lightning stroke, ink half and caramel half */
-function RelayMark({ size }: { size: number }) {
-  const uid = useId().replace(/:/g, '');
-  return (
-    <svg width={size} height={size} viewBox="2.5 2.5 27 27" fill="none" aria-hidden>
-      <defs>
-        <mask id={`fw-${uid}`} maskUnits="userSpaceOnUse" x="-5" y="-5" width="42" height="42">
-          <circle cx="16" cy="16" r="13.5" fill="#fff" />
-          <path d="M20.6 1.5L13.4 15.2L18.8 16.9L11.2 30.5" stroke="#000" strokeWidth="1.55" strokeLinejoin="miter" />
-        </mask>
-      </defs>
-      <g mask={`url(#fw-${uid})`}>
-        <path d="M0 0H20.9L13.4 15.2L18.8 16.9L10.9 32H0Z" style={{ fill: 'rgb(var(--fs-ink))' }} />
-        <path d="M20.9 0H32V32H10.9L18.8 16.9L13.4 15.2Z" fill="#D4A574" />
-      </g>
-    </svg>
-  );
-}
-
 export function ProviderLogo({ id, name, size = 20, className = '' }: { id: string; name?: string; size?: number; className?: string }) {
   const box = `inline-flex shrink-0 items-center justify-center ${className}`;
-  if (id === 'relay') return <span className={box} style={{ width: size, height: size }}><RelayMark size={size} /></span>;
   if (COLOR[id]) return <img src={COLOR[id]} alt="" width={size} height={size} className={box} draggable={false} />;
   if (MONO[id]) return <span className={`${box} text-ink [&>svg]:h-full [&>svg]:w-full`} style={{ width: size, height: size }} aria-hidden dangerouslySetInnerHTML={{ __html: MONO[id] }} />;
   return (

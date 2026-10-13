@@ -1,5 +1,5 @@
 // Claude Agent SDK runtime: Claude Code's own agent loop and tools. API-key authentication only (an Anthropic key, a
-// Relay key with its base URL, or a cloud provider): Anthropic does not allow third-party products to use Claude.ai
+// relay's key with its base URL, or a cloud provider): Anthropic does not allow third-party products to use Claude.ai
 // subscription logins, so the SDK runs with an isolated config directory and never sees the user's Claude Code login.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -9,7 +9,7 @@ import { addUsage, emptyUsage, rewriteRefusal, toolSummary, proxyEnv, type Agent
 
 export interface ClaudeRuntimeOptions {
   apiKey: string;
-  /** Anthropic-compatible endpoint, e.g. https://relay.example.com; omit for api.anthropic.com */
+  /** Anthropic-compatible endpoint, e.g. a relay; omit for api.anthropic.com */
   baseUrl?: string;
   model: string;
   effort?: 'low' | 'medium' | 'high';
@@ -27,7 +27,7 @@ export function claudeRuntime(o: ClaudeRuntimeOptions): AgentRuntime {
   if (!o.apiKey) throw new Error('The Claude Agent SDK runtime needs an API key (Anthropic or a compatible gateway); a Claude subscription login is not supported');
   return {
     id: 'claude-agent-sdk',
-    model: { provider: o.baseUrl?.includes('relay') ? 'relay' : 'anthropic', id: o.model },
+    model: { provider: 'anthropic', id: o.model },
     async open(s: SessionOptions, resume?: string): Promise<AgentSession> {
       let sessionId = resume;
       // isolated config: no user settings, memory, plugins or subscription credentials leak into the run

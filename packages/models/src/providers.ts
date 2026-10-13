@@ -28,8 +28,7 @@ export interface ProviderSpec {
 }
 
 export const PROVIDERS: ProviderSpec[] = [
-  { id: 'relay', site: 'https://relay.example.com', name: 'Relay', group: 'recommended', blurb: 'One key for Claude, Gemini and GPT, priced in yuan', keyUrl: 'https://relay.example.com', keyHint: 'sk-flash-…', protocol: 'anthropic', baseUrl: 'https://relay.example.com' },
-  { id: 'anthropic', site: 'https://www.anthropic.com', name: 'Claude', group: 'global', blurb: 'The Anthropic API', keyUrl: 'https://console.anthropic.com/settings/keys', keyHint: 'sk-ant-…', protocol: 'anthropic', baseUrl: 'https://api.anthropic.com' },
+  { id: 'anthropic', site: 'https://www.anthropic.com', name: 'Claude', group: 'recommended', blurb: 'The Anthropic API', keyUrl: 'https://console.anthropic.com/settings/keys', keyHint: 'sk-ant-…', protocol: 'anthropic', baseUrl: 'https://api.anthropic.com' },
   { id: 'openai', site: 'https://platform.openai.com', name: 'OpenAI', group: 'global', blurb: 'The OpenAI API', keyUrl: 'https://platform.openai.com/api-keys', keyHint: 'sk-…', protocol: 'openai', baseUrl: 'https://api.openai.com/v1' },
   { id: 'google', site: 'https://ai.google.dev', name: 'Gemini', group: 'global', blurb: 'Google AI Studio', keyUrl: 'https://aistudio.google.com/apikey', keyHint: 'AIza…', protocol: 'google', baseUrl: 'https://generativelanguage.googleapis.com/v1beta' },
   { id: 'xai', site: 'https://x.ai', name: 'Grok', group: 'global', blurb: 'The xAI API', keyUrl: 'https://console.x.ai', keyHint: 'xai-…', protocol: 'openai', baseUrl: 'https://api.x.ai/v1' },

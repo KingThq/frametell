@@ -9,19 +9,14 @@ import { maskProxy } from './net.js';
 import type { LocalePref, PublicSettings, RuntimeId, SettingsPatch, VoiceChoice } from './types.js';
 import { tr } from './i18n.js';
 
-export const DATA_DIR = process.env.FRAMETELL_HOME || process.env.FRAMETELL_HOME || path.join(os.homedir(), '.frametell');
-// the data directory of the days before the rename moves over once, the first time Frametell starts
-const LEGACY_DIR = path.join(os.homedir(), '.frametell');
-if (!process.env.FRAMETELL_HOME && !process.env.FRAMETELL_HOME && !fs.existsSync(DATA_DIR) && fs.existsSync(LEGACY_DIR)) {
-  try { fs.renameSync(LEGACY_DIR, DATA_DIR); } catch {}
-}
+export const DATA_DIR = process.env.FRAMETELL_HOME || path.join(os.homedir(), '.frametell');
 export const PROJECTS_DIR = path.join(DATA_DIR, 'projects');
 /** the longest 「创作偏好」 kept: it rides along in every agent session's system prompt */
 export const MAX_PREFERENCES = 2000;
 
 
 export interface Config {
-  /** API keys by provider id: relay, anthropic, openai, google, openrouter, vercel-ai-gateway, volcengine-ark, … */
+  /** API keys by provider id: anthropic, openai, google, openrouter, vercel-ai-gateway, volcengine-ark, … */
   keys: Record<string, string>;
   custom: CustomProviderConfig[];
   /** the user's own relay for a provider (anthropic, openai): an Anthropic- / OpenAI-compatible base URL */
@@ -88,7 +83,7 @@ const local = configFile(DATA_DIR);
 export const loadConfig = (): Config => local.load();
 export const saveConfig = (c: Config) => local.save(c);
 
-/** sk-flash-5e45…8487 */
+/** sk-ant-5e45…8487 */
 export const mask = (k?: string) => (!k ? '' : k.length <= 12 ? '••••' : `${k.slice(0, 8)}…${k.slice(-4)}`);
 
 /** What the panel may see: keys reduced to masked hints. */

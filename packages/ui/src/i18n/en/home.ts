@@ -76,7 +76,7 @@ const en: typeof zh = {
   toSettings: 'Open settings',
   change: 'Change',
   noModelA: 'No model connected yet. ',
-  noModelLink: 'Connect Relay (recommended)',
+  noModelLink: 'Connect Claude (recommended)',
   noModelB: ' or another provider.',
   startKey: 'to start',
   estimate: 'about {n} credits',

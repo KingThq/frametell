@@ -21,7 +21,7 @@ const MAX_IMAGES = 40;
 /** below this many characters per page a PDF is most likely scanned */
 const SPARSE_CHARS_PER_PAGE = 40;
 
-const MARK = /^<!-- (?:frametell|frametell): parsed from "(.*?)"(?: pages=(\d+))? -->/;
+const MARK = /^<!-- frametell: parsed from "(.*?)"(?: pages=(\d+))? -->/;
 const header = (source: string, pages?: number) => `<!-- frametell: parsed from "${source}"${pages ? ` pages=${pages}` : ''} -->\n\n`;
 
 export const kindOf = (name: string): MaterialKind | undefined =>

@@ -101,6 +101,6 @@ The pictures explain through warm, flat illustrations: one metaphor object runs 
 
 Illustrations come from two layers:
 - **Default: a library of illustration components drawn in code.** Free, stable and animatable, including common metaphor objects such as a snowball, a balance, a stack of coins, trees, houses, a curved hill and a calendar.
-- **Optional: illustration assets from an image model.** Through the provider the user chooses, for example Relay's image API. The style prompt is locked, the background removed, and the agent then lays them out and animates them.
+- **Optional: illustration assets from an image model.** Through the image API of the provider the user chooses. The style prompt is locked, the background removed, and the agent then lays them out and animates them.
 
 Measure sample films before writing the grammar: take a few original episodes and measure, frame by frame, the average shot length, share of motion and palette, then write this style's grammar card.

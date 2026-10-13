@@ -1,4 +1,4 @@
-// Pi runtime: any provider in the catalog (Relay, Anthropic, OpenAI, Google, OpenRouter, Ark, custom...). The session
+// Pi runtime: any provider in the catalog (Anthropic, OpenAI, Google, OpenRouter, Ark, custom...). The session
 // keeps its transcript in memory and on disk (ref = transcript file), so a later process can resume it.
 import fs from 'node:fs';
 import path from 'node:path';

@@ -62,7 +62,7 @@ async function epub() {
 /** a hand-written two-page PDF: a big heading and body text in Helvetica */
 function pdf() {
   const streams = [
-    `BT /F1 24 Tf 72 720 Td (Relay Overview) Tj ET BT /F1 11 Tf 72 680 Td (Studio turns your materials into explainer videos.) Tj ET BT /F1 11 Tf 72 660 Td (It runs locally and needs no cloud OCR.) Tj ET`,
+    `BT /F1 24 Tf 72 720 Td (Frametell Overview) Tj ET BT /F1 11 Tf 72 680 Td (Studio turns your materials into explainer videos.) Tj ET BT /F1 11 Tf 72 660 Td (It runs locally and needs no cloud OCR.) Tj ET`,
     `BT /F1 11 Tf 72 720 Td (Second page body text goes here for testing.) Tj ET`,
   ];
   const objs = [
@@ -137,7 +137,7 @@ test('pdf: page headings, a large line becomes a heading, body text kept', async
   assert.equal(f.warning, undefined);
   const md = fs.readFileSync(path.join(dir, 'paper.md'), 'utf8');
   assert.match(md, /^## 第 1 页$/m);
-  assert.match(md, /^### Relay Overview$/m);
+  assert.match(md, /^### Frametell Overview$/m);
   assert.match(md, /Studio turns your materials into explainer videos\./);
   assert.ok(md.indexOf('## 第 2 页') > md.indexOf('no cloud OCR'));
 });

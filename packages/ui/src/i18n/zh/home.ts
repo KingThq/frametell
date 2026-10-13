@@ -75,7 +75,7 @@ export default {
   toSettings: '去设置',
   change: '更改',
   noModelA: '还没有连接模型。',
-  noModelLink: '连接 Relay（推荐）',
+  noModelLink: '连接 Claude（推荐）',
   noModelB: '或其他服务商。',
   startKey: '开始',
   estimate: '预计约 {n} 积分',

@@ -11,7 +11,7 @@ npx frametell          # 启动本地服务并打开 http://localhost:5317
 ## 设计原则
 
 - **成品级面板，不是开发者工具。** 安装、模型配置、环境检查、出错恢复都在面板里完成。
-- **任何模型都能用，Relay 是推荐首选。** 模型层基于 Pi（`@earendil-works/pi-ai`），支持 OpenAI、Anthropic、Google、DeepSeek、OpenRouter、Vercel AI Gateway、火山方舟以及任意 OpenAI 兼容接口；默认推荐 Relay + Claude Opus 5.5。
+- **任何模型都能用。** 模型层基于 Pi（`@earendil-works/pi-ai`），支持 OpenAI、Anthropic、Google、DeepSeek、OpenRouter、Vercel AI Gateway、火山方舟以及任意 OpenAI 兼容接口；默认推荐 Claude Opus 5.5。
 - **工程兜底，不靠模型自觉。** 布局检查、截图自检、全片检查由编排器强制执行并把结果交给 Agent；弱一些的模型也能稳定出片。
 - **本地优先。** 素材、项目、密钥都留在用户电脑上；密钥只发给用户选择的 provider。
 - **每一步可回退。** 每个项目是一个 git 仓库，每次 Agent 改动都是一次提交，撤销就是 `git revert`。
@@ -24,7 +24,7 @@ frametell/
 │   ├── engine/    @frametell/engine   视频引擎（源自 kit）：页面运行时、风格包、组件库、
 │   │                                         渲染（Playwright + ffmpeg）、lint / snap / pages 工具
 │   ├── agent/     @frametell/agent    导演 Agent：基于 pi-agent-core，分阶段编排、工具、提示词
-│   ├── models/    @frametell/models   模型目录与 provider：pi-ai 内置 + Relay + 火山方舟
+│   ├── models/    @frametell/models   模型目录与 provider：pi-ai 内置 + 火山方舟
 │   └── voice/     @frametell/voice    配音：火山 TTS 2.0、ElevenLabs；用户录音对齐
 └── apps/
     └── studio/    frametell           本地服务（HTTP + SSE）+ Web 面板 + CLI 入口
@@ -69,7 +69,6 @@ frametell/
 ## 模型（packages/models）
 
 - `pi-ai` 内置 provider 全部可用，用户在设置页填 key。
-- **Relay**（首选，推荐）：`https://relay.example.com`，Anthropic 与 OpenAI 两种协议混合，模型列表从 `/v1/models` 动态获取，价格按 Relay 售价显示。
 - **火山方舟**：OpenAI 兼容，`createProvider` 接入。
 - **自定义**：任意 OpenAI / Anthropic 兼容地址。
 - 用量与费用：每次请求的 token 用量按模型价格表累计，面板实时显示本项目已花费。

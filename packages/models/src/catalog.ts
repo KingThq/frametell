@@ -1,8 +1,7 @@
-// The model catalog Studio works from: every built-in Pi provider, Relay (recommended), Volcengine Ark, and the
+// The model catalog Studio works from: every built-in Pi provider, Volcengine Ark and the other compatible endpoints, and the
 // user's own endpoints. Keys come from Studio's settings and live only in memory here.
 import { InMemoryCredentialStore, type Api, type Model, type MutableModels } from '@earendil-works/pi-ai';
 import { builtinModels } from '@earendil-works/pi-ai/providers/all';
-import { RELAY_BASE_URL, RELAY_ID, relayProvider } from './relay.js';
 import { customProvider, type CustomProviderConfig } from './custom.js';
 import { compatConfig, PROVIDERS, providerSpec } from './providers.js';
 
@@ -16,7 +15,6 @@ export interface ProviderKey {
 export interface CatalogOptions {
   keys: ProviderKey[];
   custom?: CustomProviderConfig[];
-  relayBaseUrl?: string;
   /** the user's own endpoint per provider (a relay, a local server on another port) */
   baseUrls?: Record<string, string>;
   /** model ids the user typed in per provider, on top of what the provider lists */
@@ -46,8 +44,6 @@ export interface ModelInfo {
 
 /** What Studio suggests, in order: the first one the user has a key for becomes the default. */
 export const RECOMMENDED: { provider: string; id: string }[] = [
-  { provider: RELAY_ID, id: 'claude-opus-5-5' },
-  { provider: RELAY_ID, id: 'gemini-3.7-flash-high' },
   { provider: 'anthropic', id: 'claude-opus-5-5' },
   { provider: 'openai', id: 'gpt-5.5' },
   { provider: 'google', id: 'gemini-3.7-flash' },
@@ -100,7 +96,7 @@ export class Catalog {
     return {
       provider: m.provider, providerName: p?.name || m.provider, id: m.id, name: m.name,
       vision: m.input.includes('image'), reasoning: m.reasoning, contextWindow: m.contextWindow,
-      cost: m.cost, currency: m.provider === RELAY_ID ? 'CNY' : 'USD',
+      cost: m.cost, currency: 'USD',
       recommended: RECOMMENDED.some((r) => r.provider === m.provider && r.id === m.id),
     };
   }
@@ -110,13 +106,12 @@ export async function createCatalog(opts: CatalogOptions): Promise<Catalog> {
   const credentials = new InMemoryCredentialStore();
   for (const k of opts.keys) await credentials.modify(k.providerId, async () => ({ type: 'api_key', key: k.apiKey, env: k.env }));
   const models = builtinModels({ credentials });
-  models.setProvider(relayProvider(normalizeBaseUrl('anthropic', opts.baseUrls?.[RELAY_ID]) || opts.relayBaseUrl || RELAY_BASE_URL));
   // the OpenAI-compatible providers Studio adds to Pi's own, on the user's base URL when set
   const compat = PROVIDERS.filter((p) => p.compat).map((p) => compatConfig(p, opts.baseUrls?.[p.id], opts.models?.[p.id] || []));
   for (const c of [...compat, ...(opts.custom || [])]) models.setProvider(customProvider(c));
-  // dynamic catalogs (Relay, compatible and custom endpoints) are fetched only for providers the user has a key for
+  // dynamic catalogs (compatible and custom endpoints) are fetched only for providers the user has a key for
   const keyed = new Set(opts.keys.map((k) => k.providerId));
-  const dynamic = [RELAY_ID, ...compat.map((c) => c.id), ...(opts.custom || []).map((c) => c.id)].filter((id) => keyed.has(id) && (!opts.only || opts.only.includes(id)));
+  const dynamic = [...compat.map((c) => c.id), ...(opts.custom || []).map((c) => c.id)].filter((id) => keyed.has(id) && (!opts.only || opts.only.includes(id)));
   if (dynamic.length) {
     const wait = opts.timeoutMs ?? 15_000;
     try {

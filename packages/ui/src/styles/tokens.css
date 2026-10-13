@@ -1,4 +1,4 @@
-/* Frametell tokens — Relay's Ink & Paper, dark by default. RGB triplets so Tailwind can apply alpha. */
+/* Frametell tokens — Ink & Paper, dark by default. RGB triplets so Tailwind can apply alpha. */
 :root {
   --fs-paper: 245 245 240;  --fs-paper-2: 239 236 228;
   --fs-surface: 255 255 255; --fs-surface-2: 250 248 243;

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// frametell run <material…> [--style warm-story] [--duration 60] [--model relay/gemini-3.7-flash-high] [--lang zh|en]
+// frametell run <material…> [--style warm-story] [--duration 60] [--model anthropic/claude-opus-5-5] [--lang zh|en]
 //                     [--voice zh_male_yuanboxiaoshu_uranus_bigtts] [--title …] [--out dir]
 // Headless end-to-end run: storyboard (auto-approved) → script → narration → pages → review → render.
-// Keys come from the environment: RELAY_API_KEY (recommended), ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY,
+// Keys come from the environment: ANTHROPIC_API_KEY (recommended), OPENAI_API_KEY, GEMINI_API_KEY,
 // OPENROUTER_API_KEY, AI_GATEWAY_API_KEY, VOLCENGINE_ARK_API_KEY …; narration: VOLCENGINE_TTS_API_KEY or ELEVENLABS_API_KEY.
 import fs from 'node:fs';
 import os from 'node:os';
@@ -14,7 +14,7 @@ import { Director, piRuntime, type AgentRuntime, type StudioEvent } from '@frame
 import { locale, tr } from '@frametell/core';
 
 const ENV_KEYS: Record<string, string> = {
-  relay: 'RELAY_API_KEY', anthropic: 'ANTHROPIC_API_KEY', openai: 'OPENAI_API_KEY', google: 'GEMINI_API_KEY',
+  anthropic: 'ANTHROPIC_API_KEY', openai: 'OPENAI_API_KEY', google: 'GEMINI_API_KEY',
   openrouter: 'OPENROUTER_API_KEY', 'vercel-ai-gateway': 'AI_GATEWAY_API_KEY', deepseek: 'DEEPSEEK_API_KEY', 'volcengine-ark': 'VOLCENGINE_ARK_API_KEY',
 };
 
@@ -27,12 +27,12 @@ const sec = (t0: number) => ((Date.now() - t0) / 1000).toFixed(0).padStart(4) + 
 
 async function run(argv: string[]) {
   const { o, pos } = args(argv);
-  if (!pos.length) { console.error(tr('用法：frametell run <资料文件…> [--style warm-story] [--duration 60] [--model relay/gemini-3.7-flash-high] [--lang zh|en]', 'Usage: frametell run <material…> [--style warm-story] [--duration 60] [--model relay/gemini-3.7-flash-high] [--lang zh|en]')); process.exit(1); }
+  if (!pos.length) { console.error(tr('用法：frametell run <资料文件…> [--style warm-story] [--duration 60] [--model anthropic/claude-opus-5-5] [--lang zh|en]', 'Usage: frametell run <material…> [--style warm-story] [--duration 60] [--model anthropic/claude-opus-5-5] [--lang zh|en]')); process.exit(1); }
   const keys: ProviderKey[] = Object.entries(ENV_KEYS).filter(([, env]) => process.env[env]).map(([providerId, env]) => ({ providerId, apiKey: process.env[env]! }));
   const catalog = await createCatalog({ keys });
   const [prov, ...rest] = (o.model || '').split('/');
   const info = o.model ? catalog.info(catalog.get(prov, rest.join('/'))!) : await catalog.defaultModel();
-  if (!info) throw new Error(tr('没有可用的模型：请设置 RELAY_API_KEY（推荐）或其他 provider 的 key', 'No model available: set RELAY_API_KEY (recommended) or another provider\'s key'));
+  if (!info) throw new Error(tr('没有可用的模型：请设置 ANTHROPIC_API_KEY（推荐）或其他 provider 的 key', 'No model available: set ANTHROPIC_API_KEY (recommended) or another provider\'s key'));
   // Pi only: the Claude Agent SDK and Codex runtimes are parked (code kept in packages/agent; see core/runner.ts)
   const runtime: AgentRuntime = piRuntime(catalog.models, catalog.get(info.provider, info.id)!);
 
