@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A finished film exports even when the model it was made with can no longer be reached (its provider was removed from Settings, or its key deleted). Exporting needs no model, but it stopped with "Model … is not available" and offered Continue instead.
+
 ## [0.3.2] - 2026-10-12
 
 ### Changed

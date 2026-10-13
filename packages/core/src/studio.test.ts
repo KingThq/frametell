@@ -137,3 +137,25 @@ test('an ElevenLabs voice list is fetched once per key and shared, and a failed 
     assert.equal(calls, 2);
   } finally { globalThis.fetch = real; fs.rmSync(dataDir, { recursive: true, force: true }); }
 });
+
+test('a finished film exports even when the model it was made with is gone', async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'frametell-export-'));
+  try {
+    // made with a provider this version no longer has: drawing more would need a model, exporting does not
+    const id = '2026-10-12-export0000001', dir = path.join(dataDir, 'projects', id), now = new Date().toISOString();
+    fs.mkdirSync(path.join(dir, '.studio'), { recursive: true });
+    fs.writeFileSync(path.join(dir, '.studio', 'project.json'), JSON.stringify({ id, title: id, style: 'whiteboard', durationSec: 60, model: 'relay/gemini-3.7-flash-high', runtime: 'pi', subtitles: true, materials: [], createdAt: now, updatedAt: now }));
+    fs.writeFileSync(path.join(dir, '.studio', 'state.json'), JSON.stringify({ stage: 'done' }));
+    fs.writeFileSync(path.join(dir, 'script.js'), "const SCRIPT = {\n  META: { style: 'whiteboard', lang: 'zh' },\n  PAGES: [],\n};\n");
+    let rendered = 0;
+    const studio = new Studio({ dataDir, config: memoryConfig(), renderer: async () => { rendered++; throw new Error('rendered here'); } });
+    const seen: { type: string; message?: string }[] = [];
+    const off = studio.subscribe(id, 0, (e) => seen.push(e as never));
+    assert.equal(studio.export(id), true);
+    for (let i = 0; i < 50 && !seen.some((e) => e.type === 'error'); i++) await new Promise((r) => setTimeout(r, 20));
+    assert.equal(rendered, 1);
+    assert.deepEqual(seen.filter((e) => e.type === 'error').map((e) => e.message), ['rendered here']);
+    assert.ok(!seen.some((e) => e.type === 'paused'));
+    off();
+  } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
+});

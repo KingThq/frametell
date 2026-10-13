@@ -256,7 +256,14 @@ class Runner {
       // reported but does not stop the run
       const { files } = await prepareMaterials(path.join(dir, 'materials'), meta.lang ?? 'zh');
       for (const f of files) if (f.kind === 'document' && !f.parsedTo) this.emit({ type: 'error', message: tr(`资料 ${f.name} 读不了：${f.warning}`, `Couldn't read ${f.name}: ${f.warning}`) });
-      const { runtime, prices, pages } = await buildRuntime(meta, cfg);
+      // an export draws the film the pages already are: it needs no model, so one that is gone (its provider removed, its
+      // key deleted) must not hold it; a model that is asked for anyway says why it can't answer
+      const { runtime, prices, pages } = await buildRuntime(meta, cfg).catch((e: Error) => {
+        if (!o.exporting) throw e;
+        const [provider, ...id] = meta.model.split('/');
+        const none: AgentRuntime = { id: 'pi', model: { provider, id: id.join('/') }, open: async () => { throw e; } };
+        return { runtime: none, prices: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, currency: 'USD' } as Prices, pages: undefined };
+      });
       const { tts, voice, provider } = voiceFor(meta, cfg);
       director = new Director({
         dir, runtime, pages, style: meta.style, prices, tts, voice, concurrency: cfg.defaults.concurrency,
