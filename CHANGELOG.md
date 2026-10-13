@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Hosts can give each run its own settings: `ConfigStore.load()` is told which project's run is asking.
+- Narration services can be reached through a gateway (`ttsBaseUrls`).
+- Model requests name their session (`x-frametell-session`).
+- `FRAMETELL_SANDBOX_NONET=1` keeps the agent's shell and the engine's tools (Chrome included) off the network and, on Linux, away from other processes. `FRAMETELL_SANDBOX_REQUIRED=1` refuses to run a shell when no sandbox is available; asking for no network requires a sandbox too.
+
 ## [0.5.0] - 2026-10-13
 
 ### Added
