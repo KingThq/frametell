@@ -87,7 +87,11 @@ export function Workbench({ id, openSettings }: { id: string; openSettings: (sec
   useEffect(() => { document.title = project.data ? `${project.data.title} · ${t('workbench.brand')}` : t('workbench.brand'); }, [project.data?.title, locale]);
 
   const running = isWorking(run);
-  const status = run.revising ? t('workbench.status.revising') : run.exporting ? t('workbench.status.exporting') : run.resuming ? t('workbench.status.preparing') : finished(run) && !running ? t('workbench.status.done') : run.awaitingApproval ? t('workbench.status.awaitingApproval') : run.paused ? t('workbench.status.paused') : run.current ? t('workbench.status.stageRunning', { stage: STAGE_NAME[run.current] }) : t('workbench.status.preparing');
+  // Pause answers the click at once; the run says it has paused a moment later, once every page has stopped
+  const [pausing, setPausing] = useState(false);
+  useEffect(() => { if (!running) setPausing(false); }, [running]);
+  const pause = (pid: string) => { setPausing(true); client.stop(pid).catch(() => setPausing(false)); };
+  const status = pausing && running ? t('workbench.status.pausing') : run.revising ? t('workbench.status.revising') : run.exporting ? t('workbench.status.exporting') : run.resuming ? t('workbench.status.preparing') : finished(run) && !running ? t('workbench.status.done') : run.awaitingApproval ? t('workbench.status.awaitingApproval') : run.paused ? t('workbench.status.paused') : run.current ? t('workbench.status.stageRunning', { stage: STAGE_NAME[run.current] }) : t('workbench.status.preparing');
   const play = () => { setSelected(undefined); setPane('stage'); setPlayKey((k) => k + 1); };
 
   if (project.error) return (
@@ -103,7 +107,7 @@ export function Workbench({ id, openSettings }: { id: string; openSettings: (sec
         {conn === 'reconnecting' && <span className="shrink-0 rounded-full bg-seal-soft px-2 py-0.5 text-[12px] text-seal" role="status">{t('workbench.reconnecting')}</span>}
         <span className="ml-auto flex shrink-0 items-center gap-2">
           {p && <CostChip run={run} project={p} />}
-          {p && running && <button className="fs-btn fs-btn-ghost fs-btn-sm" onClick={() => client.stop(p.id)} title={t('workbench.pauseTitle')}><Pause size={13} aria-hidden /> {t('workbench.pause')}</button>}
+          {p && running && <button className="fs-btn fs-btn-ghost fs-btn-sm" onClick={() => pause(p.id)} disabled={pausing} aria-busy={pausing} title={t('workbench.pauseTitle')}><Pause size={13} aria-hidden /> {pausing ? t('workbench.pausing') : t('workbench.pause')}</button>}
           {p && run.paused && <button className="fs-btn fs-btn-secondary fs-btn-sm" onClick={() => client.start(p.id)}><Play size={13} aria-hidden /> {t('workbench.resume')}</button>}
         </span>
       </TopBar>

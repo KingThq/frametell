@@ -97,14 +97,21 @@ export function fileTools(root: string, opts: { timeoutMs?: number } = {}): Agen
     execute: (_id, p, signal) => new Promise((resolve, reject) => {
       if (/\brender\.mjs\b|\bnpm (i|install)\b|\bcurl\b|\bwget\b/.test(p.command)) return reject(new Error('this command is not allowed in a page session'));
       const [cmd, argv]: [string, string[]] = process.platform === 'win32' ? ['cmd.exe', ['/d', '/s', '/c', p.command]] : confine(root, 'bash', ['-lc', p.command]);
-      const child = spawn(cmd, argv, { cwd: root, env: shellEnv(), signal });
+      // its own process group, ended whole on a stop or the timeout: killing the sandbox alone left what it had started
+      // running (seen: a page's lint.mjs, and its Chrome, still going 17 minutes after the film was paused)
+      const win = process.platform === 'win32';
+      const child = spawn(cmd, argv, { cwd: root, env: shellEnv(), detached: !win });
+      const end = () => { try { if (win || !child.pid) child.kill('SIGKILL'); else process.kill(-child.pid, 'SIGKILL'); } catch { /* gone already */ } };
+      if (signal?.aborted) end();
+      signal?.addEventListener('abort', end, { once: true });
       let out = '';
       const add = (d: Buffer) => { out += d.toString(); if (out.length > MAX_TEXT * 2) out = out.slice(-MAX_TEXT * 2); };
       child.stdout.on('data', add); child.stderr.on('data', add);
-      const timer = setTimeout(() => child.kill('SIGKILL'), opts.timeoutMs ?? 180_000);
-      child.on('error', (e) => { clearTimeout(timer); reject(e); });
+      const timer = setTimeout(end, opts.timeoutMs ?? 180_000);
+      child.on('error', (e) => { clearTimeout(timer); signal?.removeEventListener('abort', end); reject(e); });
       child.on('close', (code) => {
-        clearTimeout(timer);
+        clearTimeout(timer); signal?.removeEventListener('abort', end);
+        if (signal?.aborted) return reject(new DOMException('aborted', 'AbortError'));
         const body = (out.length > MAX_TEXT ? '…' + out.slice(-MAX_TEXT) : out).trim() || '(no output)';
         resolve(text(code === 0 ? body : `exit ${code}\n${body}`));
       });

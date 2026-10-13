@@ -208,12 +208,15 @@ function step(v: RunView, e: LoggedEvent): RunView {
     case 'page': {
       const p = r.pages[e.id] ? { ...r.pages[e.id] } : newPage(e.id, r);
       p.status = e.status; p.round = e.round ?? p.round; p.issues = e.issues ?? p.issues;
+      // a paused film has nothing in progress: a page still winding down after the pause (older runs went on for
+      // minutes) waits as queued until the film continues
+      if (r.paused && (p.status === 'drawing' || p.status === 'checking')) p.status = 'queued';
       if (e.sheet) p.sheet = e.sheet;
       if (e.thumb) p.thumb = e.thumb;
       if (e.status === 'drawing' && !p.startedAt) p.startedAt = at;
       if (['ok', 'flagged', 'failed'].includes(e.status)) p.endedAt = at;
       // the check round: first the pictures are taken, then the page agent looks at them
-      if (e.status === 'checking') r.activity = { text: t('run.now.checking', { page: pageName(e.id), snaps: !!e.sheet, round: p.round }), at, page: e.id };
+      if (e.status === 'checking' && !r.paused) r.activity = { text: t('run.now.checking', { page: pageName(e.id), snaps: !!e.sheet, round: p.round }), at, page: e.id };
       p.progress = undefined;
       r.pages = { ...r.pages, [e.id]: p };
       if (!r.pageOrder.includes(e.id)) r.pageOrder = [...r.pageOrder, e.id].sort();

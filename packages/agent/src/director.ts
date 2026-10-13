@@ -127,6 +127,8 @@ export function serviceTrouble(text: string): { zh: string; en: string } | undef
   return undefined;
 }
 
+/** a stop (Pause), not a failure */
+const stopped = (e: unknown) => (e as Error)?.name === 'AbortError';
 const MAX = { pagesAtOnce: 10, storyboardFix: 2, scriptFix: 2, planTurns: 30, pageTurns: 40, pageRounds: 3, revisionRounds: 2, reviewRounds: 2, reviewDefectsMs: 180_000 };
 
 export class Director {
@@ -135,7 +137,7 @@ export class Director {
   private commits: Promise<unknown> = Promise.resolve();
 
   constructor(private o: DirectorOptions) {
-    this.project = new Project(o.dir, o.renderer);
+    this.project = new Project(o.dir, o.renderer, o.signal);
     const f = this.project.file('.studio/state.json');
     this.state = fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : { stage: 'storyboard', pages: {}, usage: emptyUsage() };
   }
@@ -364,7 +366,7 @@ export class Director {
     }));
     for (const p of todo) this.setPage(p.id, { status: 'queued', rounds: 0, issues: [], failures: failures(p.id) });
     const queue = [...todo];
-    const worker = async () => { for (let p = queue.shift(); p; p = queue.shift()) await this.page(sb, p); };
+    const worker = async () => { for (let p = queue.shift(); p && !this.o.signal?.aborted; p = queue.shift()) await this.page(sb, p); };
     // Up to 10 pages at once. Every page session opens with the same long system prompt (the style's component pack).
     // Claude bills writing that prompt to its cache: there the first page goes alone until its first answer is back, so
     // the others find it cached instead of each paying to write it. Providers whose caching costs nothing to fill
@@ -375,7 +377,11 @@ export class Director {
     const warm = new Promise<void>((ok) => { this.firstTurn = ok; setTimeout(ok, 90_000); });
     const first = worker();
     if (n > 1 && paysToCache) await Promise.race([warm, first]);   // a first page that fails early does not hold the rest back
-    await Promise.all([first, ...Array.from({ length: n - 1 }, worker)]);
+    // every page is let finish before this ends, a stop included: the run said "paused" when the first page stopped,
+    // while the others went on in the background (seen: a paused film with one page still checking itself)
+    const settled = await Promise.allSettled([first, ...Array.from({ length: n - 1 }, worker)]);
+    const thrown = settled.find((x): x is PromiseRejectedResult => x.status === 'rejected');
+    if (thrown) throw thrown.reason;
     this.firstTurn = undefined;
     const bad = Object.entries(this.state.pages).filter(([, s]) => s.status === 'failed');
     const ids = bad.map(([id]) => id);
@@ -450,7 +456,7 @@ export class Director {
         // a page whose code throws cannot be checked; that is the first thing to fix, so it goes back to its agent
         // (one more round than usual is allowed for it) instead of failing the page
         let crash: string | undefined;
-        try { issues = await this.project.lint([id]); } catch (e) { crash = crashText((e as Error).message, id); }
+        try { issues = await this.project.lint([id]); } catch (e) { if (stopped(e)) throw e; crash = crashText((e as Error).message, id); }
         if (crash) {
           if (round > rounds) throw new Error(crash);
           this.setPage(id, { ...st, issues: [crash] });
@@ -464,6 +470,7 @@ export class Director {
         // console, then the screenshot timed out): that is a crash too, and goes back to its agent the same way
         let sheet: string;
         try { sheet = await this.project.snap(`${id}-r${round}`, times.map((x) => x.t), [id]); } catch (e) {
+          if (stopped(e)) throw e;
           const crash = crashText((e as Error).message, id);
           this.setPage(id, { ...st, issues: [crash] });
           r = await this.send(s, crashPrompt(id, crash) + this.unseen(`page-${id}`), undefined, PAGE_THINKING);
@@ -479,7 +486,7 @@ export class Director {
         if (r.stopReason === 'max_turns') break;
       }
       if (st.status !== 'ok' && st.status !== 'flagged') {
-        try { issues = await this.project.lint([id]); } catch (e) { throw new Error(crashText((e as Error).message, id)); }
+        try { issues = await this.project.lint([id]); } catch (e) { throw stopped(e) ? e : new Error(crashText((e as Error).message, id)); }
         // still throwing, or calling what the engine does not have: the page is not drawn, whatever else it shows
         const broken = issues.filter((i) => /^(runtime error|unknown API|wrong API use)/.test(i.msg));
         if (broken.length) throw new Error(broken.map((i) => i.msg).join('\n'));
@@ -494,10 +501,10 @@ export class Director {
       await s.close();
       // one settled frame as the film-strip thumbnail (the check sheets are 4-up and read as noise at tile size)
       let thumb: string | undefined;
-      try { thumb = await this.project.snap(`${id}-thumb`, [Math.max(t.start + 0.5, t.end - 0.4)], [id], 480, false); } catch {}
+      try { thumb = await this.project.snap(`${id}-thumb`, [Math.max(t.start + 0.5, t.end - 0.4)], [id], 480, false); } catch (e) { if (stopped(e)) throw e; }
       this.setPage(id, st, { thumb });
     } catch (e) {
-      if ((e as Error).name === 'AbortError') throw e;
+      if (stopped(e)) throw e;
       // what the model service said last, when the page then failed for want of an answer
       const said = s && this.lastError.get(s), msg = (e as Error).message;
       this.setPage(id, { ...st, status: 'failed', issues: [said && !msg.includes(said) ? `${msg} (${said})` : msg], failures: (st.failures ?? 0) + 1 });

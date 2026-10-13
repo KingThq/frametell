@@ -25,12 +25,18 @@ export const nodeEnv = (extra: Record<string, string | undefined> = {}) => ({ ..
 const run = (cmd: string, args: string[], cwd?: string) => new Promise<void>((ok, fail) => execFile(cmd, args, { cwd, timeout: 120_000, env: nodeEnv() }, (e, _o, err) => (e ? fail(new Error(String(err || e.message).slice(0, 1000))) : ok())));
 
 /** run an engine tool and collect its output. Never synchronously: lint and snapshots drive Chrome for seconds, and in the
- *  desktop app this process is also the one answering the panel (ten pages checking themselves froze every click) */
-function tool(dir: string, name: string, args: string[], opts: { timeoutMs?: number; env?: Record<string, string> } = {}) {
-  return new Promise<{ code: number; out: string; err: string }>((ok) => {
+ *  desktop app this process is also the one answering the panel (ten pages checking themselves froze every click).
+ *  A stop kills it at once and rejects with an AbortError: Pause used to wait for every screenshot in flight to end on
+ *  its own (seen: ten 3D pages' screenshots hung for five minutes, and the click on Pause seemed to do nothing) */
+function tool(dir: string, name: string, args: string[], opts: { timeoutMs?: number; env?: Record<string, string>; signal?: AbortSignal } = {}) {
+  return new Promise<{ code: number; out: string; err: string }>((ok, fail) => {
+    if (opts.signal?.aborted) return fail(new DOMException('aborted', 'AbortError'));
     execFile(process.execPath, [path.join(ENGINE_DIR, 'tools', name), ...args], {
-      cwd: dir, encoding: 'utf8', timeout: opts.timeoutMs ?? 240_000, maxBuffer: 64 << 20, env: nodeEnv(opts.env),
-    }, (e, stdout, stderr) => ok({ code: e ? (typeof e.code === 'number' ? e.code : 1) : 0, out: (stdout || '').trim(), err: (stderr || '').trim() }));
+      cwd: dir, encoding: 'utf8', timeout: opts.timeoutMs ?? 240_000, maxBuffer: 64 << 20, env: nodeEnv(opts.env), signal: opts.signal,
+    }, (e, stdout, stderr) => {
+      if (opts.signal?.aborted) return fail(new DOMException('aborted', 'AbortError'));
+      ok({ code: e ? (typeof e.code === 'number' ? e.code : 1) : 0, out: (stdout || '').trim(), err: (stderr || '').trim() });
+    });
   });
 }
 
@@ -42,7 +48,8 @@ function tool(dir: string, name: string, args: string[], opts: { timeoutMs?: num
 export type Renderer = (dir: string, o: { fps: number; workers: number; onLine?: (l: string) => void; signal?: AbortSignal }) => Promise<void>;
 
 export class Project {
-  constructor(readonly dir: string, private renderer?: Renderer) { linkProject(dir); }
+  /** `signal` stops the engine tools it runs (lint, screenshots, the time line) */
+  constructor(readonly dir: string, private renderer?: Renderer, private signal?: AbortSignal) { linkProject(dir); }
 
   file(rel: string) { return path.join(this.dir, rel); }
   read(rel: string) { return fs.readFileSync(this.file(rel), 'utf8'); }
@@ -60,7 +67,7 @@ export class Project {
   }
 
   /** Script check (engine/tools/script.mjs): page and cue counts, estimated length; errors point at the cue. */
-  scriptCheck() { return tool(this.dir, 'script.mjs', []); }
+  scriptCheck() { return tool(this.dir, 'script.mjs', [], { signal: this.signal }); }
 
   /**
    * One settled frame per page (0.4 s before it ends), cut from the finished film and kept in out/thumbs; for pages
@@ -116,20 +123,20 @@ export class Project {
   }
 
   async timeline(): Promise<Timeline> {
-    const r = await tool(this.dir, 'pages.mjs', ['--json']);
+    const r = await tool(this.dir, 'pages.mjs', ['--json'], { signal: this.signal });
     if (r.code) throw new Error(`timeline failed: ${r.err || r.out}`);
     return JSON.parse(r.out);
   }
 
   async lint(only?: string[], extra: string[] = []): Promise<LintIssue[]> {
-    const r = await tool(this.dir, 'lint.mjs', ['--json', ...(only ? ['--only', only.join(',')] : []), ...extra]);
+    const r = await tool(this.dir, 'lint.mjs', ['--json', ...(only ? ['--only', only.join(',')] : []), ...extra], { signal: this.signal });
     const last = r.out.split('\n').pop() || '[]';
     try { return JSON.parse(last); } catch { throw new Error(`lint failed: ${r.err || r.out}`.slice(0, 2000)); }
   }
 
   /** A contact sheet of the given absolute times → path of the jpg. */
   async snap(name: string, times: number[], only?: string[], tile = 480, label = true): Promise<string> {
-    const r = await tool(this.dir, 'snap.mjs', [...(only ? ['--only', only.join(',')] : []), '--sheet', name, ...times.map((t) => t.toFixed(2))], { env: { SNAP_TILE: String(tile), SNAP_LABEL: label ? '1' : '0' } });
+    const r = await tool(this.dir, 'snap.mjs', [...(only ? ['--only', only.join(',')] : []), '--sheet', name, ...times.map((t) => t.toFixed(2))], { env: { SNAP_TILE: String(tile), SNAP_LABEL: label ? '1' : '0' }, signal: this.signal });
     const f = this.file(`out/snap/${name}.jpg`);
     if (r.code || !fs.existsSync(f)) throw new Error(`screenshot failed: ${r.err || r.out}`.slice(0, 2000));
     return f;
