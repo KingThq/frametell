@@ -77,6 +77,11 @@ const STYLE_EXTRAS: Record<string, string[]> = { 'warm-story': ['engine/lib/warm
 const styleExtras = (style: string): string[] =>
   STYLE_EXTRAS[style] ?? (fs.existsSync(path.join(ENGINE_DIR, 'styles', style, 'kit.js')) ? [`engine/styles/${style}/kit.js`] : []);
 
+/** a style drawn in three.js (its kit.js builds on THREE): every film in it loads three and paints with WebGL */
+const styleWebgl = (style: string): boolean => {
+  try { return /\bTHREE\b/.test(fs.readFileSync(path.join(ENGINE_DIR, 'styles', style, 'kit.js'), 'utf8')); } catch { return false; }
+};
+
 /** the part of a crash that says what broke: the error and the page's own lines, not Node's internals */
 export function crashText(raw: string, id: string): string {
   const lines = raw.split('\n').map((l) => l.trim()).filter(Boolean);
@@ -276,7 +281,15 @@ export class Director {
     // a style component copied into extras/ by use-extra is the same file: load it once, from the engine
     const base = new Set(styleExtras(this.o.style).map((e) => path.basename(e)));
     const list = [...extras].filter((e) => !(e.startsWith('extras/') && base.has(path.basename(e))));
-    this.setMeta({ style: this.o.style, lang: this.o.brief.lang ?? 'zh', voice: this.o.voice, gap: 0.8, pace: { maxHold: 1.0, gap: 0.8 }, extras: list });
+    const gl = styleWebgl(this.o.style) ? (() => {
+      const vendor = new Set<string>(['three']);
+      try {   // keep vendors the page agents added
+        const m = /vendor:\s*(\[[^\]\n]*\])/.exec(fs.readFileSync(this.project.file('script.js'), 'utf8'));
+        if (m) for (const v of JSON.parse(m[1].replace(/'/g, '"'))) vendor.add(v);
+      } catch {}
+      return { vendor: [...vendor], webgl: true };
+    })() : {};
+    this.setMeta({ style: this.o.style, lang: this.o.brief.lang ?? 'zh', voice: this.o.voice, gap: 0.8, pace: { maxHold: 1.0, gap: 0.8 }, extras: list, ...gl });
   }
 
   /** Server-owned META fields, rewritten in place in script.js (the planner must not change them). */
