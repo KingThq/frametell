@@ -127,7 +127,9 @@ async function buildRuntime(meta: ProjectMeta, cfg: Config): Promise<{ runtime: 
 /** the film's narrator as the director takes it; no tts when the film has no voice, or its service has no key */
 function voiceFor(meta: ProjectMeta, cfg: Config) {
   const key = meta.voice?.provider === 'elevenlabs' ? cfg.tts.elevenlabs : cfg.tts.volcengine;
-  const tts = meta.voice && key ? (meta.voice.provider === 'elevenlabs' ? elevenLabsTts(key) : volcengineTts(key)) : undefined;
+  const tts = meta.voice && key ? (meta.voice.provider === 'elevenlabs'
+    ? elevenLabsTts(key, undefined, { baseUrl: cfg.ttsBaseUrls?.elevenlabs })
+    : volcengineTts(key, { baseUrl: cfg.ttsBaseUrls?.volcengine })) : undefined;
   const voice = meta.voice && tts ? { speaker: meta.voice.id, rate: 0, instruction: '像跟朋友分享一个实用的发现，语气轻松、真诚、自然，有轻重缓急' } : undefined;
   return { tts, voice, provider: voice && meta.voice?.provider };
 }

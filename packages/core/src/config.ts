@@ -26,6 +26,8 @@ export interface Config {
   /** HTTP proxy for every outbound request, e.g. http://127.0.0.1:7890 */
   proxy?: string;
   tts: { volcengine?: string; elevenlabs?: string };
+  /** where the narration services are reached, when not at their own addresses (a host's gateway) */
+  ttsBaseUrls?: { volcengine?: string; elevenlabs?: string };
   /** voices the user added by id (「我的音色」), checked when added */
   myVoices?: VoiceChoice[];
   /** interface language; absent = follow the system */

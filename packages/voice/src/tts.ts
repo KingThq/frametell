@@ -58,18 +58,22 @@ export function volcengineResources(voice: string): string[] {
 /** voice → the resource that served it, so a whole film asks once */
 const resolved = new Map<string, string>();
 
+/** where a service is reached: its own address when absent, else a gateway that forwards the same paths to it */
+export interface TtsEndpoint { baseUrl?: string }
+const base = (endpoint: TtsEndpoint, own: string) => (endpoint.baseUrl || own).replace(/\/+$/, '');
+
 /**
  * Volcengine TTS (v3 unidirectional HTTP): preset voices of TTS 2.0 and 1.0, and cloned voices (S_…). The key is the
  * new console's API key, or an older app's credentials written "AppID:Access Token".
  */
-export function volcengineTts(apiKey: string): TtsProvider {
+export function volcengineTts(apiKey: string, endpoint: TtsEndpoint = {}): TtsProvider {
   const app = /^(\d+):(\S+)$/.exec(apiKey.trim());
   const auth: Record<string, string> = app ? { 'X-Api-App-Id': app[1], 'X-Api-Access-Key': app[2] } : { 'X-Api-Key': apiKey };
   const once = async (text: string, o: SynthOptions, resource: string): Promise<SynthResult> => {
     const req: Record<string, unknown> = { text, speaker: o.voice, audio_params: { format: 'mp3', sample_rate: 24000, speech_rate: o.rate ?? 0, enable_subtitle: true, enable_timestamp: true } };   // timestamps: 2.0 reads the first, 1.0 the second
     if (o.pitch != null) req.additions = JSON.stringify({ post_process: { pitch: o.pitch } });   // semitones; only honoured inside additions
     if (o.instruction) req.context_texts = [o.instruction];                                        // must be top-level
-    const res = await fetch('https://openspeech.bytedance.com/api/v3/tts/unidirectional', {
+    const res = await fetch(`${base(endpoint, 'https://openspeech.bytedance.com')}/api/v3/tts/unidirectional`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...auth, 'X-Api-Resource-Id': resource, 'X-Api-Request-Id': crypto.randomUUID() },
       body: JSON.stringify({ req_params: req }),
@@ -110,12 +114,12 @@ export class VoiceNotFound extends Error {
 }
 
 /** ElevenLabs text-to-speech with character-level timestamps. */
-export function elevenLabsTts(apiKey: string, model = 'eleven_multilingual_v2'): TtsProvider {
+export function elevenLabsTts(apiKey: string, model = 'eleven_multilingual_v2', endpoint: TtsEndpoint = {}): TtsProvider {
   return {
     id: 'elevenlabs',
     synth: (text, o) => retry(async () => {
       const speed = Math.min(1.2, Math.max(0.7, 1 + (o.rate ?? 0) / 100));
-      const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(o.voice)}/with-timestamps?output_format=mp3_44100_128`, {
+      const res = await fetch(`${base(endpoint, 'https://api.elevenlabs.io')}/v1/text-to-speech/${encodeURIComponent(o.voice)}/with-timestamps?output_format=mp3_44100_128`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'xi-api-key': apiKey },
         body: JSON.stringify({ text, model_id: model, voice_settings: { stability: 0.5, similarity_boost: 0.75, speed } }),

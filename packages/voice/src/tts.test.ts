@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { elevenLabsTts } from './tts.js';
+import { elevenLabsTts, volcengineTts } from './tts.js';
 
 // a provider that never answers until the request's signal gives up
 function hangingFetch(answers: number) {
@@ -41,4 +41,32 @@ test('stopping a film ends a waiting take at once, without asking again', async 
     await assert.rejects(elevenLabsTts('k').synth('hello', { voice: 'v', signal: stop.signal }), { name: 'AbortError' });
     assert.equal(f.calls(), 1);
   });
+});
+
+/** a fetch that answers like the service and keeps what it was asked */
+function recording(body: (url: string) => string) {
+  const calls: { url: string; headers: Record<string, string> }[] = [];
+  const fetch = (url: string, init: { headers: Record<string, string> }) => {
+    calls.push({ url, headers: init.headers });
+    return Promise.resolve(new Response(body(url), { status: 200 }));
+  };
+  return { fetch, calls };
+}
+
+test('both voices go to the address they are given, with the path the service expects', async () => {
+  const eleven = JSON.stringify({ audio_base64: Buffer.from('mp3').toString('base64'), alignment: { characters: ['a'], character_start_times_seconds: [0], character_end_times_seconds: [0.1] } });
+  const volc = [JSON.stringify({ data: Buffer.from('mp3').toString('base64') }), JSON.stringify({ sentence: { words: [{ word: 'a', startTime: 0, endTime: 0.1 }] } }), JSON.stringify({ code: 20000000 })].join('\n');
+  const r = recording((url) => (url.includes('elevenlabs') ? eleven : volc));
+  await withFakes(r.fetch, async () => {
+    await elevenLabsTts('k', undefined, { baseUrl: 'http://gw.test/tts/elevenlabs/' }).synth('hello', { voice: 'v1', signal: new AbortController().signal });
+    await volcengineTts('k', { baseUrl: 'http://gw.test/tts/volcengine' }).synth('你好', { voice: 'zh_male_yuanboxiaoshu_uranus_bigtts', signal: new AbortController().signal });
+  });
+  assert.equal(r.calls[0].url, 'http://gw.test/tts/elevenlabs/v1/text-to-speech/v1/with-timestamps?output_format=mp3_44100_128');
+  assert.equal(r.calls[1].url, 'http://gw.test/tts/volcengine/api/v3/tts/unidirectional');
+});
+
+test('without an address the voices go to the services themselves, as before', async () => {
+  const r = recording(() => JSON.stringify({ audio_base64: Buffer.from('mp3').toString('base64'), alignment: { characters: ['a'], character_start_times_seconds: [0], character_end_times_seconds: [0.1] } }));
+  await withFakes(r.fetch, () => elevenLabsTts('k').synth('hello', { voice: 'v1', signal: new AbortController().signal }).then(() => {}));
+  assert.ok(r.calls[0].url.startsWith('https://api.elevenlabs.io/v1/text-to-speech/v1/'));
 });
