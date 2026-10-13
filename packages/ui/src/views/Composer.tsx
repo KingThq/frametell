@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowUp, AudioLines, FileText, Film, Layers, Loader2, Paperclip, Plus, Quote, TriangleAlert, X } from 'lucide-react';
+import { ArrowUp, AudioLines, Clock, FileText, Film, Layers, Loader2, Paperclip, Pencil, Plus, Quote, TriangleAlert, X } from 'lucide-react';
 import { client, type ProjectView } from '../lib/client';
 import { refKey, toSend, type Ref } from '../lib/refs';
-import { finished, type RunView } from '../lib/run';
+import { finished, isWorking, type RunView } from '../lib/run';
 import { Lightbox, type LightItem } from './Lightbox';
 import { FilmSettings } from '../components/FilmSettings';
 import { useT } from '../i18n';
@@ -16,6 +16,51 @@ const isImage = (name: string) => /\.(png|jpe?g|webp|gif)$/i.test(name);
 
 /** a chip in the tray, waiting for its upload, or failed */
 type Item = { key: string; ref?: Ref; name?: string; preview?: string; error?: string };
+
+// While the film is being made, a message waits above the box instead of going in: a note sent mid-run was read only by
+// the sessions spoken to after it, and while the pages were drawing that was often none, so it was lost. The queue goes
+// to the director as one message when the run comes to rest, and until then it can be edited or removed. It is kept per
+// film in this browser, so a reload doesn't lose it (but nothing is sent while no tab is open).
+type Queued = { id: string; text: string; refs: Ref[] };
+const QUEUE_KEY = (id: string) => `fs:queue:${id}`;
+const readQueue = (id: string): Queued[] => { try { return JSON.parse(localStorage.getItem(QUEUE_KEY(id)) || '[]'); } catch { return []; } };
+const writeQueue = (id: string, q: Queued[]) => { try { if (q.length) localStorage.setItem(QUEUE_KEY(id), JSON.stringify(q)); else localStorage.removeItem(QUEUE_KEY(id)); } catch { /* private mode */ } };
+/** the run has to rest this long before the queue goes: the log of a run under way arrives just after the page opens,
+ * and a step can hand over to the next with a beat where nothing runs */
+const SETTLE_MS = 1500;
+
+/** one queued message: its words (edited in place) and what it carries */
+function QueuedRow({ q, project, onSave, onRemove }: { q: Queued; project: ProjectView; onSave: (text: string) => void; onRemove: () => void }) {
+  const { t } = useT();
+  const [draft, setDraft] = useState<string>();
+  const box = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => { const el = box.current; if (!el) return; el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 120) + 'px'; }, [draft]);
+  const save = () => { if (draft != null) onSave(draft.trim()); setDraft(undefined); };
+  return (
+    <li className="group/q flex items-start gap-2 rounded-xl px-2.5 py-2 hover:bg-ink/[0.035]">
+      <div className="min-w-0 flex-1">
+        {!!q.refs.length && <div className="mb-1 flex flex-wrap gap-1">{q.refs.map((r) => <RefChip key={refKey(r)} r={r} project={project} />)}</div>}
+        {draft != null
+          ? <>
+              <textarea ref={box} autoFocus value={draft} rows={1} onChange={(e) => setDraft(e.target.value)} onBlur={save} onFocus={(e) => e.currentTarget.setSelectionRange(e.currentTarget.value.length, e.currentTarget.value.length)} aria-label={t('conversation.composer.queue.edit')}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); save(); }
+                  else if (e.key === 'Escape') { e.preventDefault(); setDraft(undefined); }
+                }}
+                className="block w-full resize-none rounded-lg border border-accent/60 bg-surface px-2 py-1 text-[13px] leading-relaxed text-ink outline-none ring-4 ring-accent/10" />
+              <span className="mt-1 block text-[11px] text-ink-3">{t('conversation.composer.queue.save')}</span>
+            </>
+          : q.text && <p className="line-clamp-3 whitespace-pre-wrap text-[13px] leading-relaxed text-ink-2">{q.text}</p>}
+      </div>
+      {draft == null && (
+        <span className="flex shrink-0 gap-0.5 opacity-60 transition-opacity focus-within:opacity-100 group-hover/q:opacity-100">
+          <button type="button" className="flex h-6 w-6 items-center justify-center rounded-md text-ink-3 hover:bg-ink/[0.08] hover:text-ink" onClick={() => setDraft(q.text)} aria-label={t('conversation.composer.queue.edit')} title={t('conversation.composer.queue.edit')}><Pencil size={12} aria-hidden /></button>
+          <button type="button" className="flex h-6 w-6 items-center justify-center rounded-md text-ink-3 hover:bg-ink/[0.08] hover:text-ink" onClick={onRemove} aria-label={t('conversation.composer.queue.remove')} title={t('conversation.composer.queue.remove')}><X size={13} aria-hidden /></button>
+        </span>
+      )}
+    </li>
+  );
+}
 
 /** one reference as a chip: a picture when it has one, else its kind; the label tells which */
 export function RefChip({ r, project, onRemove, onOpen, pending, error, name, preview }: {
@@ -48,6 +93,11 @@ export function Composer({ run, project, viewing, openSettings }: { run: RunView
   const [drag, setDrag] = useState(false);
   const [note, setNote] = useState<string>();
   const [light, setLight] = useState<LightItem | null>(null);
+  const [queue, setQueueState] = useState<Queued[]>(() => readQueue(project.id));
+  const [flush, setFlush] = useState<{ sending?: boolean; error?: string }>({});
+  const setQueue = (f: (q: Queued[]) => Queued[]) => setQueueState((cur) => { const next = f(cur); writeQueue(project.id, next); return next; });
+  const queueRef = useRef(queue); queueRef.current = queue;
+  const running = isWorking(run);
   const ref = useRef<HTMLTextAreaElement>(null);
   const picker = useRef<HTMLInputElement>(null);
   const focus = () => requestAnimationFrame(() => { const el = ref.current; if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } });
@@ -86,16 +136,45 @@ export function Composer({ run, project, viewing, openSettings }: { run: RunView
   const refs = items.filter((x) => x.ref && !x.error).map((x) => x.ref!);
   const pending = items.some((x) => !x.ref && !x.error);
   const canSend = (!!text.trim() || refs.length > 0) && !busy && !pending;
+  const clear = () => { setText(''); for (const x of items) if (x.preview) URL.revokeObjectURL(x.preview); setItems([]); };
   const send = async () => {
     if (!canSend) return;
+    // the film is being made (or a queue is still waiting its turn): this one waits too, after the others
+    if (running || queue.length) {
+      setQueue((q) => [...q, { id: Math.random().toString(36).slice(2, 10), text: text.trim(), refs }]);
+      clear(); ref.current?.focus();
+      return;
+    }
     setBusy(true);
     try {
       await client.say(project.id, text.trim(), toSend(refs));
-      setText('');
-      for (const x of items) if (x.preview) URL.revokeObjectURL(x.preview);
-      setItems([]);
+      clear();
     } catch (e) { setNote((e as Error).message); } finally { setBusy(false); ref.current?.focus(); }
   };
+
+  // the run at rest: the queue goes as one message (each would otherwise start a change of its own), the references
+  // gathered, the last voice picked winning
+  const sendQueue = async () => {
+    const q = queueRef.current;
+    if (!q.length) return;
+    const text = q.map((x) => x.text).filter(Boolean).join('\n\n');
+    const all = new Map<string, Ref>();
+    for (const r of q.flatMap((x) => x.refs)) { const k = refKey(r); all.delete(k); all.set(k, r); }
+    const voices = [...all.values()].filter((r) => r.kind === 'voice');
+    const refs = [...all.values()].filter((r) => r.kind !== 'voice' || r === voices.at(-1));
+    setFlush({ sending: true });
+    try {
+      await client.say(project.id, text, toSend(refs));
+      setQueue((cur) => cur.filter((x) => !q.some((y) => y.id === x.id)));   // what was queued while it went stays
+      setFlush({});
+    } catch (e) { setFlush({ error: (e as Error).message }); }
+  };
+  useEffect(() => {
+    if (running || !queue.length || flush.sending || flush.error) return;
+    const t = setTimeout(() => void sendQueue(), SETTLE_MS);
+    return () => clearTimeout(t);
+  }, [running, queue.length, flush.sending, flush.error]);
+  useEffect(() => { if (running) setFlush((f) => (f.error ? {} : f)); }, [running]);
 
   const open = (x: Item) => {
     const r = x.ref;
@@ -120,6 +199,23 @@ export function Composer({ run, project, viewing, openSettings }: { run: RunView
       onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) e.preventDefault(); }}
       onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDrag(false); }}
       onDrop={(e) => { e.preventDefault(); setDrag(false); if (e.dataTransfer.files.length) upload([...e.dataTransfer.files]); }}>
+      {queue.length > 0 && (
+        <section className="mb-2 rounded-2xl border border-line bg-paper px-1.5 pb-1.5 pt-2" aria-label={t('conversation.composer.queue.title', { n: queue.length })}>
+          <header className="flex items-center gap-1.5 px-2.5 pb-1 text-[11.5px] text-ink-3">
+            {flush.sending ? <Loader2 size={12} className="animate-spin" aria-hidden /> : flush.error ? <TriangleAlert size={12} className="text-seal" aria-hidden /> : <Clock size={12} aria-hidden />}
+            <span className="font-medium text-ink-2">{t('conversation.composer.queue.title', { n: queue.length })}</span>
+            <span className={`min-w-0 truncate ${flush.error ? 'text-seal' : ''}`} role="status">· {flush.sending ? t('conversation.composer.queue.sending') : flush.error ? t('conversation.composer.queue.failed', { error: flush.error }) : t('conversation.composer.queue.waiting')}</span>
+            {flush.error && !running && <button type="button" className="ml-auto shrink-0 rounded-md px-1.5 text-accent-ink hover:bg-ink/[0.06]" onClick={() => void sendQueue()}>{t('conversation.composer.queue.retry')}</button>}
+          </header>
+          <ol className="max-h-[200px] overflow-y-auto">
+            {queue.map((q) => (
+              <QueuedRow key={q.id} q={q} project={project}
+                onSave={(v) => setQueue((cur) => (v || q.refs.length ? cur.map((x) => (x.id === q.id ? { ...x, text: v } : x)) : cur.filter((x) => x.id !== q.id)))}
+                onRemove={() => setQueue((cur) => cur.filter((x) => x.id !== q.id))} />
+            ))}
+          </ol>
+        </section>
+      )}
       <div className={`relative rounded-2xl border bg-surface shadow-[var(--fs-shadow-sm)] transition-[border-color,box-shadow] duration-150 focus-within:border-accent/70 focus-within:ring-4 focus-within:ring-accent/10 ${drag ? 'border-accent ring-4 ring-accent/15' : 'border-line'}`}>
         {items.length > 0 && (
           <div className="flex flex-wrap gap-1.5 border-b border-line/70 px-2.5 pb-2 pt-2.5" aria-label={t('conversation.composer.tray')}>
@@ -153,7 +249,7 @@ export function Composer({ run, project, viewing, openSettings }: { run: RunView
               <Plus size={12} aria-hidden /><span className="truncate">{suggest.label.split(/[「“]/)[0].trim()}</span>
             </button>
           )}
-          <span className="ml-auto truncate px-1 text-[11.5px] text-ink-3" role="status">{note ?? (pending ? t('conversation.composer.attaching') : switchTo ? t(narrated ? 'conversation.composer.voiceSend' : 'conversation.composer.voiceSendEarly') : suggest ? t('conversation.composer.sendHint') : t('conversation.composer.sendHintNewline'))}</span>
+          <span className="ml-auto truncate px-1 text-[11.5px] text-ink-3" role="status">{note ?? (pending ? t('conversation.composer.attaching') : (running || queue.length) && (text.trim() || refs.length) ? t('conversation.composer.queueHint') : switchTo ? t(narrated ? 'conversation.composer.voiceSend' : 'conversation.composer.voiceSendEarly') : suggest ? t('conversation.composer.sendHint') : t('conversation.composer.sendHintNewline'))}</span>
           <button type="submit" disabled={!canSend} aria-label={t('conversation.composer.send')} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-accent text-accent-fg transition-[opacity,transform] duration-150 disabled:opacity-30 active:scale-95">
             {busy ? <Loader2 size={15} className="animate-spin" aria-hidden /> : <ArrowUp size={16} strokeWidth={2.5} aria-hidden />}
           </button>
