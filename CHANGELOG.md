@@ -7,13 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-13
+
 ### Added
 
 - A film can carry notes for its style (`styleNotes` on a new project): the director and the page agents read them right after the style card.
 - A film can carry its own look (`look` on a new project, written to `META.look` in `script.js`): palette colours by the runtime's names, the hand and latin font stacks, and the stylesheets that bring those fonts. `runtime/look.js` applies it over the style.
+- A style can draw in three.js: its films load three and paint their pages with WebGL.
+- Double-click a drawn page in the conversation to play it in its close-up. A page still being drawn can't be opened yet.
+- A message sent while a film is being made waits in a queue, where it can still be edited, and goes to the director as soon as the run is at rest. It used to reach only the agents spoken to after it, and was often lost.
+- On a hosted service, the workbench says what the credits are: what this film has spent, what is set aside for the step being made (explained on hover), and what is left. The balance in the top bar is no longer a link.
+
+### Changed
+
+- A page's checks are quicker and no longer go round in circles. Lint's findings are split into must-fix problems (a runtime error, an unknown API, text off the canvas or in the subtitle band, raw markup, an empty opening or ending) and advice (a sparse or text-heavy page, small or touching text). A page its agent calls done passes on advice alone; done with a must-fix problem is asked about once, then settled as it is. A round that changes no code ends the checks instead of checking the same page again, and one page's lint gives up after 90 seconds. The whole-film review looks at must-fix problems only.
+- The director answers in the language the film's topic was written in until you say something in the conversation. It used to fall back to the interface setting, so a film asked for in one language could get its storyboard notes in another.
+- Opening a page in the workbench is instant: its player stays loaded between visits, warms up before it is asked for, and keeps its cache. While it loads it shows a sharp key frame and a loading line.
+- Past a dozen pages, the film's page lane scrolls instead of squeezing the pages, and follows the page on screen.
 
 ### Fixed
 
+- Pause stops everything at once. It used to wait for whatever was in flight, so pages, their screenshots and lint went on in the background for minutes after "Paused".
+- A film paused before a restart stays paused. It used to go on by itself.
+- A page left mid-check when the app or server restarted picks up at the check it was in, instead of being drawn again from nothing.
+- Play from the conversation plays the film, with sound. With the film view open it did nothing, and a play started from the panel could be silent.
+- Page agents see the methods a component returns, and a true/false `META` field is rewritten in place instead of being added a second time.
 - A page's thumbnail (in the film strip and on the finished film's card) no longer carries a time label in its corner.
 
 ## [0.4.0] - 2026-10-13
@@ -211,7 +229,8 @@ The first release of Frametell: a local, open-source studio that turns an idea o
 - The npm packages are not published yet; install from source (see the README).
 - The Claude Agent SDK and Codex runtimes are in the code but not offered; every film runs on the built-in agent, which works with any provider.
 
-[Unreleased]: https://github.com/sitor-ai/frametell/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/sitor-ai/frametell/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/sitor-ai/frametell/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/sitor-ai/frametell/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/sitor-ai/frametell/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/sitor-ai/frametell/compare/v0.3.0...v0.3.1
