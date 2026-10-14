@@ -5,7 +5,7 @@ import path from 'node:path';
 import { createCatalog, PROVIDERS, type ProviderSpec } from '@frametell/models';
 import { bundledSample, ELEVENLABS_DEFAULT_VOICES, ElevenLabsError, elevenLabsTts, listElevenLabsVoices, volcengineTts, VoiceNotFound, VOLCENGINE_VOICES } from '@frametell/voice';
 import { Project, STYLES, cleanLook, type Renderer, type Timeline } from '@frametell/agent';
-import { linkProject } from '@frametell/engine/tools/project.mjs';
+import { ENGINE_DIR, engineModulesDir, linkProject } from '@frametell/engine/tools/project.mjs';
 import { DATA_DIR, configFile, patchConfig, publicConfig, type ConfigStore } from './config.js';
 import { Projects } from './runner.js';
 import { checkEnv } from './env.js';
@@ -254,6 +254,31 @@ export class Studio {
     const abs = path.resolve(root, rel || 'index.html');
     const r = path.relative(root, abs);
     if (r.startsWith('..') || path.isAbsolute(r)) return null;
-    try { return fs.statSync(abs).isFile() ? abs : null; } catch { return null; }
+    try {
+      if (!fs.statSync(abs).isFile()) return null;
+      // the lexical check above knows nothing of links: one the agent's shell planted inside the project (to another
+      // account's file, or a folder of them) must not be followed. The real path has to stay in the project, or in the
+      // installed engine that engine/ and engine_modules/ legitimately link to (decided here, never by the project's links).
+      const real = fs.realpathSync(abs);
+      return [fs.realpathSync(root), ...engineRoots()].some((dir) => within(dir, real)) ? abs : null;
+    } catch { return null; }
   }
+}
+
+const within = (dir: string, p: string) => { const r = path.relative(dir, p); return !r.startsWith('..') && !path.isAbsolute(r); };
+
+/** the installed engine and its modules (pnpm links each module in from a store elsewhere, so each one's real folder counts) */
+function engineRoots(): string[] {
+  const out = new Set<string>();
+  const add = (p: string) => { try { out.add(fs.realpathSync(p)); } catch { /* gone */ } };
+  add(ENGINE_DIR);
+  const mods = engineModulesDir();
+  add(mods);
+  try {
+    for (const n of fs.readdirSync(mods)) {
+      add(path.join(mods, n));
+      if (n.startsWith('@')) for (const m of fs.readdirSync(path.join(mods, n))) add(path.join(mods, n, m));
+    }
+  } catch { /* none */ }
+  return [...out];
 }

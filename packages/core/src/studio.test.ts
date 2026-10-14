@@ -190,3 +190,37 @@ test('a run asks for its settings with its own project; everything else asks wit
     assert.ok(asked.includes(undefined), 'creating the project did not');
   } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
 });
+
+test('a preview serves only the project\'s own files and the installed engine, never a planted link', async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'frametell-studio-'));
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'frametell-outside-'));
+  try {
+    const studio = new Studio({ dataDir, config: memoryConfig() });
+    const root = path.join(dataDir, 'projects', 'p1');
+    fs.mkdirSync(path.join(root, 'pages'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'index.html'), '<html></html>');
+    fs.writeFileSync(path.join(outside, 'secret.txt'), 'other account');
+    fs.mkdirSync(path.join(outside, 'dir'));
+    fs.writeFileSync(path.join(outside, 'dir', 'a.txt'), 'x');
+    // a normal file
+    assert.equal(studio.projectFile('p1', 'index.html'), path.join(root, 'index.html'));
+    // a link to a file outside
+    fs.symlinkSync(path.join(outside, 'secret.txt'), path.join(root, 'leak.txt'));
+    assert.equal(studio.projectFile('p1', 'leak.txt'), null);
+    // a link to a folder outside
+    fs.symlinkSync(path.join(outside, 'dir'), path.join(root, 'linked'));
+    assert.equal(studio.projectFile('p1', 'linked/a.txt'), null);
+    // the engine, through the project's real links
+    const { linkProject, ENGINE_DIR } = await import('@frametell/engine/tools/project.mjs');
+    linkProject(root);
+    assert.ok(fs.existsSync(path.join(ENGINE_DIR, 'package.json')));
+    assert.equal(studio.projectFile('p1', 'engine/package.json'), path.join(root, 'engine', 'package.json'));
+    const mod = fs.readdirSync(path.join(root, 'engine_modules')).find((n) => fs.statSync(path.join(root, 'engine_modules', n)).isDirectory() && fs.existsSync(path.join(root, 'engine_modules', n, 'package.json')));
+    assert.ok(mod);
+    assert.ok(studio.projectFile('p1', `engine_modules/${mod}/package.json`));
+    // the engine link repointed elsewhere: nothing under it is served
+    fs.rmSync(path.join(root, 'engine'));
+    fs.symlinkSync(outside, path.join(root, 'engine'));
+    assert.equal(studio.projectFile('p1', 'engine/secret.txt'), null);
+  } finally { fs.rmSync(dataDir, { recursive: true, force: true }); fs.rmSync(outside, { recursive: true, force: true }); }
+});
