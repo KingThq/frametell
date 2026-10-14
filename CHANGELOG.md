@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- On a hosted service, a step that the balance doesn't cover says so above the composer: what it needs, what is left, and a link to top up. A storyboard waiting for approval says it before the button is pressed, and the button waits until the credits are there. A refused approval used to leave the card marked approved with nothing happening. Nothing is set aside for a step any more, so the workbench no longer shows a held amount.
+
 ## [0.5.0] - 2026-10-13
 
 ### Added

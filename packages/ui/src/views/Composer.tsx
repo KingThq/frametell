@@ -5,6 +5,7 @@ import { refKey, toSend, type Ref } from '../lib/refs';
 import { finished, isWorking, type RunView } from '../lib/run';
 import { Lightbox, type LightItem } from './Lightbox';
 import { FilmSettings } from '../components/FilmSettings';
+import { reportShort } from '../components/Credits';
 import { useT } from '../i18n';
 
 // The message box to the director. Above the words sits a tray of references — the pages, lines and frames picked on
@@ -149,7 +150,10 @@ export function Composer({ run, project, viewing, openSettings }: { run: RunView
     try {
       await client.say(project.id, text.trim(), toSend(refs));
       clear();
-    } catch (e) { setNote((e as Error).message); } finally { setBusy(false); ref.current?.focus(); }
+    } catch (e) {
+      // short of credits: the notice above says so, and what was written stays in the box to send again
+      if (!reportShort(project.id, e)) setNote((e as Error).message);
+    } finally { setBusy(false); ref.current?.focus(); }
   };
 
   // the run at rest: the queue goes as one message (each would otherwise start a change of its own), the references
@@ -167,7 +171,10 @@ export function Composer({ run, project, viewing, openSettings }: { run: RunView
       await client.say(project.id, text, toSend(refs));
       setQueue((cur) => cur.filter((x) => !q.some((y) => y.id === x.id)));   // what was queued while it went stays
       setFlush({});
-    } catch (e) { setFlush({ error: (e as Error).message }); }
+    } catch (e) {
+      setFlush({ error: (e as Error).message });
+      reportShort(project.id, e);
+    }
   };
   useEffect(() => {
     if (running || !queue.length || flush.sending || flush.error) return;

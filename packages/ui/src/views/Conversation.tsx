@@ -5,7 +5,7 @@ import { clock, film, finished, relPath, STAGE_NAME, STAGES, type FeedItem, type
 import { pageName, stepText, summarizeTools } from '../lib/describe';
 import { useNow } from '../lib/hooks';
 import { Crest } from '../components/Logo';
-import { FilmCredits, useSpent } from '../components/Credits';
+import { FilmCredits, orShort, reportShort, ShortNotice, useShort, useSpent } from '../components/Credits';
 import { STYLE_NAME } from '../lib/styles';
 import { Composer, RefChip } from './Composer';
 import { ExportControls, RevealFile } from './Export';
@@ -79,10 +79,18 @@ const stageDoing = (s: Stage) => t(`conversation.doing.${s}`);
 
 // ── cards ───────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-function Approval({ sb, project, active }: { sb: Storyboard; project: ProjectView; active: boolean }) {
+function Approval({ sb, project, run, active }: { sb: Storyboard; project: ProjectView; run: RunView; active: boolean }) {
   useT();
   const [sent, setSent] = useState(false);
+  const [failed, setFailed] = useState<string>();
   const live = active && !sent;
+  // short of credits for the go-ahead: the notice above the composer says so, and the button waits for the balance
+  const short = useShort(project.id, run);
+  // a go-ahead that was refused (credits, or anything else) leaves the card as it was, to press again
+  const approve = async () => {
+    setSent(true); setFailed(undefined);
+    try { await client.approve(project.id); } catch (e) { setSent(false); if (!reportShort(project.id, e)) setFailed((e as Error).message); }
+  };
   return (
     <div className={`rounded-2xl border bg-surface transition-shadow duration-300 ${live ? 'border-accent/50 shadow-[0_0_0_4px_rgb(var(--fs-accent)/0.07)]' : 'border-line'}`}>
       <div className="px-4 pb-3 pt-3.5">
@@ -102,8 +110,8 @@ function Approval({ sb, project, active }: { sb: Storyboard; project: ProjectVie
       </ol>
       {live ? (
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-3">
-          <span className="text-[12.5px] text-ink-3">{t('conversation.approval.hint')}</span>
-          <button className="fs-btn fs-btn-accent" onClick={async () => { setSent(true); await client.approve(project.id); }}>{t('conversation.approval.approve')}</button>
+          <span className={`text-[12.5px] ${short || failed ? 'text-seal' : 'text-ink-3'}`} role={failed ? 'alert' : undefined}>{short ? t('common.short.approveHint') : failed ?? t('conversation.approval.hint')}</span>
+          <button className="fs-btn fs-btn-accent" disabled={!!short} onClick={() => void approve()}>{t('conversation.approval.approve')}</button>
         </div>
       ) : (
         <p className="flex items-center gap-1.5 border-t border-line px-4 py-3 text-[12.5px] text-jade"><Check size={14} aria-hidden /> {t('conversation.approval.approved')}</p>
@@ -183,7 +191,7 @@ function PausedCard({ item, run, project, latest }: { item: Extract<FeedItem, { 
       </p>
       {next.length > 0 && <p className="ml-[23px] mt-1.5 text-[13px] font-medium leading-relaxed text-ink-2">{next.join(' ')}</p>}
       <p className="ml-[23px] mt-1 text-[12.5px] leading-relaxed text-ink-3">{t('conversation.paused.kept')}</p>
-      {canContinue && <button className="fs-btn fs-btn-accent ml-[23px] mt-3" onClick={() => client.start(project.id)}><Play size={14} aria-hidden /> {t('conversation.paused.continue')}</button>}
+      {canContinue && <button className="fs-btn fs-btn-accent ml-[23px] mt-3" onClick={() => client.start(project.id).catch(orShort(project.id))}><Play size={14} aria-hidden /> {t('conversation.paused.continue')}</button>}
     </div>
   );
 }
@@ -358,7 +366,7 @@ function Chapter({ b, run, project, onSelectPage, onPlayPage, selected }: { b: E
           if (it.kind === 'check') return it.reds + it.yellows === 0
             ? <p key={it.key} className="flex items-center gap-1.5 text-[12.5px] text-jade"><Check size={13} aria-hidden /> {t('conversation.chapter.checkPassed')}</p>
             : <p key={it.key} className="text-[12.5px] leading-relaxed text-ink-3">{t('conversation.chapter.checkIssues', { reds: it.reds, yellows: it.yellows })}</p>;
-          if (it.kind === 'approval') return <Approval key={it.key} sb={it.storyboard} project={project} active={run.awaitingApproval && approvals.at(-1) === it} />;
+          if (it.kind === 'approval') return <Approval key={it.key} sb={it.storyboard} project={project} run={run} active={run.awaitingApproval && approvals.at(-1) === it} />;
           if (it.kind === 'pages' && !b.latest) return <p key={it.key} className="text-[12.5px] text-ink-3">{t('conversation.chapter.pagesDone', { n: run.pageOrder.length })}</p>;
           if (it.kind === 'pages') return <Pages key={it.key} run={run} onSelect={onSelectPage} onPlay={onPlayPage} selected={selected} />;
           if (it.kind === 'error') return <p key={it.key} className="flex items-start gap-1.5 text-[12.5px] leading-relaxed text-seal"><TriangleAlert size={13} className="mt-0.5 shrink-0" aria-hidden />{it.message}</p>;
@@ -462,6 +470,7 @@ export function Conversation({ run, project, onSelectPage, onPlayPage, selected,
         </div>
       </div>
       <div className="border-t border-line bg-paper-2">
+        <ShortNotice project={project.id} run={run} />
         <NowBar run={run} project={project} />
         <Composer run={run} project={project} viewing={viewing} openSettings={openSettings} />
       </div>

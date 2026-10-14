@@ -56,12 +56,17 @@ export interface Hosted {
   signOut(): void;
   /** the account's credits, shown in the top bar and linking to where they are managed; absent: no billing */
   credits?: {
-    /** `available` already leaves out `held`: what is set aside for films being made */
-    read(): Promise<{ available: number; held?: number; perMinute: number; plan?: string; styles?: string[] | null } | null>; url: string;
-    /** the credits one film has spent so far, shown instead of what it cost in money, and what is still set aside for
-     * it while it is being made; null when nothing is metered */
-    spent?(project: string): Promise<{ spent: number; held: number } | null>;
+    read(): Promise<{ available: number; perMinute: number; plan?: string; styles?: string[] | null } | null>; url: string;
+    /** the credits one film has spent so far, shown instead of what it cost in money, and what its go-ahead needs in the
+     * balance (a storyboard waiting for it says so before the button is pressed); null when nothing is metered */
+    spent?(project: string): Promise<{ spent: number; goAhead?: number } | null>;
   };
+}
+
+/** what a hosted service refused for want of credits: a failed call carries `credits` (what it needed, what was there) */
+export function shortOf(e: unknown): { needed: number; available: number } | undefined {
+  const c = (e as { credits?: { needed?: unknown; available?: unknown } } | null)?.credits;
+  return c && typeof c.needed === 'number' && typeof c.available === 'number' ? { needed: c.needed, available: c.available } : undefined;
 }
 
 class HttpError extends Error { constructor(msg: string, readonly status: number) { super(msg); } }
