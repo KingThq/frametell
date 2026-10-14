@@ -18,9 +18,9 @@ test('Pause ends the run only once every page has stopped, and starts no new pag
     id: 'pi', model: { provider: 'x', id: 'flash' },
     async open(s) {
       return { ref: 'r', close: async () => {}, send: async () => {
-        if (stop.signal.aborted) return { text: '', stopReason: 'aborted', usage: {} } as never;
+        if (stop.signal.aborted) return { text: '', stopReason: 'aborted', usage: {}, answers: [] } as never;
         fs.writeFileSync(path.join(s.cwd, `pages/${s.name.slice(5)}.js`), PAGE(s.name.slice(5)));
-        return { text: 'DONE', stopReason: 'done', usage: {} } as never;
+        return { text: 'drawn', stopReason: 'done', usage: {}, answers: [] } as never;
       } };
     },
   };
@@ -31,12 +31,12 @@ test('Pause ends the run only once every page has stopped, and starts no new pag
   Object.assign(d.project, {
     lint: async () => [], commit: async () => undefined, storyboard: () => sb,
     timeline: async () => ({ duration: 15, pages: ids.map((id, i) => ({ id, start: i * 5, end: i * 5 + 5, speechEnd: i * 5 + 4, cues: [] })) }),
-    // p01's screenshot stops at once; p02's takes a while to wind down
-    snap: (_n: string, _t: number[], only: string[]) => new Promise((_ok, fail) => {
-      const end = () => setTimeout(() => { if (only?.[0] === 'p02') slowDone = true; fail(new DOMException('aborted', 'AbortError')); }, only?.[0] === 'p02' ? 200 : 0);
+    // p01's check stops at once; p02's takes a while to wind down
+    check: (id: string) => new Promise((_ok, fail) => {
+      const end = () => setTimeout(() => { if (id === 'p02') slowDone = true; fail(new DOMException('aborted', 'AbortError')); }, id === 'p02' ? 200 : 0);
       if (stop.signal.aborted) return end();
       stop.signal.addEventListener('abort', end);
-      if (only?.[0] === 'p02') setTimeout(() => stop.abort(), 20);
+      if (id === 'p02') setTimeout(() => stop.abort(), 20);
     }),
   });
   (d as unknown as { o: { emit: (e: { type: string; id: string; status: string }) => void } }).o.emit = (e) => { if (e.type === 'page') events.push(e); };

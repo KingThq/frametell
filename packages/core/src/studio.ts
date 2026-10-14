@@ -156,6 +156,7 @@ export class Studio {
     const cfg = this.config.load(), d = cfg.defaults;
     const model = input.model || d.model;
     const pages = input.pageModel ?? d.pageModel;
+    const reviews = input.reviewModel ?? d.reviewModel;
     if (!model) throw new Error(tr('请先在设置里配置模型', 'Set up a model in Settings first'));
     const said = input.notes?.trim();
     if (!files.length && !said && !input.topic) throw new Error(tr('说一句想讲什么，或者附上资料', 'Say what the video is about, or attach some material'));
@@ -173,6 +174,7 @@ export class Studio {
     const meta = this.store.create({
       title: input.title?.trim() || fromText(topic) || fromText(said) || files[0]?.name.replace(/\.[^.]+$/, '') || tr('未命名视频', 'Untitled video'),
       style: input.style || d.style, durationSec: input.durationSec || d.durationSec, model, pageModel: pages && pages !== model ? pages : undefined,
+      reviewModel: reviews && reviews !== (pages || model) ? reviews : undefined,
       runtime: input.runtime || d.runtime, voice: input.voice === null ? undefined : input.voice ?? d.voice, subtitles: input.subtitles ?? d.subtitles,
       lang: input.lang ?? resolveLocale(cfg.locale), topic, notes: topic ? undefined : input.notes,
       styleNotes: input.styleNotes?.trim().slice(0, 4000) || undefined, look: cleanLook(input.look),

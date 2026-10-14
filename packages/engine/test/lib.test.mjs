@@ -47,5 +47,5 @@ test('lib: the gallery builds and plays without runtime errors', () => {
   const lint = withLinkedCopy(path.join(ENGINE_DIR, 'test/gallery'), (dir) =>
     spawnSync(process.execPath, [path.join(ENGINE_DIR, 'tools/lint.mjs'), '--json'], { cwd: dir, encoding: 'utf8', timeout: 300000 }));
   const issues = JSON.parse(lint.stdout.trim().split('\n').pop());
-  assert.deepEqual(issues.filter((i) => /^(runtime error|unknown API)/.test(i.msg)).map((i) => `${i.page}: ${i.msg}`), []);
+  assert.deepEqual(issues.filter((i) => i.kind === 'runtime' || i.kind === 'api').map((i) => `${i.page}: ${i.msg}`), []);
 });

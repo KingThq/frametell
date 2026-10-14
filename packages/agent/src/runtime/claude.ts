@@ -93,7 +93,7 @@ export function claudeRuntime(o: ClaudeRuntimeOptions): AgentRuntime {
             if (abort.signal.aborted) stop = 'aborted';
             else if (stop === 'done') { stop = 'error'; error = (e as Error).message; }
           }
-          return { ok: stop === 'done', text, turns, usage, error, stopReason: stop };
+          return { ok: stop === 'done', text, turns, usage, error, stopReason: stop, answers: [] };
         },
         async close() {},
       };

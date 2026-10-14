@@ -45,6 +45,8 @@ export interface ProjectMeta {
   model: string;
   /** the model that draws the pages and checks the film; absent: the director's */
   pageModel?: string;
+  /** the model that reviews each drawn page from its screenshots (it must see images); absent: the page model */
+  reviewModel?: string;
   runtime: RuntimeId;
   voice?: VoiceChoice;
   subtitles: boolean;
@@ -68,6 +70,8 @@ export interface NewProjectInput {
   model?: string;
   /** the page model; absent: the saved default; '' or the director's own: the director's */
   pageModel?: string;
+  /** the page reviewer's model; absent: the saved default; '' or the page model itself: the page model */
+  reviewModel?: string;
   runtime?: RuntimeId;
   /** null: a film with no voice; absent: the default voice */
   voice?: VoiceChoice | null;
@@ -98,7 +102,7 @@ export interface PublicSettings {
   locale: LocalePref;
   /** 「创作偏好」: what the user wants in every film; '' when none */
   preferences: string;
-  defaults: { model?: string; pageModel?: string; runtime: RuntimeId; style: string; durationSec: number; voice?: VoiceChoice; subtitles: boolean; concurrency: number };
+  defaults: { model?: string; pageModel?: string; reviewModel?: string; runtime: RuntimeId; style: string; durationSec: number; voice?: VoiceChoice; subtitles: boolean; concurrency: number };
 }
 export interface SettingsPatch {
   keys?: Record<string, string>;

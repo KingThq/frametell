@@ -14,19 +14,25 @@ const model = (id: string, calls: string[], o: { draws?: boolean; error?: string
   async open(s) {
     return { ref: 'r', close: async () => {}, send: async () => {
       calls.push(id);
-      if (o.draws) { fs.writeFileSync(path.join(s.cwd, 'pages/p01.js'), PAGE); return { text: 'DONE', stopReason: 'done', usage: {} } as never; }
-      return { text: '', stopReason: 'error', error: o.error, usage: {} } as never;
+      if (o.draws) { fs.writeFileSync(path.join(s.cwd, 'pages/p01.js'), PAGE); return { text: 'drawn', stopReason: 'done', usage: {}, answers: [] } as never; }
+      return { text: '', stopReason: 'error', error: o.error, usage: {}, answers: [] } as never;
     } };
   },
 });
 
+/** a reviewer that passes every page */
+const passing: AgentRuntime = {
+  id: 'pi', model: { provider: 'y', id: 'haiku' },
+  async open() { return { ref: 'v', close: async () => {}, send: async () => ({ text: '', stopReason: 'done', usage: {}, answers: [{ name: 'verdict', args: { pass: true, problems: [] } }] }) as never }; },
+};
+
 function film(pageModel: AgentRuntime, own: AgentRuntime) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ft-redraw-'));
   fs.mkdirSync(path.join(dir, 'pages'));
-  const d = new Director({ dir, style: 'chalkboard', brief: { durationSec: 60, lang: 'zh', replyLang: 'zh' }, runtime: own, pages: { runtime: pageModel } });
+  const d = new Director({ dir, style: 'chalkboard', brief: { durationSec: 60, lang: 'zh', replyLang: 'zh' }, runtime: own, pages: { runtime: pageModel }, reviewer: { runtime: passing } });
   const sb = { title: 'T', summary: 'S', pages: [{ id: 'p01', section: '开场', say: '…', beats: [] }] };
   Object.assign(d.project, {
-    lint: async () => [], snap: async () => 'sheet.jpg', commit: async () => undefined,
+    check: async () => ({ issues: [], sheet: 'sheet.jpg' }), lint: async () => [], snap: async () => 'sheet.jpg', commit: async () => undefined,
     storyboard: () => sb, timeline: async () => ({ duration: 5, pages: [{ id: 'p01', start: 0, end: 5, speechEnd: 4, cues: [] }] }),
   });
   return d as unknown as { pages(): Promise<void>; state: { pages: Record<string, { status: string; failures?: number }> } };
@@ -52,11 +58,12 @@ test('pages that keep failing ask the user how they should look', async () => {
 });
 
 test('a page the run left in its checks picks up there on Continue, not drawn again', async () => {
-  const sent: { resume?: string; text: string }[] = [];
+  const sent: { resume?: string; text: string }[] = [], opened: (string | undefined)[] = [];
   const pages: AgentRuntime = {
     id: 'pi', model: { provider: 'x', id: 'flash' },
     async open(_s, resume) {
-      return { ref: resume ?? 'fresh', close: async () => {}, send: async ({ text }: { text: string }) => { sent.push({ resume, text }); return { text: 'DONE', stopReason: 'done', usage: {} } as never; } };
+      opened.push(resume);
+      return { ref: resume ?? 'fresh', close: async () => {}, send: async ({ text }: { text: string }) => { sent.push({ resume, text }); return { text: '', stopReason: 'done', usage: {}, answers: [] } as never; } };
     },
   };
   const d = film(pages, pages);
@@ -64,7 +71,6 @@ test('a page the run left in its checks picks up there on Continue, not drawn ag
   d.state.pages.p01 = { status: 'checking', rounds: 2, issues: [], ref: 'session-p01' } as never;   // the server went down here
   await d.pages();
   assert.equal(d.state.pages.p01.status, 'ok');
-  assert.equal(sent.length, 1);
-  assert.equal(sent[0].resume, 'session-p01');
-  assert.doesNotMatch(sent[0].text, /does not exist yet/);
+  assert.deepEqual(opened, ['session-p01']);   // its own conversation, picked up
+  assert.equal(sent.length, 0);   // checked where it was, and passed: never asked to draw it again
 });

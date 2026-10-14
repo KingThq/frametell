@@ -35,6 +35,7 @@ export interface Config {
   defaults: {
     model?: string;          // "provider/model-id"
     pageModel?: string;      // the pages' model, when not the director's
+    reviewModel?: string;    // the page reviewer's model, when not the pages'
     runtime: RuntimeId;
     style: string;
     durationSec: number;

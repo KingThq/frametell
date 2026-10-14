@@ -62,3 +62,7 @@ export function within(p, ms, what) {
 
 /** close a stage's browser without ever hanging: Playwright's close() can stall after system Chrome has already exited */
 export const closeStage = (browser, ms = 5000) => Promise.race([browser.close().catch(() => {}), new Promise((r) => setTimeout(r, ms))]);
+
+/** end a tool once its output is out. Playwright kills the browser it launched, and removes its profile, as this process
+ *  exits: a graceful browser.close() took ~3 s, most of a page check's time, with nothing left to wait for */
+export const finish = () => process.stdout.write('', () => process.exit(process.exitCode ?? 0));

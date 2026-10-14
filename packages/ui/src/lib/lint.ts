@@ -2,8 +2,9 @@ import { getLocale } from '../i18n';
 
 // A page check's finding as the person reads it. The engine words its findings in English for the page agents, who fix
 // them; in a Chinese panel they are said in Chinese. A finding no rule knows is shown as the engine wrote it.
-// A page agent that gives up on a finding writes why (FLAGGED: …): that is a note to us, in the model's words and often
-// in English, and is not shown at all (seen: a paragraph about the "sparse" measure under a finished film's page).
+// A page agent that leaves a finding as it is says why (its flag tool), and a reviewer words what it sees wrong: those
+// are notes to us, in the model's words and often in English, and are not shown at all (seen: a paragraph about the
+// "sparse" measure under a finished film's page).
 
 const q = (s: string) => `「${s}」`;
 

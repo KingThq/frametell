@@ -88,12 +88,12 @@ type Prices = { input: number; output: number; cacheRead: number; cacheWrite: nu
 /** a message that only says to go on */
 const GO_ON = /^(继续|接着|继续制作|接着做|继续做|继续吧|go on|continue|resume|keep going)[\s.!。！~～]*$/i;
 
-async function buildRuntime(meta: ProjectMeta, cfg: Config): Promise<{ runtime: AgentRuntime; prices: Prices; pages?: { runtime: AgentRuntime; prices: Prices } }> {
+async function buildRuntime(meta: ProjectMeta, cfg: Config): Promise<{ runtime: AgentRuntime; prices: Prices; pages?: { runtime: AgentRuntime; prices: Prices }; reviewer?: { runtime: AgentRuntime; prices: Prices } }> {
   applyProxy(cfg.proxy);
   // the user's own base URL per provider and the model ids they typed in are applied by the catalog
   // only the film's own providers' lists: every keyed provider's took seconds (12 s seen), and one that hangs held the
   // run from starting
-  const only = [meta.model, meta.pageModel].filter((m): m is string => !!m).map((m) => m.split('/')[0]);
+  const only = [meta.model, meta.pageModel, meta.reviewModel].filter((m): m is string => !!m).map((m) => m.split('/')[0]);
   const catalog = await createCatalog({ keys: Object.entries(cfg.keys).map(([providerId, apiKey]) => ({ providerId, apiKey })), custom: cfg.custom, baseUrls: cfg.baseUrls, models: cfg.models, only });
   const one = (ref: string) => {
     const [provider, ...rest] = ref.split('/');
@@ -110,12 +110,18 @@ async function buildRuntime(meta: ProjectMeta, cfg: Config): Promise<{ runtime: 
     if (!p.info.vision) throw new Error(tr(`画页模型 ${meta.pageModel} 不能看图，换一个能看图的`, `The page model ${meta.pageModel} can't see images; choose one that can`));
     pages = { runtime: piRuntime(catalog.models, p.model), prices: p.prices };
   }
+  let reviewer: { runtime: AgentRuntime; prices: Prices } | undefined;
+  if (meta.reviewModel) {
+    const r = one(meta.reviewModel);
+    if (!r.info.vision) throw new Error(tr(`审阅模型 ${meta.reviewModel} 不能看图，换一个能看图的`, `The review model ${meta.reviewModel} can't see images; choose one that can`));
+    reviewer = { runtime: piRuntime(catalog.models, r.model), prices: r.prices };
+  }
   // Every project runs on Pi, which works with any provider. The Claude Agent SDK and Codex runtimes are parked: their
   // code stays in packages/agent (@frametell/agent/runtime/claude, /codex) but Studio does not offer them — two more agent loops to
   // keep in step was not worth it yet. To bring one back, branch on meta.runtime here, e.g.:
   //   if (meta.runtime === 'claude-agent-sdk') return { runtime: claudeRuntime({ apiKey, baseUrl, model: id }), prices };
   //   if (meta.runtime === 'codex') return { runtime: codexRuntime({ apiKey, baseUrl, model: id }), prices };
-  return { runtime: piRuntime(catalog.models, model), prices, pages };
+  return { runtime: piRuntime(catalog.models, model), prices, pages, reviewer };
 }
 
 /** the film's narrator as the director takes it; no tts when the film has no voice, or its service has no key */
@@ -273,15 +279,15 @@ class Runner {
       for (const f of files) if (f.kind === 'document' && !f.parsedTo) this.emit({ type: 'error', message: this.tr(`资料 ${f.name} 读不了：${f.warning}`, `Couldn't read ${f.name}: ${f.warning}`) });
       // an export draws the film the pages already are: it needs no model, so one that is gone (its provider removed, its
       // key deleted) must not hold it; a model that is asked for anyway says why it can't answer
-      const { runtime, prices, pages } = await buildRuntime(meta, cfg).catch((e: Error) => {
+      const { runtime, prices, pages, reviewer } = await buildRuntime(meta, cfg).catch((e: Error) => {
         if (!o.exporting) throw e;
         const [provider, ...id] = meta.model.split('/');
         const none: AgentRuntime = { id: 'pi', model: { provider, id: id.join('/') }, open: async () => { throw e; } };
-        return { runtime: none, prices: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, currency: 'USD' } as Prices, pages: undefined };
+        return { runtime: none, prices: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, currency: 'USD' } as Prices, pages: undefined, reviewer: undefined };
       });
       const { tts, voice, provider } = voiceFor(meta, cfg);
       director = new Director({
-        dir, runtime, pages, style: meta.style, look: meta.look, prices, tts, voice, concurrency: cfg.defaults.concurrency,
+        dir, runtime, pages, reviewer, style: meta.style, look: meta.look, prices, tts, voice, concurrency: cfg.defaults.concurrency,
         brief: { durationSec: meta.durationSec, topic: meta.topic, notes: meta.notes, styleNotes: meta.styleNotes, lang: meta.lang ?? 'zh', replyLang: this.replyIn(meta), voice: provider, preferences: cfg.preferences },
         emit: this.emit, signal: this.abort.signal, renderer: this.renderer, review: this.review,
       });

@@ -31,6 +31,7 @@ Frametell's video engine. A video is a project directory; the engine plays it, t
 | `node engine/tools/pages.mjs [--json]` | each page's real time range and when each cue starts |
 | `node engine/tools/lint.mjs [--only pNN]` | layout check: off-canvas, against the edge, in the subtitle band, overlapping text |
 | `node engine/tools/snap.mjs --only pNN --sheet name t1 t2 …` | snapshots at the given times, tiled into one sheet |
+| `node engine/tools/check.mjs --only pNN --sheet name [--determinism] t1 t2 …` | a page's check in one browser: lint and the sheet, as JSON (the studio runs it after every draft and fix) |
 | `node engine/tools/render.mjs [--fps 30] [--workers 4]` | renders the film (optionally with burnt-in subtitles) |
 | `node engine/tools/publish.mjs` | writes publishing notes per platform (titles, description, tags, chapter timestamps) |
 

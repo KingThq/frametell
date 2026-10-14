@@ -1,5 +1,6 @@
 // One stage run = one agent session working in the project directory with file and shell tools. The orchestrator drives
 // every stage through this interface, so Pi (any provider), the Claude Agent SDK and the Codex SDK are interchangeable.
+import type { TSchema } from 'typebox';
 
 export interface TokenUsage { input: number; output: number; cacheRead: number; cacheWrite: number }
 
@@ -23,6 +24,14 @@ export type Thinking = 'off' | 'low' | 'medium' | 'high';
 /** thinking: how hard the model should think for this turn, at most the session's own level (a check needs less than a draft) */
 export interface StageInput { text: string; images?: string[]; thinking?: Thinking }
 
+/**
+ * A tool whose call is the agent's answer to the orchestrator, in fields instead of words to parse: a page agent leaving
+ * a problem as it is (flag), a reviewer's verdict. The call is recorded in TurnResult.answers and ends the turn.
+ * (Pi only: the parked Claude Agent SDK and Codex runtimes offer none, so their sessions never answer this way.)
+ */
+export interface AnswerTool { name: string; description: string; parameters: TSchema }
+export interface Answer { name: string; args: Record<string, unknown> }
+
 export interface SessionOptions {
   /** stable id, also used for provider prompt caching */
   name: string;
@@ -30,6 +39,9 @@ export interface SessionOptions {
   cwd: string;
   /** hard cap on model turns for this session (each tool round trip is a turn) */
   maxTurns: number;
+  /** the project's files and shell (the default), or none: a session that only looks and answers */
+  tools?: 'files' | 'none';
+  answers?: AnswerTool[];
   signal?: AbortSignal;
   onEvent?: (e: RuntimeEvent) => void;
 }
@@ -42,6 +54,8 @@ export interface TurnResult {
   usage: TokenUsage;
   error?: string;
   stopReason?: 'done' | 'max_turns' | 'error' | 'aborted';
+  /** the answer tools called in this exchange, in order */
+  answers: Answer[];
 }
 
 /** A live session: send() appends a user message and runs the agent until it stops (or hits maxTurns). */

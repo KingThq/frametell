@@ -4,7 +4,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { ENGINE_DIR } from '@frametell/engine/tools/project.mjs';
+import { Type } from 'typebox';
 import type { PageTiming, Storyboard, LintIssue } from './project.js';
+import type { AnswerTool } from './runtime/types.js';
 
 import { pagePack } from './pagepack.js';
 
@@ -146,31 +148,67 @@ ${t.cues.map((c) => `- c${c.i}: at ${c.at}s in the page, "${c.text}"`).join('\n'
 ${revising ? `pages/${id}.js is already written; stop once the change below is made in it and say in one sentence what you changed.` : `Stop once pages/${id}.js is written and say in one sentence what you drew.`}${langNote('page', lang, replyLang)}`;
 }
 
-/** what lint reports that is plainly wrong on screen or in the code: a page is not done while one of these is there.
- * The rest (a sparse or wordy page, small or touching text) is advice: some styles mean it, and the pictures decide */
-export const hardIssue = (msg: string) => /^(runtime error|unknown API|wrong API use|off-canvas|subtitle band|raw markup|empty opening|empty ending)/.test(msg);
-
 const lintLines = (issues: LintIssue[]) => issues.map((i) => `- ${i.local}s: ${i.msg}`).join('\n');
+const sheetLine = (times: { local: number }[]) => `The attached sheet shows the page at these moments within it (left to right, top to bottom): ${times.map((x) => x.local.toFixed(1) + 's').join(', ')}.`;
 
-export function checkPrompt(round: number, issues: LintIssue[], times: { t: number; local: number }[], change?: string) {
-  const hard = issues.filter((i) => hardIssue(i.msg)), soft = issues.filter((i) => !hardIssue(i.msg));
-  const lint = !issues.length ? 'Lint found nothing.'
-    : (hard.length ? `Lint, must fix:\n${lintLines(hard)}\n` : '') + (soft.length ? `Lint, advice only (fix it if the pictures agree; if the page is right as it is, ignore it):\n${lintLines(soft)}` : '');
-  return `Check round ${round}.
-
-${lint.trim()}
-
-The attached sheet shows the page at these moments within it (left to right, top to bottom): ${times.map((x) => x.local.toFixed(1) + 's').join(', ')}.
-${change ? `The user asked for this change to the page: ${change}\nIf the pictures don't show it yet, make it now: that is what this round is for.\n` : ''}Go through the checklist against the pictures. If something is wrong, fix the page file; if nothing is (advice included), reply only DONE; for a must-fix problem you keep on purpose, or that is a false alarm, reply FLAGGED: <reason>.
-Fix with edit, only where the problem is (a size, a position, a moment). **Never rewrite the whole file with write**: a full rewrite takes minutes, one edit takes seconds. No need to read the file again afterwards.
-**Put all of this round's edits in one reply** (one reply can call edit several times), each with finish: true: the round ends once they apply, no reply needed, and the server checks again and sends you new pictures.`;
+/** the reviewer's system prompt: how to judge a page, and the film's style (the stable part, shared by every page) */
+export function reviewerSystem(style: string, styleNotes?: string) {
+  return [read('REVIEW.md'), '---\n# This film\'s style\n\n' + grammar(style), styleNotesSection(styleNotes)].filter(Boolean).join('\n\n');
 }
 
-/** the agent said DONE with a must-fix problem still on the page: once, plainly, before the page is settled as it is */
-export function stillThere(issues: LintIssue[]) {
-  return `You replied DONE, but lint still reports these on the page:
-${lintLines(issues)}
-Fix them now with edit (all edits in one reply, each with finish: true), or if one is intended or a false alarm, reply FLAGGED: <reason>. Don't reply DONE again.`;
+/** a problem the reviewer sees on the page, and the change it asks for */
+export interface Problem { at: number; what: string; fix: string }
+/** the reviewer's answer tool */
+export const VERDICT: AnswerTool = {
+  name: 'verdict',
+  description: 'Your verdict on the page: pass, or fail with the problems a viewer would see.',
+  parameters: Type.Object({
+    pass: Type.Boolean(),
+    problems: Type.Array(Type.Object({
+      at: Type.Number({ description: 'the still\'s time within the page, in seconds' }),
+      what: Type.String({ description: 'what is wrong, as the viewer sees it' }),
+      fix: Type.String({ description: 'the change that fixes it' }),
+    }), { maxItems: 5 }),
+  }),
+};
+/** the page agent's answer tool: a problem it leaves as it is */
+export const FLAG: AnswerTool = {
+  name: 'flag',
+  description: 'Leave the page as it is: the problems reported are intended or a false alarm (or, for a change the user asked for, the page already shows it or cannot do it). Give the reason in one sentence. The page is settled as it is.',
+  parameters: Type.Object({ reason: Type.String() }),
+};
+
+/** what the reviewer is shown each round: the page's storyboard and timing, the checker's findings, the sheet */
+export function reviewerPrompt(sb: Storyboard, id: string, t: PageTiming, round: number, issues: LintIssue[], times: { local: number }[], change?: string) {
+  const p = sb.pages.find((x) => x.id === id);
+  const must = issues.filter((i) => i.level === 'error'), advice = issues.filter((i) => i.level === 'warn');
+  return `${round > 1 ? `Round ${round}: the artist has changed the page since you last saw it.\n\n` : ''}## The page (${id} of ${sb.pages.length}, in the film "${sb.title}")
+- Section: ${p?.section ?? ''}
+- What it says: ${p?.say ?? ''}
+- Beats:
+${(p?.beats || []).map((b, i) => `  ${i + 1}. [${b.at}] ${b.object} — ${b.action}${b.text ? `, on-screen text "${b.text}"` : ''}`).join('\n')}
+- The page lasts ${(t.end - t.start).toFixed(1)}s. Narration:
+${t.cues.map((c) => `  - c${c.i} at ${c.at.toFixed(1)}s: "${c.text}"`).join('\n')}
+${change ? `\nThe user asked for this change to the page: ${change}\nFail the page if the pictures don't show it.\n` : ''}
+## The checker
+${must.length ? `Must-fix (already sent to the artist):\n${lintLines(must)}` : 'Nothing must be fixed.'}
+${advice.length ? `Advice (a measurement; fail on it only if the picture shows a problem):\n${lintLines(advice)}` : ''}
+
+${sheetLine(times)}
+Call verdict.`;
+}
+
+/** the reviewer did not call verdict: asked once more */
+export const verdictAgain = 'Answer by calling verdict, with nothing else.';
+
+/** what the page agent is asked to fix after a check: the checker's must-fix findings and the reviewer's problems */
+export function fixPrompt(round: number, errors: LintIssue[], problems: Problem[], times: { local: number }[], change?: string) {
+  return `Check round ${round}: the page needs changes.
+
+${errors.length ? `The checker, must fix:\n${lintLines(errors)}\n\n` : ''}${problems.length ? `The reviewer, looking at the attached sheet:\n${problems.map((p) => `- ${p.at.toFixed(1)}s: ${p.what} → ${p.fix}`).join('\n')}\n\n` : ''}${change ? `The user asked for this change to the page: ${change}\nIf the pictures don't show it yet, make it now.\n\n` : ''}${sheetLine(times)}
+Fix each problem with edit, only where it is (a size, a position, a moment). **Never rewrite the whole file with write**: a full rewrite takes minutes, one edit takes seconds. No need to read the file again afterwards.
+**Put all of this round's edits in one reply** (one reply can call edit several times), each with finish: true: the round ends once they apply, no reply needed, and the page is checked again.
+If the problems should stay as they are (intended, or a false alarm), call flag with the reason instead of changing the page.`;
 }
 
 export function reviewPrompt(issues: LintIssue[], flagged: string[], replyLang?: Lang) {
@@ -178,5 +216,5 @@ export function reviewPrompt(issues: LintIssue[], flagged: string[], replyLang?:
 ${issues.length ? 'Lint for the whole film:\n' + issues.map((i) => `- ${i.page} ${i.local}s: ${i.msg}`).join('\n') : 'Lint found nothing.'}
 ${flagged.length ? '\nThese pages still had problems after their own checks: ' + flagged.join('; ') : ''}
 
-Fix locally with edit; never rewrite a whole page file. Fix only problems across pages and obvious defects (styles that don't match, a page that is clearly empty, text off the page or overlapping), at most 2 pages; leave small blemishes. When done, stop and tell the user in one plain sentence which page you changed and how it looks different (e.g. "The timer on page 5 flickered in its second half; that's fixed"), without terms like lint, determinism or p05. If nothing needs changing, reply DONE. ${replyNote(replyLang)}`;
+Fix locally with edit; never rewrite a whole page file. Fix only problems across pages and obvious defects (styles that don't match, a page that is clearly empty, text off the page or overlapping), at most 2 pages; leave small blemishes. When done, stop and tell the user in one plain sentence which page you changed and how it looks different (e.g. "The timer on page 5 flickered in its second half; that's fixed"), without terms like lint, determinism or p05. If nothing needs changing, change nothing and stop. ${replyNote(replyLang)}`;
 }

@@ -64,7 +64,7 @@ export function codexRuntime(o: CodexRuntimeOptions): AgentRuntime {
             if (abort.signal.aborted && stop === 'done') stop = 'aborted';
             else if (stop === 'done') { stop = 'error'; error = (e as Error).message; }
           }
-          return { ok: stop === 'done', text: last, turns, usage, error, stopReason: stop };
+          return { ok: stop === 'done', text: last, turns, usage, error, stopReason: stop, answers: [] };
         },
         async close() {},
       };

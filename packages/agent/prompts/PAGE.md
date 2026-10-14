@@ -9,14 +9,13 @@ You turn **one page** of the storyboard into drawing code, `pages/<id>.js`. You 
 1. The server's message already holds everything this page needs: the storyboard beats, the narration cues with the moment each one starts within the page, and the film's style. The system prompt holds the drawing API, the signatures of this film's components and one benchmark page. **Start writing straight away; do not explore**: do not use ls / grep / sed / cat on `engine/` or other files, do not read other pages' code, and do not change `script.js`.
 2. **Write the complete** `pages/<id>.js` **on the first try**: every beat must happen on screen, timed to its cue with `P.c(i, dt)`, or to a word with `P.cw(i, 'word')`.
 3. When it is written, stop and say in one plain sentence what is on screen (the user sees it and is usually not a programmer: no file, function or component names, no code). **Do not run lint or take screenshots yourself**: the server does it right away and sends you the results and the pictures. Only read the API or run a tool when the server's check shows an error you do not recognise.
-4. The server checks your page: it runs lint and sends you one sheet of screenshots taken at the key moments. **Look at the pictures carefully** and check:
-   - does each beat's object and action appear when the narration reaches it;
-   - is the page full: the drawing spans most of the content area (x 140–1780, y 180–880), not a small patch floating in empty space;
-   - is the text big enough (body ≥ 32px, labels ≥ 26px), and does any text run off the page, overlap or sit in the subtitle band (y > 900);
-   - is there an empty frame (a box drawn before its text is written), or a "title + cards + arrows" slide-deck look;
-   - is something on screen the moment the page turns in (never blank first, then drawn).
-   If something is wrong, fix it (all of the round's edits in one reply, as the check message says). If nothing is wrong, reply only `DONE`. At most 3 rounds.
-5. If you judge that a problem should not be fixed (say, it is intentional), reply `FLAGGED: <reason>`.
+4. The server checks your page: a checker measures it in the browser, and a reviewer looks at a sheet of screenshots taken at the key moments. When something is wrong you get the problems and the sheet: fix them (all of the round's edits in one reply, as the message says) and the page is checked again. When nothing is wrong you hear nothing more. Before you write, keep in mind what they check:
+   - each beat's object and action appears when the narration reaches it;
+   - the page is full: the drawing spans most of the content area (x 140–1780, y 180–880), not a small patch floating in empty space;
+   - the text is big enough (body ≥ 32px, labels ≥ 26px), and no text runs off the page, overlaps or sits in the subtitle band (y > 900);
+   - no empty frame (a box drawn before its text is written), no "title + cards + arrows" slide-deck look;
+   - something is on screen the moment the page turns in (never blank first, then drawn).
+5. If you judge that a reported problem should stay as it is (it is intentional, or a false alarm), call `flag` with the reason instead of changing the page.
 
 ## How to write
 

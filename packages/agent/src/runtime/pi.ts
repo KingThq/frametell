@@ -5,7 +5,8 @@ import path from 'node:path';
 import { Agent, type AgentMessage } from '@earendil-works/pi-agent-core';
 import type { Api, Model, MutableModels } from '@earendil-works/pi-ai';
 import { fileTools } from '../tools/files.js';
-import { addUsage, emptyUsage, toolSummary, type AgentRuntime, type AgentSession, type SessionOptions, type StageInput, type Thinking, type TurnResult } from './types.js';
+import { answerTools } from '../tools/answers.js';
+import { addUsage, emptyUsage, toolSummary, type Answer, type AgentRuntime, type AgentSession, type SessionOptions, type StageInput, type Thinking, type TurnResult } from './types.js';
 
 const mimeOf = (f: string) => (/\.png$/i.test(f) ? 'image/png' : /\.webp$/i.test(f) ? 'image/webp' : 'image/jpeg');
 const short = toolSummary;
@@ -29,8 +30,10 @@ export function piRuntime(models: MutableModels, model: Model<Api>, opts: { thin
     model: { provider: model.provider, id: model.id },
     async open(o: SessionOptions, resume?: string): Promise<AgentSession> {
       const transcript = resume && fs.existsSync(resume) ? (JSON.parse(fs.readFileSync(resume, 'utf8')) as AgentMessage[]) : [];
+      let answers: Answer[] = [];
+      const tools = [...(o.tools === 'none' ? [] : fileTools(o.cwd)), ...answerTools(o.answers ?? [], (a) => answers.push(a))];
       const agent = new Agent({
-        initialState: { systemPrompt: o.system, model, thinkingLevel: opts.thinking ?? 'medium', tools: fileTools(o.cwd), messages: transcript },
+        initialState: { systemPrompt: o.system, model, thinkingLevel: opts.thinking ?? 'medium', tools, messages: transcript },
         streamFn: models.streamSimple.bind(models),
         sessionId: o.name,
         toolExecution: 'sequential',
@@ -81,8 +84,8 @@ export function piRuntime(models: MutableModels, model: Model<Api>, opts: { thin
       return {
         ref,
         async send(input: StageInput): Promise<TurnResult> {
-          turns = 0; usage = emptyUsage(); lastText = ''; stop = 'done';
-          if (o.signal?.aborted) return { ok: false, text: '', turns, usage, error: 'aborted', stopReason: 'aborted' };
+          turns = 0; usage = emptyUsage(); lastText = ''; stop = 'done'; answers = [];
+          if (o.signal?.aborted) return { ok: false, text: '', turns, usage, error: 'aborted', stopReason: 'aborted', answers };
           o.signal?.addEventListener('abort', onAbort, { once: true });
           const l = levelled(input.thinking);
           agent.state.model = l.model;
@@ -94,7 +97,7 @@ export function piRuntime(models: MutableModels, model: Model<Api>, opts: { thin
           const err = agent.state.errorMessage;
           if (err && stop === 'done') { error = err; stop = 'error'; }
           save();
-          return { ok: stop === 'done', text: lastText, turns, usage, error, stopReason: stop };
+          return { ok: stop === 'done', text: lastText, turns, usage, error, stopReason: stop, answers };
         },
         async close() { save(); },
       };

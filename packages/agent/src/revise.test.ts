@@ -9,51 +9,60 @@ import type { PageTiming, Storyboard } from './project.js';
 
 const PAGE = "ENGINE.visual('p01', (P) => {\n  P.text('old', { x: 100, y: 100 });\n});\n";
 
-/** a page model that answers each message with `answer`, which may change the page file */
-const fake = (sent: string[], answer: (n: number, dir: string) => string): AgentRuntime => ({
+/** a page model that answers each message with `answer` (text, or a flag with its reason), which may change the page file */
+const fake = (sent: string[], answer: (n: number, dir: string) => string | { flag: string }): AgentRuntime => ({
   id: 'pi', model: { provider: 'x', id: 'flash' },
   async open(o) {
-    return { ref: 'r', close: async () => {}, send: async (i) => { sent.push(i.text); return { text: answer(sent.length, o.cwd), stopReason: 'done', usage: {} } as never; } };
+    return { ref: 'r', close: async () => {}, send: async (i) => {
+      sent.push(i.text);
+      const a = answer(sent.length, o.cwd);
+      return { text: typeof a === 'string' ? a : '', stopReason: 'done', usage: {}, answers: typeof a === 'string' ? [] : [{ name: 'flag', args: { reason: a.flag } }] } as never;
+    } };
   },
+});
+/** a reviewer that passes every page, keeping what it was shown */
+const passing = (seen: string[]): AgentRuntime => ({
+  id: 'pi', model: { provider: 'y', id: 'haiku' },
+  async open() { return { ref: 'v', close: async () => {}, send: async (i) => { seen.push(i.text); return { text: '', stopReason: 'done', usage: {}, answers: [{ name: 'verdict', args: { pass: true, problems: [] } }] } as never; } }; },
 });
 
 /** the page step of a revision of p01, with the engine's checks stubbed: they find nothing */
-async function revise(answer: (n: number, dir: string) => string) {
+async function revise(answer: (n: number, dir: string) => string | { flag: string }) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ft-revise-'));
   fs.mkdirSync(path.join(dir, 'pages'));
   fs.writeFileSync(path.join(dir, 'pages/p01.js'), PAGE);
-  const sent: string[] = [];
-  const d = new Director({ dir, style: 'chalkboard', brief: { durationSec: 60, lang: 'zh', replyLang: 'zh' }, runtime: fake(sent, answer) });
-  Object.assign(d.project, { lint: async () => [], snap: async () => 'sheet.jpg', commit: async () => undefined });
+  const sent: string[] = [], seen: string[] = [];
+  const d = new Director({ dir, style: 'chalkboard', brief: { durationSec: 60, lang: 'zh', replyLang: 'zh' }, runtime: fake(sent, answer), reviewer: { runtime: passing(seen) } });
+  Object.assign(d.project, { check: async () => ({ issues: [], sheet: 'sheet.jpg' }), lint: async () => [], snap: async () => 'sheet.jpg', commit: async () => undefined });
   const inner = d as unknown as { state: { revision?: Record<string, string>; pages: Record<string, { status: string; issues: string[] }> }; page(sb: Storyboard, t: PageTiming): Promise<void> };
   inner.state.revision = { p01: '在开头加一个标题' };
   const sb = { title: 'T', summary: 'S', pages: [{ id: 'p01', section: '开场', say: '…', beats: [] }] } as unknown as Storyboard;
   await inner.page(sb, { id: 'p01', start: 0, end: 5, speechEnd: 4, cues: [] } as unknown as PageTiming);
-  return { sent, page: inner.state.pages.p01, code: fs.readFileSync(path.join(dir, 'pages/p01.js'), 'utf8') };
+  return { sent, seen, page: inner.state.pages.p01, code: fs.readFileSync(path.join(dir, 'pages/p01.js'), 'utf8') };
 }
 
 test('a revision whose change never lands is not shown as done', async () => {
-  // the model says it changed the page, then passes every check, and never edits the file
-  const { sent, page, code } = await revise((n) => (n === 1 ? '已在第 1 页加上标题。' : 'DONE'));
+  // the model says it changed the page, passes the reviewer, and never edits the file
+  const { sent, seen, page, code } = await revise(() => '已在第 1 页加上标题。');
   assert.equal(code, PAGE);
   assert.equal(page.status, 'flagged');
   assert.match(page.issues[0], /没有改上/);
   assert.match(sent[1], /exactly as it was: the change was not made/);   // asked once more
-  assert.ok(sent.slice(2).every((m) => m.includes('在开头加一个标题')));   // and every check round restates the change
+  assert.ok(seen.length && seen.every((m) => m.includes('在开头加一个标题')));   // and the reviewer is told what to look for
 });
 
 test('a revision that lands on the second ask is done', async () => {
-  const { sent, page, code } = await revise((n, dir) => {
+  const { seen, page, code } = await revise((n, dir) => {
     if (n === 2) fs.writeFileSync(path.join(dir, 'pages/p01.js'), PAGE.replace("'old'", "'标题'"));
-    return n === 1 ? '已加上。' : 'DONE';
+    return '已加上。';
   });
   assert.match(code, /标题/);
   assert.equal(page.status, 'ok');
-  assert.ok(!sent[2].includes('在开头加一个标题'));   // a page that shows the change is checked as usual
+  assert.ok(!seen[0].includes('在开头加一个标题'));   // a page whose code changed is checked as usual
 });
 
 test('a page that already shows the change says so, and is neither asked again nor checked', async () => {
-  const { sent, page, code } = await revise(() => 'FLAGGED: 这一页的数字本来就是黄色的');
+  const { sent, page, code } = await revise(() => ({ flag: '这一页的数字本来就是黄色的' }));
   assert.equal(code, PAGE);
   assert.equal(sent.length, 1);
   assert.equal(page.status, 'flagged');
