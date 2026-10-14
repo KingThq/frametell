@@ -224,3 +224,55 @@ test('a preview serves only the project\'s own files and the installed engine, n
     assert.equal(studio.projectFile('p1', 'engine/secret.txt'), null);
   } finally { fs.rmSync(dataDir, { recursive: true, force: true }); fs.rmSync(outside, { recursive: true, force: true }); }
 });
+
+test('openProjectFile opens first and checks what it opened: a link out is refused and closed, a file of the project or the engine is served from its descriptor', async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'frametell-studio-'));
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'frametell-outside-'));
+  const fds = () => fs.readdirSync('/dev/fd').length;
+  const read = (fd: number, size: number) => { const b = Buffer.alloc(size); fs.readSync(fd, b, 0, size, 0); return b.toString(); };
+  try {
+    const studio = new Studio({ dataDir, config: memoryConfig() });
+    const root = path.join(dataDir, 'projects', 'p1');
+    fs.mkdirSync(path.join(root, 'pages'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'pages', 'a.js'), 'page a');
+    fs.writeFileSync(path.join(outside, 'secret.txt'), 'other account');
+    const before = fds();
+    // a link out of the project (a file, a folder): null, and nothing left open
+    fs.symlinkSync(path.join(outside, 'secret.txt'), path.join(root, 'leak.txt'));
+    fs.symlinkSync(outside, path.join(root, 'linked'));
+    assert.equal(studio.openProjectFile('p1', 'leak.txt'), null);
+    assert.equal(studio.openProjectFile('p1', 'linked/secret.txt'), null);
+    assert.equal(studio.openProjectFile('p1', '../../../etc/passwd'), null);
+    assert.equal(studio.openProjectFile('p1', 'pages'), null);   // a folder
+    // a hard link of the project's (it carries no path that could be checked)
+    fs.linkSync(path.join(outside, 'secret.txt'), path.join(root, 'hard.txt'));
+    assert.equal(studio.openProjectFile('p1', 'hard.txt'), null);
+    assert.equal(fds(), before, 'a refused file left its descriptor open');
+    // a normal file: its bytes, size and real path, from the descriptor
+    const f = studio.openProjectFile('p1', 'pages/a.js')!;
+    assert.ok(f);
+    try {
+      assert.equal(f.size, 6); assert.equal(read(f.fd, f.size), 'page a');
+      assert.equal(f.path, fs.realpathSync(path.join(root, 'pages', 'a.js')));
+      // the name pointed elsewhere after the open: what was opened is still what is read
+      fs.renameSync(path.join(root, 'pages', 'a.js'), path.join(root, 'pages', 'old.js'));
+      fs.symlinkSync(path.join(outside, 'secret.txt'), path.join(root, 'pages', 'a.js'));
+      assert.equal(read(f.fd, f.size), 'page a');
+    } finally { fs.closeSync(f.fd); }
+    assert.equal(studio.openProjectFile('p1', 'pages/a.js'), null);   // and asked again, the swapped link is refused
+    // the engine, through the project's real links
+    const { linkProject } = await import('@frametell/engine/tools/project.mjs');
+    linkProject(root);
+    const e = studio.openProjectFile('p1', 'engine/package.json')!;
+    assert.ok(e);
+    try { assert.match(read(e.fd, e.size), /"name"/); } finally { fs.closeSync(e.fd); }
+    const mod = fs.readdirSync(path.join(root, 'engine_modules')).find((n) => fs.existsSync(path.join(root, 'engine_modules', n, 'package.json')));
+    const m = studio.openProjectFile('p1', `engine_modules/${mod}/package.json`)!;
+    assert.ok(m, 'an engine module is served (pnpm hard-links it from its store: allowed outside the project)');
+    fs.closeSync(m.fd);
+    // projectFile, for the callers that open later, says the same and holds nothing open
+    assert.equal(studio.projectFile('p1', 'leak.txt'), null);
+    assert.equal(studio.projectFile('p1', 'pages/old.js'), path.join(root, 'pages', 'old.js'));
+    assert.equal(fds(), before);
+  } finally { fs.rmSync(dataDir, { recursive: true, force: true }); fs.rmSync(outside, { recursive: true, force: true }); }
+});

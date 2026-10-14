@@ -2,6 +2,7 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import { FFMPEG, findChrome } from '@frametell/engine/tools/bins.mjs';
+import { gitSync } from '@frametell/agent';
 
 import type { EnvCheck as Check } from './types.js';
 import { tr } from './i18n.js';
@@ -9,7 +10,7 @@ import { tr } from './i18n.js';
 export function checkEnv(): Check[] {
   const chrome = findChrome();
   const ff = spawnSync(FFMPEG, ['-version'], { encoding: 'utf8' });
-  const git = spawnSync('git', ['--version'], { encoding: 'utf8' });
+  const git = gitSync(undefined, ['--version']);
   const [major, minor] = process.versions.node.split('.').map(Number);
   return [
     { id: 'chrome', ok: !!chrome && fs.existsSync(chrome), detail: chrome || tr('没有找到 Chrome / Edge', 'Chrome / Edge not found'), fix: tr('安装 Google Chrome，或设置 CHROME_PATH 指向一个 Chromium 内核浏览器', 'Install Google Chrome, or point CHROME_PATH at a Chromium-based browser') },

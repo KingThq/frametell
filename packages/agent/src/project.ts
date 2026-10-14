@@ -2,12 +2,13 @@
 import fs from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
-import { execFile, spawn, spawnSync } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { ENGINE_DIR, linkProject } from '@frametell/engine/tools/project.mjs';
 import { lintStoryboard, type StoryboardIssue } from '@frametell/engine/tools/storyboard-lint.mjs';
 import { measure, type FilmGateResult } from '@frametell/engine/tools/film-gate.mjs';
 import { FFMPEG } from '@frametell/engine/tools/bins.mjs';
 import { confine } from './tools/sandbox.js';
+import { gitAsync, gitSync, stageAll, stageAllSync } from './git.js';
 
 export interface Cue { i: number; at: number; abs: number; text: string }
 export interface PageTiming { id: string; start: number; end: number; speechEnd: number; cues: Cue[] }
@@ -28,8 +29,9 @@ export interface Storyboard { title: string; summary: string; durationSec?: numb
  *  shell, Node, Chrome and ffmpeg need, and nothing else. A list of what passes, not of what doesn't: an agent can print
  *  its environment, every word it reads goes to the model's provider, and on a hosted service the environment holds
  *  the service's own secrets under any name (a database URL carries its password). NODE_OPTIONS and NODE_PATH stay out:
- *  they make every Node the shell starts load other code. */
-const PASSES = /^(PATH|HOME|USER|LOGNAME|SHELL|LANG|LANGUAGE|LC_[A-Z]+|TZ|TMPDIR|TEMP|TMP|TERM|CHROME_PATH|FFMPEG_PATH|PLAYWRIGHT_BROWSERS_PATH|NODE_EXTRA_CA_CERTS|RENDER_FRAME_TIMEOUT_MS|FRAMETELL_[A-Z_]+|SYSTEMROOT|WINDIR|COMSPEC|PATHEXT|USERPROFILE|APPDATA|LOCALAPPDATA|PROGRAMDATA|PROGRAMFILES|PROGRAMFILES\(X86\))$/i;
+ *  they make every Node the shell starts load other code. The user's proxy (core/src/net.ts applyProxy, any case) passes:
+ *  on a network that only reaches out through it, the engine and the shell reach nothing without it. */
+const PASSES = /^(PATH|HOME|USER|LOGNAME|SHELL|LANG|LANGUAGE|LC_[A-Z]+|TZ|TMPDIR|TEMP|TMP|TERM|CHROME_PATH|FFMPEG_PATH|PLAYWRIGHT_BROWSERS_PATH|NODE_EXTRA_CA_CERTS|HTTPS_PROXY|HTTP_PROXY|ALL_PROXY|NO_PROXY|RENDER_FRAME_TIMEOUT_MS|FRAMETELL_[A-Z_]+|SYSTEMROOT|WINDIR|COMSPEC|PATHEXT|USERPROFILE|APPDATA|LOCALAPPDATA|PROGRAMDATA|PROGRAMFILES|PROGRAMFILES\(X86\))$/i;
 const SECRET = /KEY|SECRET|TOKEN|PASSWORD|CREDENTIAL|AUTH|URL/i;   // never, even under a name that passes (FRAMETELL_*)
 export const childEnv = (): Record<string, string> =>
   Object.fromEntries(Object.entries(process.env).filter((e): e is [string, string] => e[1] !== undefined && PASSES.test(e[0]) && !SECRET.test(e[0])));
@@ -213,10 +215,8 @@ export class Project {
   gate(file: string): FilmGateResult { return measure(file); }
 
   // ── history: every change the agent makes is a commit, so any step can be undone (git revert) ──
-  private git(args: string[]) { return spawnSync('git', args, { cwd: this.dir, encoding: 'utf8', env: childEnv() }); }
-  private gitAsync(args: string[]) {
-    return new Promise<{ status: number; stdout: string }>((ok) => execFile('git', args, { cwd: this.dir, encoding: 'utf8', maxBuffer: 16 << 20, env: childEnv() }, (e, stdout) => ok({ status: e ? 1 : 0, stdout: stdout || '' })));
-  }
+  private git(args: string[]) { return gitSync(this.dir, args, childEnv()); }
+  private gitAsync(args: string[]) { return gitAsync(this.dir, args, childEnv()); }
   initHistory() {
     if (!fs.existsSync(this.file('.git'))) {
       this.git(['init', '-q', '-b', 'main']);
@@ -227,13 +227,13 @@ export class Project {
   }
   /** Commit everything that changed; returns the commit id, or null when nothing changed. */
   async commit(message: string): Promise<string | null> {
-    await this.gitAsync(['add', '-A']);
+    await stageAll(this.dir, childEnv());
     const r = await this.gitAsync(['commit', '-q', '-m', message]);
     if (r.status !== 0) return null;
     return (await this.gitAsync(['rev-parse', '--short', 'HEAD'])).stdout.trim();
   }
   private commitSync(message: string) {
-    this.git(['add', '-A']);
+    stageAllSync(this.dir, childEnv());
     this.git(['commit', '-q', '-m', message]);
   }
 }

@@ -247,22 +247,65 @@ export class Studio {
   /** replay events after `since`, then stream live ones; returns the unsubscribe function */
   subscribe(id: string, since: number, fn: (e: LoggedEvent) => void): () => void { return this.store.runner(id).subscribe(fn, since); }
 
-  /** absolute path of a file inside a project (preview player, snapshots, audio, video), or null */
+  /** absolute path of a file inside a project (snapshots, audio, video), or null. Checked now and opened later by the
+   *  caller, so a link swapped in between wins: anything served to a browser goes through openProjectFile instead */
   projectFile(id: string, rel: string): string | null {
+    const f = this.openProjectFile(id, rel);
+    if (!f) return null;
+    fs.closeSync(f.fd);
+    return f.name;
+  }
+
+  /**
+   * A file inside a project, opened (the preview player, and every file the API serves from a project). Opened first
+   * and checked after, on what was opened: the agent's shell writes the project, and a link it swaps between a check
+   * and an open would serve another account's file. The descriptor's real path has to stay in the project, or in the
+   * installed engine that engine/ and engine_modules/ legitimately link to (decided here, never by the project's links);
+   * a file of the project with a second hard link is refused too (a hard link carries no path to check). The caller
+   * owns `fd` and closes it (a read stream with autoClose does). Null, with nothing left open, for anything else.
+   */
+  openProjectFile(id: string, rel: string): OpenFile | null {
     if (!/^[\w-]+$/.test(id)) return null;
     const root = this.store.dir(id);
     const abs = path.resolve(root, rel || 'index.html');
     const r = path.relative(root, abs);
     if (r.startsWith('..') || path.isAbsolute(r)) return null;
+    let fd: number;
+    // non-blocking: a FIFO planted under the name would otherwise hold the open forever
+    try { fd = fs.openSync(abs, fs.constants.O_RDONLY | (fs.constants.O_NONBLOCK ?? 0) | (fs.constants.O_NOCTTY ?? 0)); } catch { return null; }
     try {
-      if (!fs.statSync(abs).isFile()) return null;
-      // the lexical check above knows nothing of links: one the agent's shell planted inside the project (to another
-      // account's file, or a folder of them) must not be followed. The real path has to stay in the project, or in the
-      // installed engine that engine/ and engine_modules/ legitimately link to (decided here, never by the project's links).
-      const real = fs.realpathSync(abs);
-      return [fs.realpathSync(root), ...engineRoots()].some((dir) => within(dir, real)) ? abs : null;
-    } catch { return null; }
+      const st = fs.fstatSync(fd, { bigint: true });
+      if (!st.isFile()) throw new Error('not a file');
+      const real = openedPath(fd, abs, st);
+      if (!real) throw new Error('moved');
+      const own = within(fs.realpathSync(root), real);
+      if (!own && !engineRoots().some((dir) => within(dir, real))) throw new Error('outside');
+      if (own && st.nlink > 1n) throw new Error('hard link');
+      return { fd, name: abs, path: real, size: Number(st.size), mtimeMs: Number(st.mtimeMs), mtime: st.mtime };
+    } catch {
+      fs.closeSync(fd);
+      return null;
+    }
   }
+}
+
+/** an opened file: `fd` (the caller closes it), the name it was asked for, its real path, and its size and time as opened */
+export interface OpenFile { fd: number; name: string; path: string; size: number; mtimeMs: number; mtime: Date }
+
+/** the real path of what `fd` is. Linux names it (/proc/self/fd); elsewhere the real path of the name it was opened by,
+ *  which must still be the very file opened (same device and inode), or a link moved in between and null is returned */
+function openedPath(fd: number, name: string, st: fs.BigIntStats): string | null {
+  if (process.platform === 'linux') {
+    try {
+      const p = fs.readlinkSync(`/proc/self/fd/${fd}`);
+      return p.startsWith('/') && !p.endsWith(' (deleted)') ? p : null;
+    } catch { /* no /proc: as elsewhere */ }
+  }
+  try {
+    const real = fs.realpathSync(name);
+    const now = fs.statSync(real, { bigint: true });
+    return now.dev === st.dev && now.ino === st.ino ? real : null;
+  } catch { return null; }
 }
 
 const within = (dir: string, p: string) => { const r = path.relative(dir, p); return !r.startsWith('..') && !path.isAbsolute(r); };

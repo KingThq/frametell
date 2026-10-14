@@ -1,4 +1,4 @@
-export { Studio, type MaterialFile, type StudioOptions } from './studio.js';
+export { Studio, type MaterialFile, type OpenFile, type StudioOptions } from './studio.js';
 export { DATA_DIR, PROJECTS_DIR, configFile, withDefaults, type Config, type ConfigContext, type ConfigStore } from './config.js';
 export type * from './types.js';
 export type { Renderer } from '@frametell/agent';

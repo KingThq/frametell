@@ -136,6 +136,24 @@ test('the shell and the engine tools see only what they need of the environment,
   }
 });
 
+test('the user\'s proxy (upper and lower case) reaches the shell and the engine tools', async () => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ft-proxy-')));
+  const planted: Record<string, string> = { HTTPS_PROXY: 'http://proxy.test:8080', HTTP_PROXY: 'http://proxy.test:8080', https_proxy: 'http://proxy.test:8080', http_proxy: 'http://proxy.test:8080', NO_PROXY: 'localhost,127.0.0.1', no_proxy: 'localhost,127.0.0.1', ALL_PROXY: 'socks5://proxy.test:1080' };
+  const was = Object.fromEntries(Object.keys(planted).map((k) => [k, process.env[k]]));
+  Object.assign(process.env, planted);
+  try {
+    const env = nodeEnv();
+    for (const [k, v] of Object.entries(planted)) assert.equal(env[k], v, `${k} did not reach the engine tools`);
+    const bash = fileTools(root).find((t) => t.name === 'bash')!;
+    const r = await bash.execute('1', { command: 'env' }, undefined as never);
+    const out = (r.content[0] as { text: string }).text;
+    assert.match(out, /^HTTPS_PROXY=http:\/\/proxy\.test:8080$/m); assert.match(out, /^NO_PROXY=localhost,127\.0\.0\.1$/m);
+  } finally {
+    for (const [k, v] of Object.entries(was)) if (v === undefined) delete process.env[k]; else process.env[k] = v;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('a project\'s engine link pointed at a folder kept out does not let that folder back in; the real engine stays readable', { skip: !sandboxed && 'no sandbox here' }, () => {
   const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ft-relink-')));
   const root = path.join(base, 'project'), others = path.join(base, 'others');
