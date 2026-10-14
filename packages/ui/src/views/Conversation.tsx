@@ -259,7 +259,7 @@ function ExportLine({ it, project }: { it: Extract<FeedItem, { kind: 'export' }>
         <span className="flex gap-1.5">
           <a className="fs-btn fs-btn-ghost fs-btn-sm" href={downloadUrl(project, relPath(it.video, project.id))} download><Download size={13} aria-hidden /> {t('conversation.export.withSubs')}</a>
           {it.noSubs && <a className="fs-btn fs-btn-ghost fs-btn-sm" href={downloadUrl(project, relPath(it.noSubs, project.id), true)} download><Download size={13} aria-hidden /> {t('conversation.export.noSubs')}</a>}
-          <RevealFile file={it.video} size="fs-btn-sm" />
+          <RevealFile file={it.saved ?? it.video} size="fs-btn-sm" />
         </span>
       )}
     </div>

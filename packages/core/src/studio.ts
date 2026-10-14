@@ -62,6 +62,8 @@ export class Studio {
 
   /** the directory holding this Studio's projects */
   get projectsDir() { return this.store.root; }
+  /** the folder exports are also copied into, when the user chose one */
+  get exportDir() { return this.config.load().exportDir; }
 
   // ── settings and environment ──
   settings(): PublicSettings { return publicConfig(this.config.load()); }

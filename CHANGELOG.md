@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `META.look` can set the line (`line`: how rough and bowed a stroke is, its width, traced once or twice). Its fonts load before the first frame, and the band behind a page's heading takes the paper's colour.
 - Each `cost` event carries the turn that just ran (`turn`) and the model that took it (`model`, "provider/id"), so a service that prices turns itself no longer has to guess the model from the session's name. A page drawn again after a failure runs on the director's model, and was priced as the page model.
 - On a hosted service, the workbench can show what a film cost the service in dollars beside its credits (`Hosted.credits.spent` may return `cost`; a service gives it only to its admins).
+- Settings → General → Export folder: every mp4 export, with and without subtitles, is also saved to a folder you choose (picked in the desktop app, typed as a path in the browser), replacing an earlier export of the same name. "Show in Finder" opens that copy. A folder that can't be written is said, and the film stays in the project.
 
 ### Changed
 

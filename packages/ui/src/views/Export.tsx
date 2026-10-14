@@ -18,7 +18,7 @@ export function ExportControls({ run, project, size = '' }: { run: RunView; proj
   if (cut) return (
     <>
       <a className={`fs-btn fs-btn-secondary ${size}`} href={downloadUrl(project, relPath(cut.path, project.id))} download><Download size={14} aria-hidden /> {t('common.export.download')}</a>
-      <RevealFile file={cut.path} size={size} />
+      <RevealFile file={cut.saved?.withSubs ?? cut.path} size={size} />
     </>
   );
   if (run.exporting) return <span className={`fs-btn fs-btn-secondary pointer-events-none ${size}`} role="status"><Loader2 size={14} className="animate-spin" aria-hidden /> {t('common.export.exporting', { time: clock(now - run.exporting) })}</span>;

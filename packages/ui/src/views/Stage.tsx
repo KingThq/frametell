@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Captions, CaptionsOff, Check, ChevronLeft, ChevronRight, Download, Images, Maximize2, MessageSquareText, Quote, TriangleAlert } from 'lucide-react';
 import { client, downloadUrl, type PageTiming, type ProjectView, type Timeline } from '../lib/client';
-import { film, finished, relPath, STAGE_NAME, STAGES, type PageView, type RunView } from '../lib/run';
+import { film, finished, relPath, savedAt, STAGE_NAME, STAGES, type PageView, type RunView } from '../lib/run';
 import { shownIssues } from '../lib/lint';
 import { ExportControls, RevealFile } from './Export';
 import { pageName } from '../lib/describe';
@@ -570,7 +570,7 @@ export function Stage({ run, project, selected, onSelect, playKey, pagePlay, onR
                 {subs ? <Captions size={14} aria-hidden /> : <CaptionsOff size={14} aria-hidden />}{subs ? tr('stage.subsOn') : tr('stage.subsOff')}
               </button>
               <a className="fs-btn fs-btn-secondary fs-btn-sm" href={downloadUrl(project, relPath(cut, project.id), !subs)} download><Download size={13} aria-hidden /> {subs ? tr('stage.downloadSubs') : tr('stage.downloadNoSubs')}</a>
-              <RevealFile file={cut} size="fs-btn-sm" />
+              <RevealFile file={savedAt(exported!, cut)} size="fs-btn-sm" />
             </span>
           )}
         </div>

@@ -62,6 +62,6 @@ export type StudioEvent =
   /** the film is drawn and checked: it plays in the live preview. An mp4 is made only on export (then `done`) */
   | { type: 'ready'; duration: number }
   /** the film was exported to mp4 */
-  | { type: 'done'; video: string; videoNoSubs: string; duration: number };
+  | { type: 'done'; video: string; videoNoSubs: string; duration: number; /** the copies in the user's export folder */ saved?: { withSubs: string; noSubs: string } };
 
 export type { LintIssue };

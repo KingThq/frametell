@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, AudioLines, Boxes, Check, CircleAlert, Globe, KeyRound, Monitor, NotebookPen, SlidersHorizontal, Trash2, X, type LucideIcon } from 'lucide-react';
+import { ArrowLeft, AudioLines, Boxes, Check, CircleAlert, FolderOpen, Globe, KeyRound, Monitor, NotebookPen, SlidersHorizontal, Trash2, X, type LucideIcon } from 'lucide-react';
 import { client, hosted, type ModelInfo, type PublicSettings, type SettingsPatch } from '../lib/client';
 import { forgetVoices, useLoad } from '../lib/hooks';
 import { t, useT, type MessageKey, getLocale } from '../i18n';
@@ -163,7 +163,38 @@ function General({ c }: { c: Ctx }) {
           ))}
         </div>
       </section>
+      <ExportDir c={c} />
     </Page>
+  );
+}
+
+/** 「导出位置」: a folder each export is also copied into — chosen in the system dialog in the desktop app, typed in a browser */
+function ExportDir({ c }: { c: Ctx }) {
+  const [v, setV] = useState(c.s.exportDir ?? '');
+  const [err, setErr] = useState('');
+  const [ok, setOk] = useState(false);
+  useEffect(() => setV(c.s.exportDir ?? ''), [c.s.exportDir]);
+  const commit = async (x: string) => {
+    if (x.trim() === (c.s.exportDir ?? '')) return;
+    try { await c.patch({ exportDir: x.trim() }); setErr(''); setOk(true); setTimeout(() => setOk(false), 1400); } catch (e) { setErr((e as Error).message); }
+  };
+  const choose = async () => { const d = await client.pickFolder!(c.s.exportDir || undefined); if (d) { setV(d); void commit(d); } };
+  return (
+    <section aria-labelledby="sec-export">
+      <h4 id="sec-export" className="text-[13px] font-semibold text-ink">{t('settings.exportDir.title')}</h4>
+      <p className="mt-1 text-[12.5px] text-ink-3">{t('settings.exportDir.desc')}</p>
+      <div className="mt-3 flex gap-2">
+        <div className="relative min-w-0 flex-1">
+          <label htmlFor="export-dir" className="sr-only">{t('settings.exportDir.title')}</label>
+          <input id="export-dir" spellCheck={false} className="fs-input h-10 pr-8 font-mono text-[12.5px]" value={v} placeholder={t('settings.exportDir.placeholder')}
+            onChange={(e) => setV(e.target.value)} onBlur={() => void commit(v)} onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
+          {ok && <Check size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-jade" aria-label={t('providers.saved')} />}
+        </div>
+        {client.pickFolder && <button type="button" className="fs-btn fs-btn-secondary h-10" onClick={() => void choose()}><FolderOpen size={14} aria-hidden /> {t('settings.exportDir.choose')}</button>}
+        {c.s.exportDir && <button type="button" className="fs-btn fs-btn-ghost h-10" onClick={() => { setV(''); void commit(''); }}>{t('settings.exportDir.clear')}</button>}
+      </div>
+      {err && <p className="mt-1.5 flex items-center gap-1 text-[12px] text-seal" role="alert"><CircleAlert size={13} aria-hidden /> {err}</p>}
+    </section>
   );
 }
 

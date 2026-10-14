@@ -27,3 +27,14 @@ test('hand-added model ids and custom providers are checked before they are save
   assert.equal(patchConfig(withCustom, { custom: [] }).keys['custom-relay'], undefined);   // removing it removes its key
   assert.throws(() => patchConfig(c, { custom: [{ id: 'custom-x', name: 'x', protocol: 'openai', baseUrl: 'ftp://x', models: [] }] }));
 });
+
+test('the export folder is kept as a full path; ~ is the home folder, a relative one is refused', async () => {
+  const { patchConfig, loadConfig, publicConfig } = await import('./config.js');
+  const os = await import('node:os'), path = await import('node:path');
+  const c = loadConfig();
+  assert.equal(patchConfig(c, { exportDir: '~/Movies/帧言' }).exportDir, path.join(os.homedir(), 'Movies/帧言'));
+  assert.equal(patchConfig(c, { exportDir: '/tmp/films/' }).exportDir, '/tmp/films');
+  assert.equal(patchConfig({ ...c, exportDir: '/tmp/films' }, { exportDir: '' }).exportDir, undefined);
+  assert.throws(() => patchConfig(c, { exportDir: 'films' }), /完整路径|full path/);
+  assert.equal(publicConfig({ ...c, exportDir: undefined }).exportDir, '');
+});

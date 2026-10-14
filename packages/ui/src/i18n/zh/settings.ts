@@ -12,6 +12,13 @@ export default {
     zh: '中文',
     en: 'English',
   },
+  exportDir: {
+    title: '导出位置',
+    desc: '每次导出 mp4，带字幕和无字幕两版都会另存一份到这里，同名的旧版会被替换。不填就只留在项目里。',
+    placeholder: '~/Movies/帧言',
+    choose: '选择文件夹…',
+    clear: '不另存',
+  },
   voice: {
     desc: '配音要用它：连接后才能用这家的音色出片，没连接时只能试听。Key 只保存在这台电脑上。',
     volcengine: '火山引擎',

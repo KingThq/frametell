@@ -13,6 +13,13 @@ const en: typeof zh = {
     zh: '中文',
     en: 'English',
   },
+  exportDir: {
+    title: 'Export folder',
+    desc: 'Every mp4 export, with and without subtitles, is also saved here, replacing an earlier export of the same name. Leave it empty to keep exports in the project only.',
+    placeholder: '~/Movies/Frametell',
+    choose: 'Choose folder…',
+    clear: 'Don’t save a copy',
+  },
   voice: {
     desc: "Narration needs it: until it's connected you can listen to the voices but not make a film with them. Keys stay on this computer.",
     volcengine: 'Volcengine',
