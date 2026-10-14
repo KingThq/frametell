@@ -1,6 +1,6 @@
 {
   "name": "@frametell/agent",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "The Frametell director: staged agent runs (storyboard, narration script, pages, review) on Pi, the Claude Agent SDK or the Codex SDK, with lint and frame checks enforced by the orchestrator.",
   "license": "AGPL-3.0-only",
   "author": "Sitor Team (https://sitor.ai)",

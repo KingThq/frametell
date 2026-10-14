@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-14
+
 ### Added
 
 - A style can leave its look to each film: with a `fonts.json` beside its grammar card, the director designs the film's look while writing the storyboard (`look` in storyboard.json: a style card, a palette by the runtime's colour names, one of the style's fonts, and a line: sketch, pen or clean). The server checks it, writes it into `META.look`, and every page agent and reviewer reads the card after the style's own. The storyboard card in the panel shows the look in a line, with its colours.
@@ -242,7 +244,8 @@ The first release of Frametell: a local, open-source studio that turns an idea o
 - The npm packages are not published yet; install from source (see the README).
 - The Claude Agent SDK and Codex runtimes are in the code but not offered; every film runs on the built-in agent, which works with any provider.
 
-[Unreleased]: https://github.com/sitor-ai/frametell/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/sitor-ai/frametell/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/sitor-ai/frametell/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/sitor-ai/frametell/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/sitor-ai/frametell/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/sitor-ai/frametell/compare/v0.3.1...v0.3.2
