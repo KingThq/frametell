@@ -82,4 +82,4 @@ run it, including commercially. If you offer a modified version to others over a
 source available to them under the same license. For a commercial license without these obligations, contact us
 through [sitor.ai](https://sitor.ai).
 
-Copyright © 2026 Hangzhou Sitor Cloud Technology Co., Ltd. · Made by [**Sitor Team**](https://sitor.ai)
+© 2026 [**Sitor**](https://sitor.ai)
