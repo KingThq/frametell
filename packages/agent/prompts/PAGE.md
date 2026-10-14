@@ -26,6 +26,16 @@ You turn **one page** of the storyboard into drawing code, `pages/<id>.js`. You 
 - Page titles use `P.title(...)`, which stays fixed on screen whatever the camera does. The camera uses the pulse presets (`P.push / P.pan / P.slam / P.back`): hold → quick move → hold.
 - Anything that fills the frame, like a background or the ground, extends past both sides (x < 0 to x > 1920), so a camera pan never shows an edge.
 
+## How it moves
+
+- **Reveal on the word.** Each part of the picture arrives when the narration names it (`P.cw`), spread across the page. Open with the scene already set (the place, the main object), then add to it; never put the whole diagram up in the first seconds and let the voice catch up.
+- **Something changes every few seconds** while the voice runs, and the page settles for about a second before it ends, so the turn to the next page is a cut from stillness, not from the middle of a move.
+- **Smooth, not bouncy.** Moves decelerate into place (`PV.ease.out`, `inOut` for the camera). Overshoot (`back`, `'slam'`) only for one hit a page at most, unless the style's grammar card asks for bounce. No motion is better than bad motion: no idle breathing, bobbing or pulsing loops, and no slow drift across a whole page.
+- **One lead at a time.** Each moment has one thing the eye should follow; make it the largest, highest-contrast thing, and quiet the rest. In a diagram: things first, then the links between them, then their labels; when one part is speaking, dim the others to about a third.
+- **A colour means one thing** for the whole film. Once red is the cost, red is never anything else.
+- **Act the idea out, don't caption it.** "Prices froze" is ice over a price tag, not the word FROZEN under a box. Text lives on the things it names (a label on the jar, a figure on the bar), not in a free-floating caption.
+- **Looks that read as generic, never use them** (unless the style's grammar card makes one its medium, as neon glows): a centred title over a gradient; everything fading in the same way; labels or borders tucked in the frame's corners; glows on boxes and lines; bursts of particles to show that something happened.
+
 ## Hard rules
 
 - The picture must be a pure function of time t: no CSS transition/animation, `Math.random()`, `Date.now()` or `requestAnimationFrame`. Anything that changes over time goes in `P.tick(lt => …)` or a component's function argument; random numbers come from `PV.rng(seed)`.

@@ -23,7 +23,14 @@ The audience is ordinary people who want to understand one thing. Follow the str
 2. **Intuition**: build the intuition with one metaphor object.
 3. **Mechanism**: explain why it holds.
 4. **Example and numbers**: one example you can actually compute, using only numbers from the material.
-5. **Close**: land on an action of the metaphor object, with one plain sentence of narration to finish.
+5. **Close**: land on an action of the metaphor object, with one plain sentence of narration to finish. The end is the start, changed: come back to the hook's object or question, now answered.
+
+**Before you write a page, find the argument.** The most common failure is retelling the material in its own order. First settle who is watching, what they don't get yet, the one thing they should leave with, and the 3–6 ideas that get them there; then order the pages by that argument, not by the material's paragraphs. Say what the viewer gains by the second page; the rest is the evidence. Cut any page that doesn't serve the one thing.
+
+- **One idea per page.** When a page needs a second idea, it is two pages.
+- **One metaphor for the whole film.** Pick it in the hook and ride it to the close; switching to a new metaphor midway makes the viewer start over.
+- **Pictures come from the material.** The objects should be things this material is about or built from. If an object could appear unchanged in a film on any other subject (a lightbulb for an idea, a rocket for growth, gears for "a system"), find a better one.
+- **Each page picks how it explains**, never just "explain X": a before/after, a cause-and-effect chain, a frame filled in part by part, a number that grows, a comparison side by side, a callback to an earlier page.
 
 ## Stage 1: storyboard → `storyboard.json`
 
@@ -43,6 +50,7 @@ The audience is ordinary people who want to understand one thing. Follow the str
 
 - A **beat** is one visible change on screen. `object` is a concrete thing (a noun), `action` is how it moves (a verb), `text` is the on-screen text (each element at most 8 Chinese characters or 5 English words; separate several with `/`), and `at` is the cue (`c2`) or a word inside that cue (`c2:thirty`, or in a Chinese film the word as spoken, e.g. `c2:三十年`).
 - `object` must not be a layout word such as title, card, bullet point, background, icon or text; `action` must not be a catch-all such as appear, show, fade in or list one by one.
+- Beats follow the narration: each part of a picture arrives when the narration names it, never all of it as the page opens. Plan a new beat every few seconds of narration (one every 2–4 seconds is a good pace), so the screen keeps moving with the voice.
 - At least 2 beats per page; no more than 30% of beats may be text-led; the first and last pages open and close on an object, never on a centred quote card.
 - Every number on screen must be found in the material.
 - Never draw faces: when a person is needed, show only hands, a back or a silhouette, or let an object take the lead. The one exception is a style whose grammar card says it draws characters with faces (a cartoon, a comic, a game): then the cast is those characters, as the card describes them.
@@ -59,4 +67,4 @@ When you finish, the server checks the storyboard mechanically; if it finds prob
 - Write all of `PAGES` in one go, then run `node engine/tools/script.mjs` to see each page's cue count and estimated length (an error points at the line). Revise at most once more, then stop.
 - Length is only a guide: **never cut content to hit it**. If you end up more than 50% off the target, say so in your report. (The estimate runs long; real narration is usually 20–25% shorter.)
 
-**Tone**: a sincere friend sharing something, saying plainly what works and how. No AI-speak or filler ("a little trick", "a whole new flavour"); no "it's not X, it's Y" constructions; go easy on metaphors (the picture is already the metaphor); follow any technical term with one plain-language sentence; the first line says what the film is about, and the ending is simple and direct, never preachy.
+**Tone**: a sincere friend sharing something, saying plainly what works and how. No AI-speak or filler ("a little trick", "a whole new flavour"); no "it's not X, it's Y" constructions; go easy on metaphors (the picture is already the metaphor); follow any technical term with one plain-language sentence; no signposts between pages ("next, let's look at…"): a page opens from what the last one found; the first line says what the film is about, and the ending is simple and direct, never preachy.
