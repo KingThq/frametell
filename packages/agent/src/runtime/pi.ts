@@ -5,6 +5,7 @@ import path from 'node:path';
 import { Agent, type AgentMessage } from '@earendil-works/pi-agent-core';
 import type { Api, Model, MutableModels } from '@earendil-works/pi-ai';
 import { fileTools } from '../tools/files.js';
+import { imagesIn } from '../projectfs.js';
 import { answerTools } from '../tools/answers.js';
 import { addUsage, emptyUsage, toolSummary, type Answer, type AgentRuntime, type AgentSession, type SessionOptions, type StageInput, type Thinking, type TurnResult } from './types.js';
 
@@ -92,7 +93,7 @@ export function piRuntime(models: MutableModels, model: Model<Api>, opts: { thin
           const l = levelled(input.thinking);
           agent.state.model = named(l.model);
           agent.state.thinkingLevel = l.thinking;
-          const images = (input.images || []).map((f) => ({ type: 'image' as const, data: fs.readFileSync(f).toString('base64'), mimeType: mimeOf(f) }));
+          const images = imagesIn(o.cwd, input.images).map(({ file, data }) => ({ type: 'image' as const, data: data.toString('base64'), mimeType: mimeOf(file) }));
           let error: string | undefined;
           try { await agent.prompt(input.text, images); } catch (e) { error = (e as Error).message; stop = stop === 'done' ? 'error' : stop; }
           finally { o.signal?.removeEventListener('abort', onAbort); }

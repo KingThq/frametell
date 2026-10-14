@@ -7,3 +7,4 @@ export type { StudioEvent, Stage, PageStatus, UserRef } from './events.js';
 export type { AgentRuntime, AgentSession, RuntimeEvent, TokenUsage, TurnResult } from './runtime/types.js';
 export { piRuntime } from './runtime/pi.js';
 // parked runtimes (Claude Agent SDK, Codex): not loaded with the package; import '@frametell/agent/runtime/claude' or '/codex'
+export { openIn, openProjectFile, readIn, writeIn, editIn, readFd, Refused, type OpenFile, type Reach } from './projectfs.js';

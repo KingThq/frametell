@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { withDefaults, type Config, type ConfigStore } from './config.js';
 import { Studio } from './studio.js';
 import type { NewProjectInput } from './types.js';
@@ -274,5 +275,35 @@ test('openProjectFile opens first and checks what it opened: a link out is refus
     assert.equal(studio.projectFile('p1', 'leak.txt'), null);
     assert.equal(studio.projectFile('p1', 'pages/old.js'), path.join(root, 'pages', 'old.js'));
     assert.equal(fds(), before);
+  } finally { fs.rmSync(dataDir, { recursive: true, force: true }); fs.rmSync(outside, { recursive: true, force: true }); }
+});
+
+const hasFfmpeg = (() => { try { execFileSync('ffmpeg', ['-version'], { stdio: 'ignore' }); return true; } catch { return false; } })();
+
+test('frames are cut only from a film that is a file of the project: a film named in state.json that links out is ignored', { skip: !hasFfmpeg && 'no ffmpeg' }, async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'frametell-studio-'));
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'frametell-outside-'));
+  try {
+    const studio = new Studio({ dataDir, config: memoryConfig() });
+    const root = path.join(dataDir, 'projects', 'p1');
+    fs.mkdirSync(path.join(root, '.studio'), { recursive: true });
+    fs.mkdirSync(path.join(root, 'out'));
+    const theirs = path.join(outside, 'film-no-subtitles.mp4');
+    execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'lavfi', '-i', 'testsrc=size=160x90:rate=10', '-t', '2', '-pix_fmt', 'yuv420p', theirs]);
+    const state = (video: string) => fs.writeFileSync(path.join(root, '.studio', 'state.json'), JSON.stringify({ video, exported: true }));
+    const cut = () => fs.existsSync(path.join(root, 'out', 'frames', '5.jpg'));
+    // another account's film, by its own path and through a link in the project: never cut (the live film is tried
+    // instead, and this project has no pages, so that fails)
+    for (const video of [path.join(outside, 'film-with-subtitles.mp4'), path.join(root, 'out', 'film-with-subtitles.mp4')]) {
+      if (video.startsWith(root)) fs.symlinkSync(theirs, path.join(root, 'out', 'film-no-subtitles.mp4'));
+      state(video);
+      await studio.frames('p1', [0.5]).catch(() => undefined);
+      assert.equal(cut(), false, video);
+    }
+    // the same film as the project's own file is cut
+    fs.rmSync(path.join(root, 'out', 'film-no-subtitles.mp4'));
+    fs.copyFileSync(theirs, path.join(root, 'out', 'film-no-subtitles.mp4'));
+    assert.deepEqual(await studio.frames('p1', [0.5]), ['out/frames/5.jpg']);
+    assert.equal(cut(), true);
   } finally { fs.rmSync(dataDir, { recursive: true, force: true }); fs.rmSync(outside, { recursive: true, force: true }); }
 });

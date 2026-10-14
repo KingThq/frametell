@@ -249,7 +249,7 @@ export class Director {
     // the film's language is the server's to say (the page agents and the checks read it from here)
     try {
       const j = this.project.storyboard();
-      if (j.lang !== (this.o.brief.lang ?? 'zh')) fs.writeFileSync(this.project.file('storyboard.json'), JSON.stringify({ ...j, lang: this.o.brief.lang ?? 'zh' }, null, 2));
+      if (j.lang !== (this.o.brief.lang ?? 'zh')) this.project.write('storyboard.json', JSON.stringify({ ...j, lang: this.o.brief.lang ?? 'zh' }, null, 2));
     } catch {}
     for (let round = 1; ; round++) {
       const issues = this.project.storyboardIssues();
@@ -299,7 +299,7 @@ export class Director {
   private serverMeta() {
     const extras = new Set<string>(styleExtras(this.o.style));
     try {   // keep components the page agents registered (use-extra.mjs appends to META.extras)
-      const m = /extras:\s*(\[[^\]\n]*\])/.exec(fs.readFileSync(this.project.file('script.js'), 'utf8'));
+      const m = /extras:\s*(\[[^\]\n]*\])/.exec(this.project.read('script.js'));
       if (m) for (const e of JSON.parse(m[1].replace(/'/g, '"'))) extras.add(e);
     } catch {}
     // a style component copied into extras/ by use-extra is the same file: load it once, from the engine
@@ -308,7 +308,7 @@ export class Director {
     const gl = styleWebgl(this.o.style) ? (() => {
       const vendor = new Set<string>(['three']);
       try {   // keep vendors the page agents added
-        const m = /vendor:\s*(\[[^\]\n]*\])/.exec(fs.readFileSync(this.project.file('script.js'), 'utf8'));
+        const m = /vendor:\s*(\[[^\]\n]*\])/.exec(this.project.read('script.js'));
         if (m) for (const v of JSON.parse(m[1].replace(/'/g, '"'))) vendor.add(v);
       } catch {}
       return { vendor: [...vendor], webgl: true };
@@ -318,15 +318,14 @@ export class Director {
 
   /** Server-owned META fields, rewritten in place in script.js (the planner must not change them). */
   private setMeta(fields: Record<string, unknown>) {
-    const f = this.project.file('script.js');
-    let src = fs.readFileSync(f, 'utf8');
+    let src = this.project.read('script.js');
     for (const [k, v] of Object.entries(fields)) {
       if (v === undefined) continue;
       const json = JSON.stringify(v);
       const re = new RegExp(`(\\n\\s*)${k}:\\s*(\\{[^\\n]*\\}|\\[[^\\n]*\\]|'[^'\\n]*'|"[^"\\n]*"|[\\d.]+|true|false)\\s*,`);
       src = re.test(src) ? src.replace(re, `$1${k}: ${json},`) : src.replace(/const META = \{/, `const META = {\n    ${k}: ${json},`);
     }
-    fs.writeFileSync(f, src);
+    this.project.write('script.js', src);
   }
 
   // ── ③ narration ──────────────────────────────────────────────────────────────────────────────

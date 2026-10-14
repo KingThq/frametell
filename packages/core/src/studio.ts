@@ -4,8 +4,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createCatalog, PROVIDERS, type ProviderSpec } from '@frametell/models';
 import { bundledSample, ELEVENLABS_DEFAULT_VOICES, ElevenLabsError, elevenLabsTts, listElevenLabsVoices, volcengineTts, VoiceNotFound, VOLCENGINE_VOICES } from '@frametell/voice';
-import { Project, STYLES, cleanLook, type Renderer, type Timeline } from '@frametell/agent';
-import { ENGINE_DIR, engineModulesDir, linkProject } from '@frametell/engine/tools/project.mjs';
+import { Project, STYLES, cleanLook, openProjectFile, type OpenFile, type Renderer, type Timeline } from '@frametell/agent';
+import { linkProject } from '@frametell/engine/tools/project.mjs';
 import { DATA_DIR, configFile, patchConfig, publicConfig, type ConfigStore } from './config.js';
 import { Projects } from './runner.js';
 import { checkEnv } from './env.js';
@@ -213,7 +213,11 @@ export class Studio {
     let st: { video?: string; exported?: boolean } = {};
     try { st = JSON.parse(fs.readFileSync(path.join(dir, '.studio', 'state.json'), 'utf8')); } catch {}
     const cut = st.video && st.exported !== false ? st.video.replace(/-有字幕\.mp4$/, '-无字幕.mp4').replace(/-with-subtitles\.mp4$/, '-no-subtitles.mp4') : undefined;
-    return new Project(dir).stills(ts, cut && fs.existsSync(cut) ? cut : undefined);
+    // the film named there must be a file of this project's own (opened and checked): a link to another account's film
+    // or a path elsewhere is ignored, and the frames are drawn live instead
+    const film = cut ? openProjectFile(dir, cut) : null;
+    if (film) fs.closeSync(film.fd);
+    return new Project(dir).stills(ts, film ? cut : undefined);
   }
 
   start(id: string) { return this.store.runner(id).start(); }
@@ -266,62 +270,8 @@ export class Studio {
    */
   openProjectFile(id: string, rel: string): OpenFile | null {
     if (!/^[\w-]+$/.test(id)) return null;
-    const root = this.store.dir(id);
-    const abs = path.resolve(root, rel || 'index.html');
-    const r = path.relative(root, abs);
-    if (r.startsWith('..') || path.isAbsolute(r)) return null;
-    let fd: number;
-    // non-blocking: a FIFO planted under the name would otherwise hold the open forever
-    try { fd = fs.openSync(abs, fs.constants.O_RDONLY | (fs.constants.O_NONBLOCK ?? 0) | (fs.constants.O_NOCTTY ?? 0)); } catch { return null; }
-    try {
-      const st = fs.fstatSync(fd, { bigint: true });
-      if (!st.isFile()) throw new Error('not a file');
-      const real = openedPath(fd, abs, st);
-      if (!real) throw new Error('moved');
-      const own = within(fs.realpathSync(root), real);
-      if (!own && !engineRoots().some((dir) => within(dir, real))) throw new Error('outside');
-      if (own && st.nlink > 1n) throw new Error('hard link');
-      return { fd, name: abs, path: real, size: Number(st.size), mtimeMs: Number(st.mtimeMs), mtime: st.mtime };
-    } catch {
-      fs.closeSync(fd);
-      return null;
-    }
+    return openProjectFile(this.store.dir(id), rel || 'index.html', { engine: true, record: true });
   }
 }
 
-/** an opened file: `fd` (the caller closes it), the name it was asked for, its real path, and its size and time as opened */
-export interface OpenFile { fd: number; name: string; path: string; size: number; mtimeMs: number; mtime: Date }
-
-/** the real path of what `fd` is. Linux names it (/proc/self/fd); elsewhere the real path of the name it was opened by,
- *  which must still be the very file opened (same device and inode), or a link moved in between and null is returned */
-function openedPath(fd: number, name: string, st: fs.BigIntStats): string | null {
-  if (process.platform === 'linux') {
-    try {
-      const p = fs.readlinkSync(`/proc/self/fd/${fd}`);
-      return p.startsWith('/') && !p.endsWith(' (deleted)') ? p : null;
-    } catch { /* no /proc: as elsewhere */ }
-  }
-  try {
-    const real = fs.realpathSync(name);
-    const now = fs.statSync(real, { bigint: true });
-    return now.dev === st.dev && now.ino === st.ino ? real : null;
-  } catch { return null; }
-}
-
-const within = (dir: string, p: string) => { const r = path.relative(dir, p); return !r.startsWith('..') && !path.isAbsolute(r); };
-
-/** the installed engine and its modules (pnpm links each module in from a store elsewhere, so each one's real folder counts) */
-function engineRoots(): string[] {
-  const out = new Set<string>();
-  const add = (p: string) => { try { out.add(fs.realpathSync(p)); } catch { /* gone */ } };
-  add(ENGINE_DIR);
-  const mods = engineModulesDir();
-  add(mods);
-  try {
-    for (const n of fs.readdirSync(mods)) {
-      add(path.join(mods, n));
-      if (n.startsWith('@')) for (const m of fs.readdirSync(path.join(mods, n))) add(path.join(mods, n, m));
-    }
-  } catch { /* none */ }
-  return [...out];
-}
+export type { OpenFile };

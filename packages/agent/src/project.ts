@@ -1,5 +1,6 @@
 // The orchestrator's hands on a project: engine tools (lint, snap, timeline, render, film gate) and git history.
 import fs from 'node:fs';
+import os from 'node:os';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { execFile, spawn } from 'node:child_process';
@@ -9,6 +10,7 @@ import { measure, type FilmGateResult } from '@frametell/engine/tools/film-gate.
 import { FFMPEG } from '@frametell/engine/tools/bins.mjs';
 import { confine } from './tools/sandbox.js';
 import { gitAsync, gitSync, stageAll, stageAllSync } from './git.js';
+import { openProjectFile, readIn, writeIn, type OpenFile } from './projectfs.js';
 
 export interface Cue { i: number; at: number; abs: number; text: string }
 export interface PageTiming { id: string; start: number; end: number; speechEnd: number; cues: Cue[] }
@@ -44,6 +46,28 @@ export const nodeEnv = (extra: Record<string, string | undefined> = {}): Record<
 /** run a program to completion without blocking the process */
 const run = (cmd: string, args: string[], cwd?: string) => new Promise<void>((ok, fail) => execFile(cmd, args, { cwd, timeout: 120_000, env: nodeEnv() }, (e, _o, err) => (e ? fail(new Error(String(err || e.message).slice(0, 1000))) : ok())));
 
+/**
+ * One frame cut by ffmpeg from a file of the project that was opened and checked (`from`), installed at `out` in the
+ * project. ffmpeg reads the opened descriptor (handed to it as fd 3), never the name, which the agent's shell could
+ * swap for a link to another account's film; it writes a private temp file, copied in with writeIn (never through a
+ * link planted at `out`).
+ */
+async function cutFrame(dir: string, from: OpenFile, before: string[], after: string[], out: string) {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'frametell-cut-'));
+  const jpg = path.join(tmp, 'frame.jpg');
+  try {
+    const input = process.platform === 'win32' ? from.path : '/dev/fd/3';   // Windows has no /dev/fd: the checked real path
+    await new Promise<void>((ok, fail) => {
+      const child = spawn(FFMPEG, ['-y', '-loglevel', 'error', ...before, '-i', input, ...after, jpg], { stdio: ['ignore', 'ignore', 'pipe', from.fd], env: nodeEnv(), timeout: 120_000 });
+      let err = '';
+      child.stderr!.on('data', (d: Buffer) => { err += d.toString(); });
+      child.on('error', fail);
+      child.on('close', (code) => (code === 0 ? ok() : fail(new Error((err || `ffmpeg exited ${code}`).slice(0, 1000)))));
+    });
+    writeIn(dir, out, fs.readFileSync(jpg), { record: true });
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+}
+
 /** how an engine tool is run: as Node, and inside the shell's sandbox when the network is taken away (the hosted
  *  sandbox), since the pages it opens in Chrome run code the agent wrote */
 export const engineCmd = (dir: string, args: string[]): [string, string[]] =>
@@ -78,14 +102,19 @@ export class Project {
   constructor(readonly dir: string, private renderer?: Renderer, private signal?: AbortSignal) { linkProject(dir); }
 
   file(rel: string) { return path.join(this.dir, rel); }
-  read(rel: string) { return fs.readFileSync(this.file(rel), 'utf8'); }
+  /** a file of the project, read through a checked descriptor (never another account's file behind a planted link) */
+  read(rel: string) { return readIn(this.dir, rel, { record: true }).toString('utf8'); }
+  /** writes a file of the project, never through a planted link */
+  write(rel: string, data: string) { writeIn(this.dir, rel, data, { record: true }); }
+  /** a film (an absolute path) opened and checked to be a file of this project's own, or undefined */
+  private film(video: string): OpenFile | undefined { return openProjectFile(this.dir, video) ?? undefined; }
   exists(rel: string) { return fs.existsSync(this.file(rel)); }
 
   storyboard(): Storyboard { return JSON.parse(this.read('storyboard.json')); }
   materialsText(): string {
     const dir = this.file('materials');
     if (!fs.existsSync(dir)) return '';
-    return fs.readdirSync(dir).filter((f) => /\.(md|txt)$/i.test(f)).map((f) => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n\n');
+    return fs.readdirSync(dir).filter((f) => /\.(md|txt)$/i.test(f)).flatMap((f) => { try { return [this.read(path.join('materials', f))]; } catch { return []; } }).join('\n\n');
   }
   storyboardIssues(): StoryboardIssue[] {
     try { return lintStoryboard(this.storyboard(), { source: this.materialsText() }); }
@@ -105,15 +134,20 @@ export class Project {
    */
   async stills(times: number[], video?: string): Promise<string[]> {
     const ts = times.map((t) => Math.max(0, Math.round(t * 10) / 10));
-    const dir = path.join(this.dir, 'out', 'frames');
-    fs.mkdirSync(dir, { recursive: true });
-    if (video) {
-      const vt = fs.statSync(video).mtimeMs;
-      return Promise.all(ts.map(async (t) => {
-        const rel = `out/frames/${Math.round(t * 10)}.jpg`, abs = path.join(this.dir, rel);
-        if (!fs.existsSync(abs) || fs.statSync(abs).mtimeMs < vt) await run(FFMPEG, ['-y', '-loglevel', 'error', '-ss', t.toFixed(2), '-i', video, '-frames:v', '1', '-q:v', '2', abs]);
-        return rel;
-      }));
+    // a film that is not a file of this project (a link to another account's, an absolute path elsewhere) is ignored
+    const film = video ? this.film(video) : undefined;
+    if (film) {
+      try {
+        const vt = film.mtimeMs;
+        // one at a time: they share the one opened film (and its offset)
+        const out: string[] = [];
+        for (const t of ts) {
+          const rel = `out/frames/${Math.round(t * 10)}.jpg`, abs = path.join(this.dir, rel);
+          if (!fs.existsSync(abs) || fs.statSync(abs).mtimeMs < vt) await cutFrame(this.dir, film, ['-ss', t.toFixed(2)], ['-frames:v', '1', '-q:v', '2'], rel);
+          out.push(rel);
+        }
+        return out;
+      } finally { fs.closeSync(film.fd); }
     }
     // the film as it is now: its script, voice and pages; any change gives new names, so old frames are never shown
     const files = ['script.js', 'voice.js', ...fs.readdirSync(this.file('pages')).map((f) => `pages/${f}`)];
@@ -125,7 +159,9 @@ export class Project {
       await run(cmd, argv, this.dir);
       await Promise.all(todo.map(async (t) => {
         const png = this.file(`out/snap/snap-${t}.png`);
-        await run(FFMPEG, ['-y', '-loglevel', 'error', '-i', png, '-q:v', '2', path.join(this.dir, rel(t))]);
+        const shot = openProjectFile(this.dir, png);
+        if (!shot) throw new Error(`screenshot failed: out/snap/snap-${t}.png is not a file of the project`);
+        try { await cutFrame(this.dir, shot, [], ['-q:v', '2'], rel(t)); } finally { fs.closeSync(shot.fd); }
         fs.rmSync(png, { force: true });
       }));
     }
@@ -134,18 +170,19 @@ export class Project {
 
   async posters(video: string, pages: PageTiming[]): Promise<Record<string, string>> {
     const out: Record<string, string> = {};
-    const dir = path.join(this.dir, 'out', 'thumbs');
-    const vt = fs.statSync(video).mtimeMs;
-    for (const p of pages) {
-      const rel = `out/thumbs/${p.id}.jpg`, abs = path.join(this.dir, rel);
-      try {
-        if (!fs.existsSync(abs) || fs.statSync(abs).mtimeMs < vt) {
-          fs.mkdirSync(dir, { recursive: true });
-          await run(FFMPEG, ['-y', '-loglevel', 'error', '-ss', Math.max(p.start, p.end - 0.4).toFixed(2), '-i', video, '-frames:v', '1', '-vf', 'scale=640:-2', '-q:v', '4', abs]);
-        }
-        out[p.id] = rel;
-      } catch { /* a frame that will not cut leaves that page on its check sheet */ }
-    }
+    // a film that is not a file of this project (a link to another account's) gives no posters
+    const film = this.film(video);
+    if (!film) return out;
+    try {
+      const vt = film.mtimeMs;
+      for (const p of pages) {
+        const rel = `out/thumbs/${p.id}.jpg`, abs = path.join(this.dir, rel);
+        try {
+          if (!fs.existsSync(abs) || fs.statSync(abs).mtimeMs < vt) await cutFrame(this.dir, film, ['-ss', Math.max(p.start, p.end - 0.4).toFixed(2)], ['-frames:v', '1', '-vf', 'scale=640:-2', '-q:v', '4'], rel);
+          out[p.id] = rel;
+        } catch { /* a frame that will not cut leaves that page on its check sheet */ }
+      }
+    } finally { fs.closeSync(film.fd); }
     return out;
   }
 

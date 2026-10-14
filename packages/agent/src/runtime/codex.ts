@@ -3,7 +3,9 @@
 // project so the user's own Codex login and config are never used implicitly.
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { Codex, type ThreadEvent } from '@openai/codex-sdk';
+import { imagesIn } from '../projectfs.js';
 import { addUsage, emptyUsage, proxyEnv, type AgentRuntime, type AgentSession, type SessionOptions, type StageInput, type TurnResult } from './types.js';
 
 export interface CodexRuntimeOptions {
@@ -40,8 +42,13 @@ export function codexRuntime(o: CodexRuntimeOptions): AgentRuntime {
           const abort = new AbortController();
           s.signal?.addEventListener('abort', () => abort.abort(), { once: true });
           let turns = 0, usage = emptyUsage(), last = '', error: string | undefined, stop: TurnResult['stopReason'] = 'done';
+          let tmp: string | undefined;
           try {
-            const { events } = await thread.runStreamed([{ type: 'text', text }, ...(input.images || []).map((p) => ({ type: 'local_image' as const, path: p }))], { signal: abort.signal });
+            // Codex reads a picture by its name: it gets a private copy of the checked bytes, never the project's name
+            const pics = imagesIn(s.cwd, input.images);
+            tmp = pics.length ? fs.mkdtempSync(path.join(os.tmpdir(), 'frametell-pics-')) : undefined;
+            const local = pics.map(({ file, data }, i) => { const p = path.join(tmp!, `${i}${path.extname(file)}`); fs.writeFileSync(p, data); return { type: 'local_image' as const, path: p }; });
+            const { events } = await thread.runStreamed([{ type: 'text', text }, ...local], { signal: abort.signal });
             for await (const e of events as AsyncIterable<ThreadEvent>) {
               if (e.type === 'item.started' && (e.item.type === 'command_execution' || e.item.type === 'file_change')) {
                 turns++;
@@ -63,7 +70,7 @@ export function codexRuntime(o: CodexRuntimeOptions): AgentRuntime {
           } catch (e) {
             if (abort.signal.aborted && stop === 'done') stop = 'aborted';
             else if (stop === 'done') { stop = 'error'; error = (e as Error).message; }
-          }
+          } finally { if (tmp) fs.rmSync(tmp, { recursive: true, force: true }); }
           return { ok: stop === 'done', text: last, turns, usage, error, stopReason: stop, answers: [] };
         },
         async close() {},

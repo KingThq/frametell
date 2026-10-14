@@ -1,7 +1,6 @@
 // File and shell tools for the Pi runtime. Everything is confined to the project directory: the engine (engine/,
 // engine_modules/) is read-only, nothing outside the project is reachable (the shell runs in a sandbox, see
 // sandbox.ts), commands run with a timeout and see no keys.
-import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { nodeEnv } from '../project.js';
@@ -9,12 +8,15 @@ import { Type } from 'typebox';
 import type { AgentTool } from '@earendil-works/pi-agent-core';
 import { rewriteRefusal } from '../runtime/types.js';
 import { confine } from './sandbox.js';
+import { editIn, readIn, writeIn } from '../projectfs.js';
 
 const READ_ONLY = ['engine', 'engine_modules', '.git'];
 const STUDIO = '.studio';
 const IMAGE = /\.(png|jpe?g|webp|gif)$/i;
 const MAX_TEXT = 60_000;
 
+/** the lexical check, for its messages: what a name may reach is decided again on what is opened (projectfs.ts), since
+ *  the agent's shell can plant links in the project */
 export function resolveIn(root: string, p: string, write = false): string {
   const abs = path.resolve(root, p);
   const rel = path.relative(root, abs);
@@ -48,11 +50,12 @@ export function fileTools(root: string, opts: { timeoutMs?: number } = {}): Agen
     parameters: ReadP,
     execute: async (_id, p) => {
       const abs = resolveIn(root, p.path);
+      const bytes = readIn(root, abs, { engine: true, shown: p.path });
       if (IMAGE.test(abs)) {
         const mime = /\.png$/i.test(abs) ? 'image/png' : /\.webp$/i.test(abs) ? 'image/webp' : /\.gif$/i.test(abs) ? 'image/gif' : 'image/jpeg';
-        return { content: [{ type: 'image', data: fs.readFileSync(abs).toString('base64'), mimeType: mime }], details: undefined };
+        return { content: [{ type: 'image', data: bytes.toString('base64'), mimeType: mime }], details: undefined };
       }
-      const lines = fs.readFileSync(abs, 'utf8').split('\n');
+      const lines = bytes.toString('utf8').split('\n');
       const from = Math.max(0, (p.offset ?? 1) - 1), to = p.limit ? from + p.limit : lines.length;
       let out = lines.slice(from, to).map((l, i) => `${String(from + i + 1).padStart(5)}  ${l}`).join('\n');
       if (out.length > MAX_TEXT) out = out.slice(0, MAX_TEXT) + `\n… (truncated; read with offset/limit)`;
@@ -66,10 +69,10 @@ export function fileTools(root: string, opts: { timeoutMs?: number } = {}): Agen
     executionMode: 'sequential',
     execute: async (_id, p) => {
       const abs = resolveIn(root, p.path, true);
-      const refused = rewriteRefusal(path.relative(root, abs), fs.existsSync(abs) ? fs.readFileSync(abs, 'utf8') : undefined);
-      if (refused) throw new Error(refused);
-      fs.mkdirSync(path.dirname(abs), { recursive: true });
-      fs.writeFileSync(abs, p.content);
+      writeIn(root, abs, p.content, { shown: p.path, before: (existing) => {
+        const refused = rewriteRefusal(path.relative(root, abs), existing);
+        if (refused) throw new Error(refused);
+      } });
       return text(`wrote ${p.path} (${p.content.split('\n').length} lines)`);
     },
   };
@@ -80,11 +83,13 @@ export function fileTools(root: string, opts: { timeoutMs?: number } = {}): Agen
     executionMode: 'sequential',
     execute: async (_id, p) => {
       const abs = resolveIn(root, p.path, true);
-      const src = fs.readFileSync(abs, 'utf8');
-      const n = src.split(p.old_string).length - 1;
-      if (n === 0) throw new Error('old_string not found');
-      if (n > 1 && !p.replace_all) throw new Error(`old_string occurs ${n} times; add context or set replace_all`);
-      fs.writeFileSync(abs, p.replace_all ? src.split(p.old_string).join(p.new_string) : src.replace(p.old_string, () => p.new_string));
+      let n = 0;
+      editIn(root, abs, (src) => {
+        n = src.split(p.old_string).length - 1;
+        if (n === 0) throw new Error('old_string not found');
+        if (n > 1 && !p.replace_all) throw new Error(`old_string occurs ${n} times; add context or set replace_all`);
+        return p.replace_all ? src.split(p.old_string).join(p.new_string) : src.replace(p.old_string, () => p.new_string);
+      }, { shown: p.path });
       return { ...text(`edited ${p.path} (${p.replace_all ? n : 1} replacement${n > 1 && p.replace_all ? 's' : ''})`), terminate: p.finish === true };
     },
   };
