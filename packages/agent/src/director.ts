@@ -8,7 +8,7 @@ import { Project, type LintIssue, type LintKind, type PageTiming, type Storyboar
 import { FLAG, VERDICT, fixPrompt, langNote, voiceNote, pagePrompt, pageSystem, plannerSystem, replyNote, reviewPrompt, reviewerPrompt, reviewerSystem, scriptPrompt, storyboardFixPrompt, storyboardPrompt, verdictAgain, type Brief, type Problem } from './prompts.js';
 import { addUsage, emptyUsage, type AgentRuntime, type AgentSession, type SessionOptions, type Thinking, type TokenUsage, type TurnResult } from './runtime/types.js';
 import type { PageIssue, PageStatus, Stage, StudioEvent } from './events.js';
-import type { Look } from './look.js';
+import { designedFonts, designedIssues, designedLook, type Look } from './look.js';
 import { ENGINE_DIR } from '@frametell/engine/tools/project.mjs';
 
 export interface Prices { input: number; output: number; cacheRead: number; cacheWrite: number; currency: 'CNY' | 'USD' }
@@ -256,7 +256,7 @@ export class Director {
       if (j.lang !== (this.o.brief.lang ?? 'zh')) fs.writeFileSync(this.project.file('storyboard.json'), JSON.stringify({ ...j, lang: this.o.brief.lang ?? 'zh' }, null, 2));
     } catch {}
     for (let round = 1; ; round++) {
-      const issues = this.project.storyboardIssues();
+      const issues = [...this.project.storyboardIssues(), ...this.lookIssues()];
       this.emit({ type: 'storyboard_check', round, issues });
       const reds = issues.filter((i) => i.level === 'red');
       if (!reds.length || round > MAX.storyboardFix) break;
@@ -299,6 +299,22 @@ export class Director {
     this.emit({ type: 'stage', stage: 'script', status: 'done', detail: check.out.split('\n').pop() });
   }
 
+  /** a designed style's film (its style has no look of its own): what its storyboard still lacks of the look */
+  private lookIssues(): { level: 'red'; msg: string }[] {
+    const fonts = designedFonts(this.o.style);
+    if (!fonts) return [];
+    let look: unknown;
+    try { look = this.project.storyboard().look; } catch { return []; }   // an unreadable storyboard is reported already
+    return designedIssues(look, fonts).map((msg) => ({ level: 'red' as const, msg }));
+  }
+
+  /** a designed style's film: the look the director wrote in storyboard.json (its card and what it comes to) */
+  private designed() {
+    const fonts = designedFonts(this.o.style);
+    if (!fonts) return undefined;
+    try { return designedLook(this.project.storyboard().look, fonts); } catch { return undefined; }
+  }
+
   /** Style, voice, pacing and the style's components: owned by the server, re-applied after every agent edit. */
   private serverMeta() {
     const extras = new Set<string>(styleExtras(this.o.style));
@@ -317,7 +333,7 @@ export class Director {
       } catch {}
       return { vendor: [...vendor], webgl: true };
     })() : {};
-    this.setMeta({ style: this.o.style, lang: this.o.brief.lang ?? 'zh', voice: this.o.voice, gap: 0.8, pace: { maxHold: 1.0, gap: 0.8 }, extras: list, look: this.o.look, ...gl });
+    this.setMeta({ style: this.o.style, lang: this.o.brief.lang ?? 'zh', voice: this.o.voice, gap: 0.8, pace: { maxHold: 1.0, gap: 0.8 }, extras: list, look: this.o.look ?? this.designed()?.look, ...gl });
   }
 
   /** Server-owned META fields, rewritten in place in script.js (the planner must not change them). */
@@ -470,7 +486,7 @@ export class Director {
     this.setPage(id, st);
     let s: AgentSession | undefined;
     try {
-      s = await this.session(`page-${id}`, pageSystem(this.o.style, styleExtras(this.o.style), this.o.brief.preferences, this.o.brief.styleNotes), MAX.pageTurns, was?.ref, undefined, { answers: [FLAG] });
+      s = await this.session(`page-${id}`, pageSystem(this.o.style, styleExtras(this.o.style), this.o.brief.preferences, this.o.brief.styleNotes, this.designed()?.card), MAX.pageTurns, was?.ref, undefined, { answers: [FLAG] });
       const fix = this.state.revision?.[id];
       // a revision's page already exists, so "is there a file" says nothing: what tells is whether the code changed
       // (seen: a revision whose edits never landed was checked, passed and shown as done, on the old page)
@@ -514,7 +530,7 @@ export class Director {
           }
           this.setPage(id, { ...st, issues: issues.map(fromLint) }, { sheet: c.sheet });
           const change = unchanged() ? fix : undefined;
-          reviewer ??= await this.session(`check-${id}`, reviewerSystem(this.o.style, this.o.brief.styleNotes), MAX.reviewerTurns, undefined, undefined, { tools: 'none', answers: [VERDICT] });
+          reviewer ??= await this.session(`check-${id}`, reviewerSystem(this.o.style, this.o.brief.styleNotes, this.designed()?.card), MAX.reviewerTurns, undefined, undefined, { tools: 'none', answers: [VERDICT] });
           verdict = await this.verdict(reviewer, reviewerPrompt(sb, id, t, round, issues, times, change), c.sheet);
           const errors = errorsOf(issues), problems = verdict?.pass === false ? verdict.problems : [];
           if (!errors.length && !problems.length) { st.status = 'ok'; st.issues = []; break; }
@@ -582,7 +598,7 @@ export class Director {
     const limit = defectsOnly ? new AbortController() : undefined;
     const timer = limit && setTimeout(() => limit.abort(), MAX.reviewDefectsMs);
     const signal = limit ? AbortSignal.any([limit.signal, ...(this.o.signal ? [this.o.signal] : [])]) : this.o.signal;
-    const s = await this.session('review', pageSystem(this.o.style, styleExtras(this.o.style), this.o.brief.preferences, this.o.brief.styleNotes), MAX.pageTurns, undefined, signal);
+    const s = await this.session('review', pageSystem(this.o.style, styleExtras(this.o.style), this.o.brief.preferences, this.o.brief.styleNotes, this.designed()?.card), MAX.pageTurns, undefined, signal);
     let timedOut = false;
     try {
       for (let round = 1; round <= (defectsOnly ? 1 : MAX.reviewRounds); round++) {

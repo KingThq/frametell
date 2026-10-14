@@ -22,7 +22,8 @@ export type PageCheck = { issues: LintIssue[]; sheet: string; crash?: undefined 
 
 export interface Beat { at: string; object: string; action: string; camera?: string; text?: string }
 export interface StoryPage { id: string; section: string; say: string; core?: boolean; beats: Beat[] }
-export interface Storyboard { title: string; summary: string; durationSec?: number; style: string; cast: string; lang?: 'zh' | 'en'; pages: StoryPage[] }
+/** `look`: a designed style's film only, the look the director designed for it (look.ts designedLook) */
+export interface Storyboard { title: string; summary: string; durationSec?: number; style: string; cast: string; lang?: 'zh' | 'en'; look?: unknown; pages: StoryPage[] }
 
 /** The environment for a child that runs process.execPath as Node: inside Electron the executable is the app, which runs
  * as plain Node only with ELECTRON_RUN_AS_NODE (it must not be set for the app's own helper processes, so only here). */

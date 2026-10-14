@@ -11,7 +11,7 @@ const en: typeof zh = {
   scriptDetail: (v) => `${v.pages} pages · ${v.cues} lines · about ${v.min ? `${v.min}m ` : ''}${v.sec}s`,
   voiceDetail: '{s}s of audio',
   doing: { storyboard: 'Planning the storyboard', script: 'Writing the narration', narrate: 'Recording the voiceover', pages: 'Drawing page by page', review: 'Checking the whole film', render: 'Rendering the film' },
-  approval: { hint: 'Want changes? Say so below', approve: 'Approve and start making', approved: 'Approved' },
+  approval: { hint: 'Want changes? Say so below', approve: 'Approve and start making', approved: 'Approved', look: 'This film’s look' },
   page: {
     queued: 'Queued',
     drawing: (v) => `Drawing${v.progress ? ` · ${v.progress}` : ''}`,

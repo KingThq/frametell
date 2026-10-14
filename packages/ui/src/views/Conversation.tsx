@@ -79,11 +79,24 @@ const stageDoing = (s: Stage) => t(`conversation.doing.${s}`);
 
 // ── cards ───────────────────────────────────────────────────────────────────────────────────────────────────────────
 
+/** the look the director designed for a film whose style has none of its own: the card's first plain sentence, and up to
+ *  five of its colours (paper and ink first) */
+function designedLook(sb: Storyboard) {
+  const look = (sb as { look?: { card?: unknown; palette?: Record<string, unknown> } }).look;
+  if (!look || typeof look.card !== 'string') return undefined;
+  const line = look.card.split('\n').map((l) => l.replace(/^[#>*\-\s]+/, '').replace(/\*\*/g, '').trim()).find((l) => l.length > 12);
+  const p = look.palette ?? {};
+  const hex = (v: unknown) => (typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v) ? v : undefined);
+  const colours = [p.paper, p.ink, ...Object.entries(p).filter(([k]) => k !== 'paper' && k !== 'ink' && !k.endsWith('F')).map(([, v]) => v)].map(hex).filter(Boolean).slice(0, 5) as string[];
+  return line ? { line, colours } : undefined;
+}
+
 function Approval({ sb, project, run, active }: { sb: Storyboard; project: ProjectView; run: RunView; active: boolean }) {
   useT();
   const [sent, setSent] = useState(false);
   const [failed, setFailed] = useState<string>();
   const live = active && !sent;
+  const look = useMemo(() => designedLook(sb), [sb]);
   // short of credits for the go-ahead: the notice above the composer says so, and the button waits for the balance
   const short = useShort(project.id, run);
   // a go-ahead that was refused (credits, or anything else) leaves the card as it was, to press again
@@ -96,6 +109,12 @@ function Approval({ sb, project, run, active }: { sb: Storyboard; project: Proje
       <div className="px-4 pb-3 pt-3.5">
         <h4 className="text-balance text-[14.5px] font-semibold leading-snug">{sb.title}</h4>
         {sb.summary && sb.summary !== sb.title && <p className="mt-1 text-[13px] leading-relaxed text-ink-2">{sb.summary}</p>}
+        {look && (
+          <p className="mt-2.5 flex items-start gap-2.5 text-[12.5px] leading-relaxed text-ink-2">
+            <span className="mt-[3px] flex shrink-0" aria-hidden>{look.colours.map((c, i) => <i key={i} className="-ml-1 h-3.5 w-3.5 rounded-full ring-2 ring-surface first:ml-0" style={{ background: c }} />)}</span>
+            <span><span className="mr-1.5 text-ink-3">{t('conversation.approval.look')}</span>{look.line}</span>
+          </p>
+        )}
       </div>
       <ol className="divide-y divide-line border-t border-line">
         {sb.pages.map((p, i) => (

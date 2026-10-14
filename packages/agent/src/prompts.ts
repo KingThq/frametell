@@ -43,13 +43,20 @@ export function styleNotesSection(notes?: string) {
   return n ? `---\n# This film's own look\n\nThe user shaped the style above for their films, and keeps these notes with it: how they like it drawn and told. Follow them wherever they bear on your part of the work, as long as the style's rules above still hold. This film's own request, and anything the user says while it is made, come first.\n\n<style-notes>\n${n}\n</style-notes>` : '';
 }
 
+/** A designed style's film (one whose style has no look of its own): the style card the director wrote for it in
+ *  storyboard.json. After the style's own card, which says how to read it; binding on every page. */
+export function filmCardSection(card?: string) {
+  const c = card?.trim();
+  return c ? `---\n# This film's style card\n\nThe director designed this film's look, and wrote it here. It is this film's style: hold every page to it, as you would a style's own card. The palette and the typeface it names are already set for the film (\`ink\`, \`paper\` and the other colour names, the hand and latin faces): use them by name, don't restate them as hex. This film's own request, and anything the user says while it is made, come first.\n\n<style-card>\n${c}\n</style-card>` : '';
+}
+
 export function plannerSystem(style: string, preferences?: string, styleNotes?: string) {
   return [read('PLANNER.md'), '---\n# This film\'s style (the page agent draws to it, so the storyboard must be drawable in it)\n\n' + grammar(style), styleNotesSection(styleNotes), '---\n' + read('LIB.md'), preferencesSection(preferences)].filter(Boolean).join('\n\n');
 }
 /** the page agent's system prompt: process, the style's grammar, the drawing API, the style's components with a worked
  *  example page, and the wider component library (the stable part of every page session, so it caches well) */
-export function pageSystem(style: string, extras: string[] = [], preferences?: string, styleNotes?: string) {
-  return [read('PAGE.md'), '---\n# This film\'s style\n\n' + grammar(style), styleNotesSection(styleNotes), '---\n' + read('API.md'), '---\n' + pagePack(style, extras), '---\n' + read('LIB.md'), preferencesSection(preferences)].filter(Boolean).join('\n\n');
+export function pageSystem(style: string, extras: string[] = [], preferences?: string, styleNotes?: string, card?: string) {
+  return [read('PAGE.md'), '---\n# This film\'s style\n\n' + grammar(style), filmCardSection(card), styleNotesSection(styleNotes), '---\n' + read('API.md'), '---\n' + pagePack(style, extras), '---\n' + read('LIB.md'), preferencesSection(preferences)].filter(Boolean).join('\n\n');
 }
 
 /** the film's language (narration, on-screen text) and the language the director reports in (the user's) */
@@ -152,8 +159,8 @@ const lintLines = (issues: LintIssue[]) => issues.map((i) => `- ${i.local}s: ${i
 const sheetLine = (times: { local: number }[]) => `The attached sheet shows the page at these moments within it (left to right, top to bottom): ${times.map((x) => x.local.toFixed(1) + 's').join(', ')}.`;
 
 /** the reviewer's system prompt: how to judge a page, and the film's style (the stable part, shared by every page) */
-export function reviewerSystem(style: string, styleNotes?: string) {
-  return [read('REVIEW.md'), '---\n# This film\'s style\n\n' + grammar(style), styleNotesSection(styleNotes)].filter(Boolean).join('\n\n');
+export function reviewerSystem(style: string, styleNotes?: string, card?: string) {
+  return [read('REVIEW.md'), '---\n# This film\'s style\n\n' + grammar(style), filmCardSection(card), styleNotesSection(styleNotes)].filter(Boolean).join('\n\n');
 }
 
 /** a problem the reviewer sees on the page, and the change it asks for */
