@@ -3,7 +3,7 @@ export { Project, type Renderer, type Storyboard, type StoryPage, type Beat, typ
 export { gitSync, gitAsync, GIT_SAFE } from './git.js';
 export { cleanLook, type Look } from './look.js';
 export { STYLES, type Brief } from './prompts.js';
-export type { StudioEvent, Stage, PageStatus, UserRef } from './events.js';
+export type { StudioEvent, Stage, PageStatus, PageIssue, UserRef } from './events.js';
 export type { AgentRuntime, AgentSession, RuntimeEvent, TokenUsage, TurnResult } from './runtime/types.js';
 export { piRuntime } from './runtime/pi.js';
 // parked runtimes (Claude Agent SDK, Codex): not loaded with the package; import '@frametell/agent/runtime/claude' or '/codex'

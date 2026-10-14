@@ -9,6 +9,7 @@ export type Stage = Ev<'stage'>['stage'];
 export type StageStatus = 'pending' | 'running' | 'done' | 'failed' | 'skipped' | 'stopped';
 export type Storyboard = Ev<'approval'>['storyboard'];
 export type PageStatus = Ev<'page'>['status'];
+export type PageIssue = NonNullable<Ev<'page'>['issues']>[number];
 
 export interface ToolCall { id: string; name: string; summary: string; ok?: boolean }
 /** every item knows the stage it happened in, so the conversation reads as chapters */
@@ -35,7 +36,7 @@ export interface PageView {
   id: string;
   status: PageStatus;
   round: number;
-  issues: string[];
+  issues: PageIssue[];
   sheet?: string;
   thumb?: string;
   lastText?: string;
@@ -171,16 +172,13 @@ function step(v: RunView, e: LoggedEvent): RunView {
       if (page) {
         const id = page;
         const p = r.pages[id] ? { ...r.pages[id] } : newPage(id, r);
-        if (ev.type === 'text' && !/^(DONE|FLAGGED)\b/i.test(ev.text.trim())) p.lastText = ev.text;   // keep the description, not the check-loop reply
+        // what the agent says while drawing is the page's description; what it says while its page is checked is not
+        if (ev.type === 'text' && p.status === 'drawing') p.lastText = ev.text;
         if (ev.type === 'tool_start') { p.tools += 1; p.progress = undefined; }
         r.pages = { ...r.pages, [id]: p };
         return r;
       }
-      if (ev.type === 'text') {
-        // DONE / FLAGGED end the agent's check loop; they are protocol, not something to show people
-        const text = ev.text.replace(/(^|\n)\s*(DONE|FLAGGED)\b[^\n]*\s*$/i, '').trim();
-        if (text) push({ kind: 'say', key, session: e.session, text, at });
-      }
+      if (ev.type === 'text') { const text = ev.text.trim(); if (text) push({ kind: 'say', key, session: e.session, text, at }); }
       else if (ev.type === 'thinking') push({ kind: 'think', key, session: e.session, text: ev.text, at });
       else if (ev.type === 'tool_start' || ev.type === 'tool_end') {
         const last = r.feed[r.feed.length - 1];
@@ -207,7 +205,8 @@ function step(v: RunView, e: LoggedEvent): RunView {
       return r;
     case 'page': {
       const p = r.pages[e.id] ? { ...r.pages[e.id] } : newPage(e.id, r);
-      p.status = e.status; p.round = e.round ?? p.round; p.issues = e.issues ?? p.issues;
+      // a film from before issues had fields logged them as lines of text: kept as notes, which the panel doesn't word
+      p.status = e.status; p.round = e.round ?? p.round; p.issues = e.issues?.map((i: PageIssue | string) => (typeof i === 'string' ? { from: 'agent', msg: i } : i)) ?? p.issues;
       // a paused film has nothing in progress: a page still winding down after the pause (older runs went on for
       // minutes) waits as queued until the film continues
       if (r.paused && (p.status === 'drawing' || p.status === 'checking')) p.status = 'queued';

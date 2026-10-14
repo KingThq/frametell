@@ -7,8 +7,8 @@ import { narrate, type TtsProvider } from '@frametell/voice';
 import { Project, type LintIssue, type LintKind, type PageTiming, type Storyboard, type Renderer } from './project.js';
 import { FLAG, VERDICT, fixPrompt, langNote, voiceNote, pagePrompt, pageSystem, plannerSystem, replyNote, reviewPrompt, reviewerPrompt, reviewerSystem, scriptPrompt, storyboardFixPrompt, storyboardPrompt, verdictAgain, type Brief, type Problem } from './prompts.js';
 import { addUsage, emptyUsage, type AgentRuntime, type AgentSession, type SessionOptions, type Thinking, type TokenUsage, type TurnResult } from './runtime/types.js';
-import type { PageStatus, Stage, StudioEvent } from './events.js';
-import type { Look } from './look.js';
+import type { PageIssue, PageStatus, Stage, StudioEvent } from './events.js';
+import { designedFonts, designedIssues, designedLook, type Look } from './look.js';
 import { ENGINE_DIR } from '@frametell/engine/tools/project.mjs';
 
 export interface Prices { input: number; output: number; cacheRead: number; cacheWrite: number; currency: 'CNY' | 'USD' }
@@ -49,7 +49,7 @@ export interface DirectorOptions {
   review?: 'full' | 'defects';
 }
 
-interface PageState { status: PageStatus; rounds: number; issues: string[]; ref?: string; /** runs this page has failed in */ failures?: number }
+interface PageState { status: PageStatus; rounds: number; issues: PageIssue[]; ref?: string; /** runs this page has failed in */ failures?: number }
 interface State {
   stage: Stage | 'approval' | 'done';
   planner?: string;
@@ -143,6 +143,8 @@ const DEFECTS: LintKind[] = ['runtime', 'api', 'nondeterministic'];
 /** findings that mean the page's code does not run as written: such a page is not drawn */
 const BROKEN: LintKind[] = ['runtime', 'api'];
 const errorsOf = (issues: LintIssue[]) => issues.filter((i) => i.level === 'error');
+const fromLint = (i: LintIssue): PageIssue => ({ from: 'lint', kind: i.kind, at: i.local, msg: i.msg, data: i.data });
+const fromReview = (p: Problem): PageIssue => ({ from: 'review', at: p.at, msg: p.what });
 /** what the page agent said with its flag tool, if it used it */
 const flagOf = (r: TurnResult) => r.answers.find((a) => a.name === FLAG.name)?.args.reason as string | undefined;
 
@@ -155,6 +157,8 @@ export class Director {
     this.project = new Project(o.dir, o.renderer, o.signal);
     const f = this.project.file('.studio/state.json');
     this.state = fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : { stage: 'storyboard', pages: {}, usage: emptyUsage() };
+    // a film from before issues had fields kept them as lines of text: kept as notes, which no panel words
+    for (const p of Object.values(this.state.pages ?? {})) p.issues = (p.issues ?? []).map((i: PageIssue | string) => (typeof i === 'string' ? { from: 'agent', msg: i } : i));
   }
 
   get stage() { return this.state.stage; }
@@ -252,7 +256,7 @@ export class Director {
       if (j.lang !== (this.o.brief.lang ?? 'zh')) this.project.write('storyboard.json', JSON.stringify({ ...j, lang: this.o.brief.lang ?? 'zh' }, null, 2));
     } catch {}
     for (let round = 1; ; round++) {
-      const issues = this.project.storyboardIssues();
+      const issues = [...this.project.storyboardIssues(), ...this.lookIssues()];
       this.emit({ type: 'storyboard_check', round, issues });
       const reds = issues.filter((i) => i.level === 'red');
       if (!reds.length || round > MAX.storyboardFix) break;
@@ -295,6 +299,22 @@ export class Director {
     this.emit({ type: 'stage', stage: 'script', status: 'done', detail: check.out.split('\n').pop() });
   }
 
+  /** a designed style's film (its style has no look of its own): what its storyboard still lacks of the look */
+  private lookIssues(): { level: 'red'; msg: string }[] {
+    const fonts = designedFonts(this.o.style);
+    if (!fonts) return [];
+    let look: unknown;
+    try { look = this.project.storyboard().look; } catch { return []; }   // an unreadable storyboard is reported already
+    return designedIssues(look, fonts).map((msg) => ({ level: 'red' as const, msg }));
+  }
+
+  /** a designed style's film: the look the director wrote in storyboard.json (its card and what it comes to) */
+  private designed() {
+    const fonts = designedFonts(this.o.style);
+    if (!fonts) return undefined;
+    try { return designedLook(this.project.storyboard().look, fonts); } catch { return undefined; }
+  }
+
   /** Style, voice, pacing and the style's components: owned by the server, re-applied after every agent edit. */
   private serverMeta() {
     const extras = new Set<string>(styleExtras(this.o.style));
@@ -313,7 +333,7 @@ export class Director {
       } catch {}
       return { vendor: [...vendor], webgl: true };
     })() : {};
-    this.setMeta({ style: this.o.style, lang: this.o.brief.lang ?? 'zh', voice: this.o.voice, gap: 0.8, pace: { maxHold: 1.0, gap: 0.8 }, extras: list, look: this.o.look, ...gl });
+    this.setMeta({ style: this.o.style, lang: this.o.brief.lang ?? 'zh', voice: this.o.voice, gap: 0.8, pace: { maxHold: 1.0, gap: 0.8 }, extras: list, look: this.o.look ?? this.designed()?.look, ...gl });
   }
 
   /** Server-owned META fields, rewritten in place in script.js (the planner must not change them). */
@@ -414,9 +434,9 @@ export class Director {
    */
   private notDrawn(bad: [string, PageState][]): string {
     const ids = bad.map(([id]) => id), byReason = new Map<string, string[]>();
-    for (const [id, s] of bad) { const r = (s.issues[0] ?? '').split('\n')[0].slice(0, 240); byReason.set(r, [...(byReason.get(r) ?? []), id]); }
+    for (const [id, s] of bad) { const r = (s.issues[0]?.msg ?? '').split('\n')[0].slice(0, 240); byReason.set(r, [...(byReason.get(r) ?? []), id]); }
     const reasons = [...byReason].map(([r, of]) => (byReason.size > 1 ? `${of.join(this.say('、', ', '))}: ` : '') + (r || this.say('原因不明', 'no reason given')));
-    const all = bad.map(([, s]) => s.issues.join(' ')).join(' ');
+    const all = bad.map(([, s]) => s.issues.map((i) => i.msg).join(' ')).join(' ');
     const service = serviceTrouble(all);
     const again = bad.every(([, s]) => (s.failures ?? 0) >= 2);
     const next = service ? this.say(service.zh, service.en)
@@ -465,7 +485,7 @@ export class Director {
     this.setPage(id, st);
     let s: AgentSession | undefined;
     try {
-      s = await this.session(`page-${id}`, pageSystem(this.o.style, styleExtras(this.o.style), this.o.brief.preferences, this.o.brief.styleNotes), MAX.pageTurns, was?.ref, undefined, { answers: [FLAG] });
+      s = await this.session(`page-${id}`, pageSystem(this.o.style, styleExtras(this.o.style), this.o.brief.preferences, this.o.brief.styleNotes, this.designed()?.card), MAX.pageTurns, was?.ref, undefined, { answers: [FLAG] });
       const fix = this.state.revision?.[id];
       // a revision's page already exists, so "is there a file" says nothing: what tells is whether the code changed
       // (seen: a revision whose edits never landed was checked, passed and shown as done, on the old page)
@@ -478,7 +498,7 @@ export class Director {
         if (!this.project.exists(`pages/${id}.js`)) throw new Error(r.error || this.say('没有写出页面文件', 'No page file was written'));
         // the agent found nothing to change (already so, or nothing this page can do): it says why instead of searching
         declined = unchanged() && flagOf(r) !== undefined ? flagOf(r)!.trim() || this.say(NOT_MADE.zh, NOT_MADE.en) : undefined;
-        if (declined) { st.status = 'flagged'; st.issues = [declined]; }
+        if (declined) { st.status = 'flagged'; st.issues = [{ from: 'agent', msg: declined }]; }
         else if (unchanged()) r = await this.send(s, `pages/${id}.js is exactly as it was: the change was not made${r.error ? ` (${r.error})` : ''}. Make it now with edit. If an edit failed, its old_string must be copied exactly from the current file; read the file first if unsure.`, undefined, PAGE_THINKING);
       }
       st.ref = s.ref;
@@ -502,14 +522,14 @@ export class Director {
           // instead of failing the page (on the last round too: the settling check below decides)
           if (c.crash !== undefined) {
             const crash = crashText(c.crash, id);
-            this.setPage(id, { ...st, issues: [crash] });
+            this.setPage(id, { ...st, issues: [{ from: 'run', kind: 'crash', msg: crash }] });
             r = await this.send(s, crashPrompt(id, crash) + this.unseen(`page-${id}`), undefined, PAGE_THINKING);
             await this.commit(this.say(`${id}：修运行错误`, `${id}: fix a runtime error`));
             continue;
           }
-          this.setPage(id, { ...st, issues: issues.map((i) => i.msg) }, { sheet: c.sheet });
+          this.setPage(id, { ...st, issues: issues.map(fromLint) }, { sheet: c.sheet });
           const change = unchanged() ? fix : undefined;
-          reviewer ??= await this.session(`check-${id}`, reviewerSystem(this.o.style, this.o.brief.styleNotes), MAX.reviewerTurns, undefined, undefined, { tools: 'none', answers: [VERDICT] });
+          reviewer ??= await this.session(`check-${id}`, reviewerSystem(this.o.style, this.o.brief.styleNotes, this.designed()?.card), MAX.reviewerTurns, undefined, undefined, { tools: 'none', answers: [VERDICT] });
           verdict = await this.verdict(reviewer, reviewerPrompt(sb, id, t, round, issues, times, change), c.sheet);
           const errors = errorsOf(issues), problems = verdict?.pass === false ? verdict.problems : [];
           if (!errors.length && !problems.length) { st.status = 'ok'; st.issues = []; break; }
@@ -517,7 +537,7 @@ export class Director {
           r = await this.send(s, fixPrompt(round, errors, problems, times, change) + this.unseen(`page-${id}`), [c.sheet], PAGE_THINKING);
           await this.commit(this.say(`${id}：第 ${round} 轮修改`, `${id}: check round ${round}`));
           const reason = flagOf(r);
-          if (reason !== undefined) { st.status = 'flagged'; st.issues = [reason]; break; }
+          if (reason !== undefined) { st.status = 'flagged'; st.issues = [{ from: 'agent', msg: reason }]; break; }
           // nothing changed this round: checking it again would show the same thing
           if (code() === checked || r.stopReason === 'max_turns') break;
         }
@@ -536,11 +556,11 @@ export class Director {
       if (st.status !== 'ok' && st.status !== 'flagged') {
         const errors = errorsOf(issues), problems = verdict?.pass === false ? verdict.problems : [];
         st.status = errors.length || problems.length ? 'flagged' : 'ok';
-        st.issues = [...errors.map((i) => `${i.local}s：${i.msg}`), ...problems.map((p) => `${p.at.toFixed(1)}s：${p.what}`)];
+        st.issues = [...errors.map(fromLint), ...problems.map(fromReview)];
       }
       // the change never landed: the page is as it was, which is not what the user asked for, whatever the checks said
       if (unchanged()) {
-        if (!declined) { st.status = 'flagged'; st.issues = [this.say(NOT_MADE.zh, NOT_MADE.en)]; }
+        if (!declined) { st.status = 'flagged'; st.issues = [{ from: 'run', kind: 'not-made', msg: NOT_MADE.en }]; }
         this.unchanged.set(id, declined);
       }
       await s.close();
@@ -552,7 +572,7 @@ export class Director {
       if (stopped(e)) throw e;
       // what the model service said last, when the page then failed for want of an answer
       const said = s && this.lastError.get(s), msg = (e as Error).message;
-      this.setPage(id, { ...st, status: 'failed', issues: [said && !msg.includes(said) ? `${msg} (${said})` : msg], failures: (st.failures ?? 0) + 1 });
+      this.setPage(id, { ...st, status: 'failed', issues: [{ from: 'run', kind: 'failed', msg: said && !msg.includes(said) ? `${msg} (${said})` : msg }], failures: (st.failures ?? 0) + 1 });
     }
   }
 
@@ -566,7 +586,7 @@ export class Director {
     // also takes what is plainly wrong on screen, never lint's advice (a sparse or wordy page is the pages' own call)
     const issues = all.filter((i) => DEFECTS.includes(i.kind) || (!defectsOnly && i.level === 'error'));
     // a page a change left as it was, with the agent's reason (already so, nothing to do there), is no defect to chase
-    const flagged = defectsOnly ? [] : Object.entries(this.state.pages).filter(([id, s]) => s.status === 'flagged' && !this.unchanged.get(id)).map(([id, s]) => `${id}（${s.issues.join('，')}）`);
+    const flagged = defectsOnly ? [] : Object.entries(this.state.pages).filter(([id, s]) => s.status === 'flagged' && !this.unchanged.get(id)).map(([id, s]) => `${id} (${s.issues.map((i) => ('at' in i ? `${i.at.toFixed(1)}s: ` : '') + i.msg).join('; ')})`);
     if (!issues.length && !flagged.length) {
       this.emit({ type: 'stage', stage: 'review', status: 'skipped', detail: this.say('全片检查通过，各页自检通过', 'The whole film passed its checks, and every page passed its own') });
       return this.ready();
@@ -577,7 +597,7 @@ export class Director {
     const limit = defectsOnly ? new AbortController() : undefined;
     const timer = limit && setTimeout(() => limit.abort(), MAX.reviewDefectsMs);
     const signal = limit ? AbortSignal.any([limit.signal, ...(this.o.signal ? [this.o.signal] : [])]) : this.o.signal;
-    const s = await this.session('review', pageSystem(this.o.style, styleExtras(this.o.style), this.o.brief.preferences, this.o.brief.styleNotes), MAX.pageTurns, undefined, signal);
+    const s = await this.session('review', pageSystem(this.o.style, styleExtras(this.o.style), this.o.brief.preferences, this.o.brief.styleNotes, this.designed()?.card), MAX.pageTurns, undefined, signal);
     let timedOut = false;
     try {
       for (let round = 1; round <= (defectsOnly ? 1 : MAX.reviewRounds); round++) {

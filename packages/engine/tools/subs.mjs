@@ -2,12 +2,12 @@
 // Usage (from a project dir): node engine/tools/subs.mjs <from> <to>
 import fs from 'fs';
 import path from 'path';
-import { openStage, OUT, PORTRAIT, closeStage } from './lib.mjs';
+import { openStage, OUT, PORTRAIT, finish } from './lib.mjs';
 const [from, to] = [+process.argv[2], +process.argv[3]];
 const sd = path.join(OUT, PORTRAIT ? 'subs-portrait' : 'subs');
 fs.rmSync(sd, { recursive: true, force: true });
 fs.mkdirSync(sd, { recursive: true });
-const { browser, page } = await openStage('render&subs&only=none');
+const { page } = await openStage('render&subs&only=none');
 await page.evaluate(() => {
   document.body.classList.add('transparent');
   document.documentElement.style.background = 'transparent';
@@ -36,7 +36,4 @@ push(blank, to - t);
 lines.push(`file '${blank}'`); // concat demuxer needs the last entry repeated
 fs.writeFileSync(path.join(sd, 'list.txt'), lines.join('\n'));
 console.log('subtitle frames:', cues.length);
-await closeStage(browser);
-
-// a stalled browser connection must not keep the process alive once the output is out
-process.stdout.write("", () => process.exit(process.exitCode ?? 0));
+finish();

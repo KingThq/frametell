@@ -8,7 +8,7 @@ import { Conversation } from './Conversation';
 import { Stage } from './Stage';
 import { offerRef } from '../lib/refs';
 import { useT } from '../i18n';
-import { FilmCredits } from '../components/Credits';
+import { FilmCredits, orShort } from '../components/Credits';
 import { hosted } from '../lib/client';
 
 const fmtK = (n: number) => (n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'K' : String(n));
@@ -110,7 +110,7 @@ export function Workbench({ id, openSettings }: { id: string; openSettings: (sec
         <span className="ml-auto flex shrink-0 items-center gap-2">
           {p && <CostChip run={run} project={p} />}
           {p && running && <button className="fs-btn fs-btn-ghost fs-btn-sm" onClick={() => pause(p.id)} disabled={pausing} aria-busy={pausing} title={t('workbench.pauseTitle')}><Pause size={13} aria-hidden /> {pausing ? t('workbench.pausing') : t('workbench.pause')}</button>}
-          {p && run.paused && <button className="fs-btn fs-btn-secondary fs-btn-sm" onClick={() => client.start(p.id)}><Play size={13} aria-hidden /> {t('workbench.resume')}</button>}
+          {p && run.paused && <button className="fs-btn fs-btn-secondary fs-btn-sm" onClick={() => client.start(p.id).catch(orShort(p.id))}><Play size={13} aria-hidden /> {t('workbench.resume')}</button>}
         </span>
       </TopBar>
       {p && (

@@ -5,7 +5,7 @@
 import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
-import { openStage, closeStage, within } from './lib.mjs';
+import { openStage, within, finish } from './lib.mjs';
 import { FFMPEG } from './bins.mjs';
 const jobsMode = process.argv[2] === '--jobs';
 const fps = +process.argv[4];
@@ -20,7 +20,7 @@ const stalled = (e) => {
   process.exit(STALLED);   // Playwright closes the browser it launched as this process exits
 };
 
-const { browser, page } = await openStage('render', ['--disable-gpu-vsync', '--force-color-profile=srgb']).catch(stalled);
+const { page } = await openStage('render', ['--disable-gpu-vsync', '--force-color-profile=srgb']).catch(stalled);
 // WATERMARK=1 (render.mjs --watermark): the Frametell mark, small and quiet in the bottom right, on every frame. It sits
 // outside the stage the pages draw on, so no page can cover or move it.
 if (process.env.WATERMARK === '1') {
@@ -64,6 +64,7 @@ for (const { a: f0, b: f1, out } of jobs) {
 // a page whose code threw draws a placeholder: never let that into a film
 const thrown = await page.evaluate(() => ENGINE.errors);
 if (thrown.length) { for (const x of thrown) console.error(`✗ ${x.page} runtime error (${x.phase}): ${x.message}${x.at.length ? ` — at ${x.at.join(', ')}` : ''}`); code = code || 2; }
-// browser.close() can hang after Chrome has already gone (seen with system Chrome): the chunk is written, so never wait on it
-await closeStage(browser);
-process.exit(code);
+// the chunk is written: the browser is left to close as the process exits, never waited on (a graceful close took ~3 s
+// a chunk, and could hang after system Chrome had already gone)
+process.exitCode = code;
+finish();

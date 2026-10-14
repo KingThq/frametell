@@ -1,10 +1,24 @@
 // Everything the director reports while it works. The local server streams these to the panel over SSE, so each event
 // is small, JSON-serializable and meaningful on its own.
 import type { RuntimeEvent, TokenUsage } from './runtime/types.js';
-import type { LintIssue, Storyboard } from './project.js';
+import type { LintIssue, LintKind, Storyboard } from './project.js';
 
 export type Stage = 'storyboard' | 'script' | 'narrate' | 'pages' | 'review' | 'render';
 export type PageStatus = 'queued' | 'drawing' | 'checking' | 'ok' | 'flagged' | 'failed';
+
+/**
+ * Something about a page worth telling, by where it comes from. `msg` is always there, in English or in the model's
+ * words: what the agents read. A panel words what it knows (lint by `kind` and `data`, the run's own by `kind`) in its
+ * language and keeps the rest to itself.
+ *   lint: a check's finding, `at` seconds into the page; review: a problem the reviewer sees; agent: the page agent's
+ *   reason for leaving the page as it is; run: the page could not be checked (crash), was not drawn (failed), or a
+ *   change to it never landed (not-made)
+ */
+export type PageIssue =
+  | { from: 'lint'; kind: LintKind; at: number; msg: string; data?: Record<string, string | number> }
+  | { from: 'review'; at: number; msg: string }
+  | { from: 'agent'; msg: string }
+  | { from: 'run'; kind: 'crash' | 'failed' | 'not-made'; msg: string };
 
 /**
  * A piece of the film or of the user's machine the user handed the director with a message: a page, a narration line,
@@ -26,7 +40,7 @@ export type StudioEvent =
   | { type: 'storyboard_check'; round: number; issues: { level: string; page?: string; beat?: number; msg: string }[] }
   /** the storyboard passed its checks and waits for the user (in CLI runs it is approved automatically) */
   | { type: 'approval'; storyboard: Storyboard }
-  | { type: 'page'; id: string; status: PageStatus; round?: number; issues?: string[]; sheet?: string; thumb?: string; note?: string }
+  | { type: 'page'; id: string; status: PageStatus; round?: number; issues?: PageIssue[]; sheet?: string; thumb?: string; note?: string }
   /** something the user said to the director (approval feedback, a note while it works, a change after the film) */
   | { type: 'user'; text: string; refs?: UserRef[] }
   /** a short line from the director that isn't a model message: how a user note will be handled, what a revision redraws */
