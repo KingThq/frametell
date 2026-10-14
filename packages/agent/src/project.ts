@@ -14,8 +14,9 @@ export interface Timeline { voiced: boolean; duration: number; pages: PageTiming
 /** what a lint finding is about (engine/tools/checks.mjs) */
 export type LintKind = 'runtime' | 'api' | 'empty-opening' | 'empty-ending' | 'sparse' | 'text-heavy' | 'nondeterministic' | 'raw-markup' | 'off-canvas' | 'subtitle-band' | 'small-text' | 'overlap';
 /** `level`: 'error' is plainly wrong on screen or in the code, a page is not done while one is there; 'warn' is advice
- *  the pictures decide on. `msg` is for whoever reads it: code goes by `kind` and `level` */
-export interface LintIssue { page: string; t: number; t1: number; local: number; kind: LintKind; level: 'error' | 'warn'; msg: string }
+ *  the pictures decide on. `msg` is for whoever reads it: code goes by `kind` and `level`. `data`: what the message
+ *  quotes (percent, text, px…), for wording it in another language */
+export interface LintIssue { page: string; t: number; t1: number; local: number; kind: LintKind; level: 'error' | 'warn'; msg: string; data?: Record<string, string | number> }
 /** a page's check: its lint findings and a contact sheet (absolute path), or why the page could not be drawn */
 export type PageCheck = { issues: LintIssue[]; sheet: string; crash?: undefined } | { issues: LintIssue[]; sheet?: undefined; crash: string };
 

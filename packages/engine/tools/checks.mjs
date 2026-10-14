@@ -3,7 +3,8 @@
 //
 // Every lint finding carries a `kind` and a `level`. 'error' is plainly wrong on screen or in the code: a page is not
 // done while one is there. 'warn' is advice (a sparse or wordy page, small text, text that touches): some styles mean
-// it, and the pictures decide. Callers branch on these fields, never on the wording of `msg`, which is for the reader.
+// it, and the pictures decide. Callers branch on these fields, never on the wording of `msg`, which is for the reader;
+// `data` holds what the message quotes (a share, a piece of text, a size), for whoever words it in another language.
 import fs from 'fs';
 import path from 'path';
 import { execFileSync } from 'child_process';
@@ -18,11 +19,11 @@ const OVERLAP_ERROR = 0.5;
  * or safe area, sits in the subtitle band, overlaps other text, or renders too small to read. Per page it also checks
  * the settled state (body fills the content area, text doesn't dominate) and, with `determinism`, that a frame renders
  * identically whether reached from the start or from elsewhere on the timeline.
- * → [{ page, t, t1, local, kind, level, msg }], repeats of one finding on a page collapsed into a time range.
+ * → [{ page, t, t1, local, kind, level, msg, data }], repeats of one finding on a page collapsed into a time range.
  */
 export async function lintPages(page, { L, pages, step = 0.5, minFont = 24, determinism = false }) {
   const issues = [];
-  const add = (p, t, kind, level, msg) => issues.push({ page: p.id, t: +t.toFixed(1), local: +(t - p.start).toFixed(1), kind, level, msg });
+  const add = (p, t, kind, level, msg, data = {}) => issues.push({ page: p.id, t: +t.toFixed(1), local: +(t - p.start).toFixed(1), kind, level, msg, data });
   // how much of a page is on screen at time t: visible strokes, text, images (the page's own elements only)
   const inkAt = (id, t) => page.evaluate(({ id, t }) => {
     ENGINE.renderAt(t);
@@ -60,10 +61,10 @@ export async function lintPages(page, { L, pages, step = 0.5, minFont = 24, dete
         const label = `${isP ? 'P' : 'PV'}.${name}`;
         if (!has) {
           const hint = [...near(name, isP ? pNames : pvNames).map((k) => `${isP ? 'P' : 'PV'}.${k}`), ...((isP ? pvNames : pNames).includes(name) ? [`${isP ? 'PV' : 'P'}.${name}`] : [])];
-          out.push({ page: id, line: line(m.index), msg: `unknown API: ${label} does not exist${hint.length ? ` — did you mean ${hint.join(' or ')}?` : ' — use only the components listed for this film'}` });
+          out.push({ page: id, line: line(m.index), name: label, msg: `unknown API: ${label} does not exist${hint.length ? ` — did you mean ${hint.join(' or ')}?` : ' — use only the components listed for this film'}` });
         } else if (call && typeof target[name] !== 'function') {
           const keys = target[name] && typeof target[name] === 'object' ? Object.keys(target[name]).slice(0, 6) : [];
-          out.push({ page: id, line: line(m.index), msg: `wrong API use: ${label} is not a function${keys.length ? ` — it holds ${keys.map((k) => `${label}.${k}`).join(', ')}` : ''}` });
+          out.push({ page: id, line: line(m.index), name: label, msg: `wrong API use: ${label} is not a function${keys.length ? ` — it holds ${keys.map((k) => `${label}.${k}`).join(', ')}` : ''}` });
         }
       }
     }
@@ -71,7 +72,7 @@ export async function lintPages(page, { L, pages, step = 0.5, minFont = 24, dete
   }, pages.map((p) => p.id));
   // the visual's lines → the file's: the visual starts on the line that registers it
   const fileLine = (id, rel) => { try { const src = fs.readFileSync(path.join(EP, PORTRAIT ? 'pages-portrait' : 'pages', id + '.js'), 'utf8'); const at = src.split('\n').findIndex((l) => /ENGINE\.visual\s*\(/.test(l)); return at >= 0 ? at + rel : rel; } catch { return rel; } };
-  for (const a of apiIssues) { const p = pages.find((x) => x.id === a.page); add(p, p.start, 'api', 'error', `${a.msg} — at pages/${a.page}.js:${fileLine(a.page, a.line)}`); }
+  for (const a of apiIssues) { const p = pages.find((x) => x.id === a.page); add(p, p.start, 'api', 'error', `${a.msg} — at pages/${a.page}.js:${fileLine(a.page, a.line)}`, { name: a.name, line: fileLine(a.page, a.line) }); }
 
   for (const p of pages) {
     // page turns cross-fade: the incoming page must already show something, and the outgoing one must not have cleared
@@ -101,8 +102,8 @@ export async function lintPages(page, { L, pages, step = 0.5, minFont = 24, dete
       const area = (A.x1 - A.x0) * (A.y1 - A.y0);
       return { cover: x1 > x0 ? ((x1 - x0) * (y1 - y0)) / area : 0, text: textArea / area };
     }, { id: p.id, t: p.end - 0.4 });
-    if (settled.cover < 0.45) add(p, p.end - 0.4, 'sparse', 'warn', `sparse page: the drawing spans ${Math.round(settled.cover * 100)}% of the content area (aim for most of x 140–1780, y 180–880)`);
-    if (settled.text > 0.35) add(p, p.end - 0.4, 'text-heavy', 'warn', `text-dominated page: text covers ${Math.round(settled.text * 100)}% of the content area — let an object carry the idea, keep text to labels and numbers`);
+    if (settled.cover < 0.45) add(p, p.end - 0.4, 'sparse', 'warn', `sparse page: the drawing spans ${Math.round(settled.cover * 100)}% of the content area (aim for most of x 140–1780, y 180–880)`, { percent: Math.round(settled.cover * 100) });
+    if (settled.text > 0.35) add(p, p.end - 0.4, 'text-heavy', 'warn', `text-dominated page: text covers ${Math.round(settled.text * 100)}% of the content area — let an object carry the idea, keep text to labels and numbers`, { percent: Math.round(settled.text * 100) });
     // determinism: the same moment, reached cold (from 0) and warm (from the page end), must be pixel-identical
     if (determinism) {
       const mid = (p.start + p.end) / 2;
@@ -118,7 +119,7 @@ export async function lintPages(page, { L, pages, step = 0.5, minFont = 24, dete
         for (let i = 0; i < da.length; i += 4) if (Math.abs(da[i] - db[i]) + Math.abs(da[i + 1] - db[i + 1]) + Math.abs(da[i + 2] - db[i + 2]) > 48) n++;
         return n / (da.length / 4);
       }, [a.toString('base64'), b.toString('base64')]);
-      if (changed > 0.0005) add(p, mid, 'nondeterministic', 'error', `not deterministic: ${(changed * 100).toFixed(2)}% of this frame differs depending on where playback came from — something depends on state, Math.random, Date.now or a CSS transition`);
+      if (changed > 0.0005) add(p, mid, 'nondeterministic', 'error', `not deterministic: ${(changed * 100).toFixed(2)}% of this frame differs depending on where playback came from — something depends on state, Math.random, Date.now or a CSS transition`, { percent: +(changed * 100).toFixed(2) });
     }
     for (let t = p.start + 0.4; t < p.end - 0.15; t += step) {
       const found = await page.evaluate(({ t, minFont, overlapError }) => {
@@ -140,12 +141,12 @@ export async function lintPages(page, { L, pages, step = 0.5, minFont = 24, dete
           if (x1 < 0) continue;
           // LaTeX or other markup written into plain text shows as code (\\lambda): characters, or P.tex for a formula
           const raw = el.closest('.katex') ? null : /\\[A-Za-z]{2,}/.exec(el.textContent);
-          if (raw) out.push({ kind: 'raw-markup', level: 'error', msg: `raw markup on screen: "${raw[0]}" in "${el.textContent.trim().slice(0, 40)}" — write the character (λ, ≈, ², →) instead, or use P.tex for a formula` });
+          if (raw) out.push({ kind: 'raw-markup', level: 'error', msg: `raw markup on screen: "${raw[0]}" in "${el.textContent.trim().slice(0, 40)}" — write the character (λ, ≈, ², →) instead, or use P.tex for a formula`, data: { markup: raw[0], text: el.textContent.trim().slice(0, 40) } });
           boxes.push({ x0: x0 - frame.left, y0: y0 - frame.top, x1: x1 - frame.left, y1: y1 - frame.top, txt: txt.replace(/ /g, ' ').slice(0, 24) });
         }
         for (const b of boxes) {
-          if (b.x0 < 40 || b.x1 > 1880 || b.y0 < 30 || b.y1 > 1060) out.push({ kind: 'off-canvas', level: 'error', msg: `off-canvas/edge: "${b.txt}" box ${b.x0|0},${b.y0|0}–${b.x1|0},${b.y1|0}` });
-          else if (b.y1 > 905) out.push({ kind: 'subtitle-band', level: 'error', msg: `subtitle band (y>905): "${b.txt}" bottom ${b.y1|0}` });
+          if (b.x0 < 40 || b.x1 > 1880 || b.y0 < 30 || b.y1 > 1060) out.push({ kind: 'off-canvas', level: 'error', msg: `off-canvas/edge: "${b.txt}" box ${b.x0|0},${b.y0|0}–${b.x1|0},${b.y1|0}`, data: { text: b.txt } });
+          else if (b.y1 > 905) out.push({ kind: 'subtitle-band', level: 'error', msg: `subtitle band (y>905): "${b.txt}" bottom ${b.y1|0}`, data: { text: b.txt } });
         }
         // Readability: every visible text node, at the size it actually renders (camera zoom and CSS transforms included).
         const walker = document.createTreeWalker(document.getElementById('stage'), NodeFilter.SHOW_TEXT);
@@ -164,17 +165,17 @@ export async function lintPages(page, { L, pages, step = 0.5, minFont = 24, dete
             if (!small.has(k)) small.set(k, owner.textContent.trim().replace(/\s+/g, ' ').slice(0, 20));
           }
         }
-        for (const [px, sample] of small) out.push({ kind: 'small-text', level: 'warn', msg: `small text (${px}px < ${minFont}px): "${sample}"` });
+        for (const [px, sample] of small) out.push({ kind: 'small-text', level: 'warn', msg: `small text (${px}px < ${minFont}px): "${sample}"`, data: { px, min: minFont, text: sample } });
         for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
           const a = boxes[i], b = boxes[j];
           const w = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0), h = Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0);
           if (w <= 0 || h <= 0) continue;
           const share = w * h / Math.min((a.x1 - a.x0) * (a.y1 - a.y0), (b.x1 - b.x0) * (b.y1 - b.y0));
-          if (share > 0.15) out.push({ kind: 'overlap', level: share >= overlapError ? 'error' : 'warn', msg: `text overlap: "${a.txt}" × "${b.txt}" (${Math.round(100 * share)}% of the smaller)` });
+          if (share > 0.15) out.push({ kind: 'overlap', level: share >= overlapError ? 'error' : 'warn', msg: `text overlap: "${a.txt}" × "${b.txt}" (${Math.round(100 * share)}% of the smaller)`, data: { a: a.txt, b: b.txt, percent: Math.round(100 * share) } });
         }
         return out;
       }, { t, minFont, overlapError: OVERLAP_ERROR });
-      for (const f of found) add(p, t, f.kind, f.level, f.msg);
+      for (const f of found) add(p, t, f.kind, f.level, f.msg, f.data);
     }
   }
   // a page whose code threw (loading, building or at some moment): the error first, with where it happened
@@ -182,7 +183,7 @@ export async function lintPages(page, { L, pages, step = 0.5, minFont = 24, dete
   for (const x of thrown) {
     const p = pages.find((q) => q.id === x.page);
     if (!p) continue;
-    issues.unshift({ page: x.page, t: x.t ?? +p.start.toFixed(1), local: x.local ?? 0, kind: 'runtime', level: 'error', msg: `runtime error (${x.phase}): ${x.message}${x.at.length ? ` — at ${x.at.join(', ')}` : ''}` });
+    issues.unshift({ page: x.page, t: x.t ?? +p.start.toFixed(1), local: x.local ?? 0, kind: 'runtime', level: 'error', msg: `runtime error (${x.phase}): ${x.message}${x.at.length ? ` — at ${x.at.join(', ')}` : ''}`, data: { phase: x.phase, message: x.message } });
   }
   // collapse repeats of the same message on a page into one line with a time range
   const seen = new Map();

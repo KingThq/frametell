@@ -6,6 +6,7 @@ import path from 'node:path';
 import { Director } from './director.js';
 import type { Answer, AgentRuntime, SessionOptions } from './runtime/types.js';
 import type { LintIssue, PageCheck } from './project.js';
+import type { PageIssue } from './events.js';
 
 const PAGE = "ENGINE.visual('p01', (P) => {\n  P.text('hi', { x: 100, y: 100 });\n});\n";
 const file = (dir: string) => path.join(dir, 'pages/p01.js');
@@ -51,7 +52,7 @@ function film(pages: AgentRuntime, review: AgentRuntime, issues: (n: number) => 
     snap: async () => 'thumb.jpg', commit: async () => undefined,
     storyboard: () => sb, timeline: async () => ({ duration: 5, pages: [{ id: 'p01', start: 0, end: 5, speechEnd: 4, cues: [] }] }),
   });
-  return { d: d as unknown as { pages(): Promise<void>; state: { pages: Record<string, { status: string; issues: string[] }> } }, n, dir, events };
+  return { d: d as unknown as { pages(): Promise<void>; state: { pages: Record<string, { status: string; issues: PageIssue[] }> } }, n, dir, events };
 }
 
 const issue = (kind: LintIssue['kind'], level: LintIssue['level'], msg: string): LintIssue => ({ page: 'p01', t: 4.6, t1: 4.6, local: 4.6, kind, level, msg });
@@ -97,7 +98,7 @@ test('a problem the page agent keeps on purpose is flagged with its reason, and 
   const { d, n } = film(artist(sent, () => ({ answers: [{ name: 'flag', args: { reason: 'the label is meant to sit low' } }] })), reviewer(seen, [{ pass: false, problems: [{ at: 1, what: 'label low', fix: 'raise it' }] }]));
   await d.pages();
   assert.equal(d.state.pages.p01.status, 'flagged');
-  assert.deepEqual(d.state.pages.p01.issues, ['the label is meant to sit low']);
+  assert.deepEqual(d.state.pages.p01.issues, [{ from: 'agent', msg: 'the label is meant to sit low' }]);
   assert.deepEqual(n, { check: 1, lint: 0, determinism: 1 });
 });
 
@@ -106,7 +107,7 @@ test('a page agent that changes nothing settles the page as it is, with what is 
   const { d, n } = film(artist(sent), reviewer(seen, [{ pass: false, problems: [{ at: 3, what: 'the chart is cut off on the right', fix: 'shrink it' }] }]));
   await d.pages();
   assert.equal(d.state.pages.p01.status, 'flagged');
-  assert.deepEqual(d.state.pages.p01.issues, ['3.0s：the chart is cut off on the right']);
+  assert.deepEqual(d.state.pages.p01.issues, [{ from: 'review', at: 3, msg: 'the chart is cut off on the right' }]);
   assert.equal(n.check, 1);
 });
 
@@ -117,7 +118,7 @@ test('a page still failing after its last check is flagged with the reviewer\'s 
   assert.equal(n.check, 3);
   assert.equal(sent.length, 3);   // the draft and two fix rounds: the third check settles the page
   assert.equal(d.state.pages.p01.status, 'flagged');
-  assert.deepEqual(d.state.pages.p01.issues, ['3.0s：still crowded']);
+  assert.deepEqual(d.state.pages.p01.issues, [{ from: 'review', at: 3, msg: 'still crowded' }]);
 });
 
 test('a reviewer that gives no verdict is asked once more, then the page stands on its lint', async () => {
@@ -147,4 +148,21 @@ test('the reviewer\'s words never reach the people watching; its turns are still
   const review = events.filter((e) => e.session === 'check-p01') as unknown as { event: { type: string } }[];
   assert.deepEqual(review.map((e) => e.event.type), ['turn']);
   assert.deepEqual(counted, ['check-p01']);
+});
+
+test('a lint error left on the last check is kept with its kind and the values it quotes', async () => {
+  const sent: string[] = [], seen: { text: string; images?: string[]; opts: SessionOptions }[] = [];
+  const off = { ...issue('off-canvas', 'error', 'off-canvas/edge: "孝" box 1717,229–2005,511'), data: { text: '孝' } };
+  const { d } = film(artist(sent, (k, dir) => { edit(dir, `try${k}`); return {}; }), reviewer(seen, [{ pass: true }]), () => [off]);
+  await d.pages();
+  assert.equal(d.state.pages.p01.status, 'flagged');
+  assert.deepEqual(d.state.pages.p01.issues, [{ from: 'lint', kind: 'off-canvas', at: 4.6, msg: off.msg, data: { text: '孝' } }]);
+});
+
+test('a film from before issues had fields reads its old lines as notes', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ft-legacy-'));
+  fs.mkdirSync(path.join(dir, '.studio'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '.studio/state.json'), JSON.stringify({ stage: 'done', usage: {}, pages: { p01: { status: 'flagged', rounds: 3, issues: ['18.4s：text-dominated page'] } } }));
+  const d = new Director({ dir, style: 'chalkboard', brief: { durationSec: 60 }, runtime: artist([]) }) as unknown as { state: { pages: Record<string, { issues: PageIssue[] }> } };
+  assert.deepEqual(d.state.pages.p01.issues, [{ from: 'agent', msg: '18.4s：text-dominated page' }]);
 });

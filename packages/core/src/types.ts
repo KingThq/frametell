@@ -4,7 +4,7 @@ import type { StudioEvent, Storyboard } from '@frametell/agent';
 import type { CustomProviderConfig, ModelInfo, ProviderSpec } from '@frametell/models';
 
 export type { StudioEvent, Storyboard, ModelInfo, ProviderSpec, CustomProviderConfig };
-export type { Timeline, PageTiming, UserRef, Look } from '@frametell/agent';
+export type { Timeline, PageTiming, UserRef, Look, PageIssue } from '@frametell/agent';
 import type { Look } from '@frametell/agent';
 export type RuntimeId = 'pi' | 'claude-agent-sdk' | 'codex';
 /** interface language; 'auto' follows the system */

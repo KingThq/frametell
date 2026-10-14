@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { Director } from './director.js';
 import type { AgentRuntime } from './runtime/types.js';
+import type { PageIssue } from './events.js';
 import type { PageTiming, Storyboard } from './project.js';
 
 const PAGE = "ENGINE.visual('p01', (P) => {\n  P.text('old', { x: 100, y: 100 });\n});\n";
@@ -34,7 +35,7 @@ async function revise(answer: (n: number, dir: string) => string | { flag: strin
   const sent: string[] = [], seen: string[] = [];
   const d = new Director({ dir, style: 'chalkboard', brief: { durationSec: 60, lang: 'zh', replyLang: 'zh' }, runtime: fake(sent, answer), reviewer: { runtime: passing(seen) } });
   Object.assign(d.project, { check: async () => ({ issues: [], sheet: 'sheet.jpg' }), lint: async () => [], snap: async () => 'sheet.jpg', commit: async () => undefined });
-  const inner = d as unknown as { state: { revision?: Record<string, string>; pages: Record<string, { status: string; issues: string[] }> }; page(sb: Storyboard, t: PageTiming): Promise<void> };
+  const inner = d as unknown as { state: { revision?: Record<string, string>; pages: Record<string, { status: string; issues: PageIssue[] }> }; page(sb: Storyboard, t: PageTiming): Promise<void> };
   inner.state.revision = { p01: '在开头加一个标题' };
   const sb = { title: 'T', summary: 'S', pages: [{ id: 'p01', section: '开场', say: '…', beats: [] }] } as unknown as Storyboard;
   await inner.page(sb, { id: 'p01', start: 0, end: 5, speechEnd: 4, cues: [] } as unknown as PageTiming);
@@ -46,7 +47,7 @@ test('a revision whose change never lands is not shown as done', async () => {
   const { sent, seen, page, code } = await revise(() => '已在第 1 页加上标题。');
   assert.equal(code, PAGE);
   assert.equal(page.status, 'flagged');
-  assert.match(page.issues[0], /没有改上/);
+  assert.deepEqual(page.issues, [{ from: 'run', kind: 'not-made', msg: 'The change was not made: the page is as it was' }]);
   assert.match(sent[1], /exactly as it was: the change was not made/);   // asked once more
   assert.ok(seen.length && seen.every((m) => m.includes('在开头加一个标题')));   // and the reviewer is told what to look for
 });
@@ -66,5 +67,5 @@ test('a page that already shows the change says so, and is neither asked again n
   assert.equal(code, PAGE);
   assert.equal(sent.length, 1);
   assert.equal(page.status, 'flagged');
-  assert.equal(page.issues[0], '这一页的数字本来就是黄色的');
+  assert.deepEqual(page.issues, [{ from: 'agent', msg: '这一页的数字本来就是黄色的' }]);
 });
