@@ -278,6 +278,29 @@ test('openProjectFile opens first and checks what it opened: a link out is refus
   } finally { fs.rmSync(dataDir, { recursive: true, force: true }); fs.rmSync(outside, { recursive: true, force: true }); }
 });
 
+test('the preview never serves the studio\'s record, not even through a link into .studio', () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'frametell-studio-'));
+  try {
+    const studio = new Studio({ dataDir, config: memoryConfig() });
+    const root = path.join(dataDir, 'projects', 'p1');
+    fs.mkdirSync(path.join(root, '.studio', 'sessions'), { recursive: true });
+    fs.mkdirSync(path.join(root, 'pages'));
+    fs.writeFileSync(path.join(root, '.studio', 'events.jsonl'), '{"type":"user"}\n');
+    fs.writeFileSync(path.join(root, '.studio', 'sessions', 'a.json'), '{}');
+    fs.writeFileSync(path.join(root, 'pages', 'a.js'), 'page a');
+    fs.symlinkSync('.studio', path.join(root, 's'));
+    assert.equal(studio.openProjectFile('p1', 's/events.jsonl'), null);
+    assert.equal(studio.openProjectFile('p1', 's/sessions/a.json'), null);
+    assert.equal(studio.openProjectFile('p1', '.studio/events.jsonl'), null);
+    assert.equal(studio.projectFile('p1', 's/events.jsonl'), null);
+    const ok = studio.openProjectFile('p1', 'pages/a.js');
+    assert.ok(ok); fs.closeSync(ok.fd);
+    // the host's own read names the record explicitly
+    const rec = studio.openProjectFile('p1', '.studio/events.jsonl', { record: true });
+    assert.ok(rec); fs.closeSync(rec.fd);
+  } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
+});
+
 const hasFfmpeg = (() => { try { execFileSync('ffmpeg', ['-version'], { stdio: 'ignore' }); return true; } catch { return false; } })();
 
 test('frames are cut only from a film that is a file of the project: a film named in state.json that links out is ignored', { skip: !hasFfmpeg && 'no ffmpeg' }, async () => {

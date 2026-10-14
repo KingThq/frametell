@@ -267,10 +267,13 @@ export class Studio {
    * installed engine that engine/ and engine_modules/ legitimately link to (decided here, never by the project's links);
    * a file of the project with a second hard link is refused too (a hard link carries no path to check). The caller
    * owns `fd` and closes it (a read stream with autoClose does). Null, with nothing left open, for anything else.
+   * `record: true` (the host's own reads only, never from a request) also allows the studio's record.
    */
-  openProjectFile(id: string, rel: string): OpenFile | null {
+  openProjectFile(id: string, rel: string, o: { record?: boolean } = {}): OpenFile | null {
     if (!/^[\w-]+$/.test(id)) return null;
-    return openProjectFile(this.store.dir(id), rel || 'index.html', { engine: true, record: true });
+    // the studio's record (.studio/: the agents' transcripts, the run's events) is for the host's own reads, which name
+    // it with `record`; whatever a browser can ask for never reaches it, not even through a link into .studio
+    return openProjectFile(this.store.dir(id), rel || 'index.html', { engine: true, record: o.record === true });
   }
 }
 
