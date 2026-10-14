@@ -330,3 +330,28 @@ test('frames are cut only from a film that is a file of the project: a film name
     assert.equal(cut(), true);
   } finally { fs.rmSync(dataDir, { recursive: true, force: true }); fs.rmSync(outside, { recursive: true, force: true }); }
 });
+
+test('a host hears every event of every run, with its project, and a host that throws stops nothing', async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'frametell-onevent-'));
+  const err = console.error;
+  console.error = () => {};
+  try {
+    const id = '2026-10-14-cut000000001', dir = path.join(dataDir, 'projects', id), now = new Date().toISOString();
+    fs.mkdirSync(path.join(dir, '.studio'), { recursive: true });
+    fs.writeFileSync(path.join(dir, '.studio', 'project.json'), JSON.stringify({ id, title: id, style: 'whiteboard', durationSec: 60, model: 'nowhere/none', runtime: 'pi', subtitles: true, materials: [], createdAt: now, updatedAt: now }));
+    fs.writeFileSync(path.join(dir, '.studio', 'state.json'), JSON.stringify({ stage: 'pages' }));
+    fs.writeFileSync(path.join(dir, '.studio', 'events.jsonl'), JSON.stringify({ type: 'stage', stage: 'pages', status: 'start', seq: 1, at: 1 }) + '\n');
+    const heard: [string, string, number][] = [];
+    const studio = new Studio({ dataDir, config: memoryConfig(), onEvent: (project, e) => { heard.push([project, e.type, e.seq]); throw new Error('the host failed'); } });
+    // opening the project finds its run cut short and says so in the log: the host hears that too
+    studio.projects();
+    assert.deepEqual(heard, [[id, 'paused', 2]]);
+    // with no model here, continuing says resumed, then stops with the reason
+    await studio.start(id);
+    assert.deepEqual(heard.map((h) => h[1]), ['paused', 'resumed', 'error', 'paused']);
+    assert.deepEqual(heard.map((h) => h[2]), [2, 3, 4, 5]);
+    assert.ok(heard.every((h) => h[0] === id));
+    // the run's own log has every one of them, as before
+    assert.equal(fs.readFileSync(path.join(dir, '.studio', 'events.jsonl'), 'utf8').trim().split('\n').length, 5);
+  } finally { console.error = err; fs.rmSync(dataDir, { recursive: true, force: true }); }
+});

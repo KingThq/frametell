@@ -33,7 +33,7 @@ function writeMeta(dir: string, m: ProjectMeta) { m.updatedAt = new Date().toISO
 /** The projects under one directory and the settings their runs use: one per Studio, so several can share a process. */
 export class Projects {
   private runners = new Map<string, Runner>();
-  constructor(readonly root: string, readonly config: ConfigStore, private renderer?: Renderer, private review?: 'full' | 'defects') {}
+  constructor(readonly root: string, readonly config: ConfigStore, private renderer?: Renderer, private review?: 'full' | 'defects', private onEvent?: (project: string, e: Logged) => void) {}
 
   dir(id: string) { return path.join(this.root, id); }
 
@@ -77,7 +77,7 @@ export class Projects {
   runner(id: string): Runner {
     if (!fs.existsSync(studioFile(this.dir(id), 'project.json'))) throw new Error(tr('项目不存在', 'Project not found'));
     let r = this.runners.get(id);
-    if (!r) { r = new Runner(id, this.dir(id), this.config, this.renderer, this.review); this.runners.set(id, r); }
+    if (!r) { r = new Runner(id, this.dir(id), this.config, this.renderer, this.review, this.onEvent); this.runners.set(id, r); }
     return r;
   }
 }
@@ -162,7 +162,7 @@ class Runner {
   }
   private tr(zh: string, en: string) { return this.replyIn() === 'zh' ? zh : en; }
 
-  constructor(readonly id: string, private dir: string, private config: ConfigStore, private renderer?: Renderer, private review?: 'full' | 'defects') {
+  constructor(readonly id: string, private dir: string, private config: ConfigStore, private renderer?: Renderer, private review?: 'full' | 'defects', private onEvent?: (project: string, e: Logged) => void) {
     this.log = studioFile(dir, 'events.jsonl');
     if (fs.existsSync(this.log)) {
       const lines = fs.readFileSync(this.log, 'utf8').trim().split('\n').filter(Boolean);
@@ -208,14 +208,21 @@ class Runner {
     if (e.type === 'agent' && e.event.type === 'progress') {
       const live = { ...e, seq: this.seq + ++this.tick / 1e4, at: Date.now() } as Logged;
       for (const fn of this.subs) fn(live);
+      this.tell(live);
       return;
     }
     this.tick = 0;
     const logged = { ...e, seq: ++this.seq, at: Date.now() } as Logged;
     fs.appendFileSync(this.log, JSON.stringify(logged) + '\n');
     for (const fn of this.subs) fn(logged);
+    this.tell(logged);
   };
   private tick = 0;
+
+  /** the host hears it too (StudioOptions.onEvent): a host that fails must not stop the run */
+  private tell(e: Logged) {
+    try { this.onEvent?.(this.id, e); } catch (err) { console.error(`[studio] the host could not take an event of ${this.id}:`, err); }
+  }
 
   /** events after `since` (replayed from disk), then live ones */
   subscribe(fn: (e: Logged) => void, since = 0) {

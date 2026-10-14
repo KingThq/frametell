@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Hosts can give each run its own settings: `ConfigStore.load()` is told which project's run is asking.
 - Narration services can be reached through a gateway (`ttsBaseUrls`).
 - Model requests name their session (`x-frametell-session`).
+- Hosts can hear every event of every run (`StudioOptions.onEvent`), to keep or forward the events themselves.
 - `FRAMETELL_SANDBOX_NONET=1` keeps the agent's shell and the engine's tools (Chrome included) off the network and, on Linux, away from other processes. `FRAMETELL_SANDBOX_REQUIRED=1` refuses to run a shell when no sandbox is available; asking for no network requires a sandbox too.
 - A style can leave its look to each film: with a `fonts.json` beside its grammar card, the director designs the film's look while writing the storyboard (`look` in storyboard.json: a style card, a palette by the runtime's colour names, one of the style's fonts, and a line: sketch, pen or clean). The server checks it, writes it into `META.look`, and every page agent and reviewer reads the card after the style's own. The storyboard card in the panel shows the look in a line, with its colours.
 - `META.look` can set the line (`line`: how rough and bowed a stroke is, its width, traced once or twice). Its fonts load before the first frame, and the band behind a page's heading takes the paper's colour.

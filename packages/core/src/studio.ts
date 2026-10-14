@@ -44,6 +44,11 @@ export interface StudioOptions {
   renderer?: Renderer;
   /** the whole-film check after the pages: 'full' (default) or only for real defects, briefly ('defects'); see DirectorOptions */
   review?: 'full' | 'defects';
+  /**
+   * every event of every run as it is logged (and each live one, which is not): for a host that keeps or forwards the
+   * events itself. Called after the event is in the project's events.jsonl; what it throws is logged and stops nothing.
+   */
+  onEvent?: (project: string, e: LoggedEvent) => void;
 }
 
 export class Studio {
@@ -54,7 +59,7 @@ export class Studio {
   constructor(o: StudioOptions = {}) {
     this.dataDir = o.dataDir ?? DATA_DIR;
     this.config = o.config ?? configFile(this.dataDir);
-    this.store = new Projects(path.join(this.dataDir, 'projects'), this.config, o.renderer, o.review);
+    this.store = new Projects(path.join(this.dataDir, 'projects'), this.config, o.renderer, o.review, o.onEvent);
     applyProxy(this.config.load().proxy);
     // every project reaches the engine through links; point them at this install (it may have moved, or been renamed)
     try { for (const id of fs.readdirSync(this.store.root)) { try { linkProject(this.store.dir(id)); } catch {} } } catch {}
