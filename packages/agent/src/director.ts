@@ -201,12 +201,12 @@ export class Director {
     return { amount: this.state.spent ?? priced(this.state.usage, this.o.prices, currency), currency };
   }
   /** usage is counted per model turn as it happens, so the running cost is live even inside a long exchange */
-  private countTurn(u: TokenUsage, prices?: Prices) {
+  private countTurn(u: TokenUsage, prices: Prices | undefined, model: AgentRuntime['model']) {
     const { amount, currency } = this.cost();
     this.state.spent = amount + priced(u, prices, currency);
     this.state.usage = addUsage(this.state.usage, u);
     this.save();
-    this.emit({ type: 'cost', usage: this.state.usage, ...this.cost() });
+    this.emit({ type: 'cost', usage: this.state.usage, ...this.cost(), turn: u, model: `${model.provider}/${model.id}` });
   }
   /** the page model draws the pages and checks the whole film; the director's takes everything else */
   private model(name: string) {
@@ -222,7 +222,7 @@ export class Director {
     const shown = !name.startsWith('check-');
     return runtime.open({ name, system, cwd: this.o.dir, maxTurns, signal, ...tools, onEvent: (event) => {
       if (shown || event.type === 'turn') this.emit({ type: 'agent', session: name, event });
-      if (event.type === 'turn') { this.countTurn(event.usage, prices); if (name.startsWith('page-')) this.firstTurn?.(); }
+      if (event.type === 'turn') { this.countTurn(event.usage, prices, runtime.model); if (name.startsWith('page-')) this.firstTurn?.(); }
     } }, resume);
   }
   private async send(s: AgentSession, text: string, images?: string[], thinking?: Thinking) {

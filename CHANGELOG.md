@@ -11,9 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - A style can leave its look to each film: with a `fonts.json` beside its grammar card, the director designs the film's look while writing the storyboard (`look` in storyboard.json: a style card, a palette by the runtime's colour names, one of the style's fonts, and a line: sketch, pen or clean). The server checks it, writes it into `META.look`, and every page agent and reviewer reads the card after the style's own. The storyboard card in the panel shows the look in a line, with its colours.
 - `META.look` can set the line (`line`: how rough and bowed a stroke is, its width, traced once or twice). Its fonts load before the first frame, and the band behind a page's heading takes the paper's colour.
+- Each `cost` event carries the turn that just ran (`turn`) and the model that took it (`model`, "provider/id"), so a service that prices turns itself no longer has to guess the model from the session's name. A page drawn again after a failure runs on the director's model, and was priced as the page model.
+- On a hosted service, the workbench can show what a film cost the service in dollars beside its credits (`Hosted.credits.spent` may return `cost`; a service gives it only to its admins).
 
 ### Changed
 
+- What a film cost is always shown in US dollars. It used to read ¥0.00 until the first model turn came in, and films from when a provider was priced in yuan showed ¥: those are now turned into dollars.
 - On a hosted service, a step that the balance doesn't cover says so above the composer: what it needs, what is left, and a link to top up. A storyboard waiting for approval says it before the button is pressed, and the button waits until the credits are there. A refused approval used to leave the card marked approved with nothing happening. Nothing is set aside for a step any more, so the workbench no longer shows a held amount.
 
 ## [0.5.0] - 2026-10-13

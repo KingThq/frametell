@@ -26,7 +26,7 @@ export function useCredits() {
 export function useFilmCredits(project: string, run: RunView) {
   const spent = hosted?.credits?.spent;
   const working = isWorking(run);
-  const [v, setV] = useState<{ spent: number; goAhead?: number } | null>(null);
+  const [v, setV] = useState<{ spent: number; goAhead?: number; cost?: number } | null>(null);
   useEffect(() => {
     if (!spent) return;
     let alive = true;
@@ -48,12 +48,17 @@ export function useSpent(project: string, run: RunView) {
   return v == null ? null : t('common.credits', { n: v.spent.toLocaleString(locale === 'zh' ? 'zh-CN' : 'en-US') });
 }
 
-/** on a hosted service, what this film has spent */
+/** on a hosted service, what this film has spent; its admins also see what it cost the service */
 export function FilmCredits({ project, run }: { project: string; run: RunView }) {
   const { t, locale } = useT();
   const v = useFilmCredits(project, run);
   if (!v) return null;
-  return <span className="shrink-0 text-[12.5px] text-ink-3 tabular" title={t('common.filmSpentTitle')}>{t('common.filmSpent', { n: v.spent.toLocaleString(locale === 'zh' ? 'zh-CN' : 'en-US') })}</span>;
+  return (
+    <span className="shrink-0 text-[12.5px] text-ink-3 tabular" title={t('common.filmSpentTitle')}>
+      {t('common.filmSpent', { n: v.spent.toLocaleString(locale === 'zh' ? 'zh-CN' : 'en-US') })}
+      {v.cost != null && <span title={t('common.filmCostTitle')}>{` · ${money({ amount: v.cost, currency: 'USD' })}`}</span>}
+    </span>
+  );
 }
 
 /** the balance, quiet in the top bar: what is left to spend, only to read (billing is in the account menu); below a

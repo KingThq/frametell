@@ -14,6 +14,7 @@ export default {
   creditsTitle: '可用积分',
   filmSpent: '本次消耗 {n} 积分',
   filmSpentTitle: '这部片子到现在实际用掉的积分',
+  filmCostTitle: '按官方 API 价格算的成本（仅管理员可见）',
   short: {
     title: '积分不够了',
     goAhead: '确认分镜后的制作大约要 {need} 积分，你还有 {have}。',

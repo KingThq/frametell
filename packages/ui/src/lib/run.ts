@@ -284,7 +284,10 @@ function newPage(id: string, r: RunView): PageView {
 /** a project-relative path from an absolute one the core reported (snapshots, video) */
 export const relPath = (abs: string, projectId: string) => { const i = abs.indexOf(projectId + '/'); return i >= 0 ? abs.slice(i + projectId.length + 1) : abs.split('/').slice(-2).join('/'); };
 
-export const money = (c?: { amount: number; currency: 'CNY' | 'USD' }, currency: 'CNY' | 'USD' = 'CNY') => { const cur = c?.currency ?? currency, a = c?.amount ?? 0; return `${cur === 'CNY' ? '¥' : '$'}${a < 10 ? a.toFixed(2) : a.toFixed(1)}`; };
+const CNY_PER_USD = 7.2;
+/** what a film cost, always in US dollars: every model is priced in them now, and a film from when one was priced in
+ * yuan (its log says CNY) is turned into dollars at the director's rate, so the figure never switches between ¥ and $ */
+export const money = (c?: { amount: number; currency: 'CNY' | 'USD' }) => { const a = c ? (c.currency === 'CNY' ? c.amount / CNY_PER_USD : c.amount) : 0; return `$${a < 10 ? a.toFixed(2) : a.toFixed(1)}`; };
 export const clock = (ms: number) => { const s = Math.max(0, Math.round(ms / 1000)); return s < 60 ? t('run.sec', { s }) : t('run.minSec', { m: Math.floor(s / 60), s: String(s % 60).padStart(2, '0') }); };
 
 /** something is being made right now (a stage, or the director planning a change to the finished film) */
