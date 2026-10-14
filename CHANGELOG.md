@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Model requests name their session (`x-frametell-session`).
 - `FRAMETELL_SANDBOX_NONET=1` keeps the agent's shell and the engine's tools (Chrome included) off the network and, on Linux, away from other processes. `FRAMETELL_SANDBOX_REQUIRED=1` refuses to run a shell when no sandbox is available; asking for no network requires a sandbox too.
 
+### Security
+
+- The agent's shell, the engine's tools and git get only the environment they need (paths, locale, the Chrome and ffmpeg settings, `FRAMETELL_*`). A host's secrets under any name, such as a database URL, no longer reach them; `NODE_OPTIONS` and `NODE_PATH` stay out too.
+- The shell's sandbox lets back in the installed engine's folders, not wherever a project's `engine/` and `engine_modules/` links point: a shell could repoint them at a hidden folder and read it.
+- The shell can no longer change a project's `.git`, whose hooks and config run in the studio's own git, outside the sandbox.
+
 ## [0.5.0] - 2026-10-13
 
 ### Added

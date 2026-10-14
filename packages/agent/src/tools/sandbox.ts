@@ -13,17 +13,20 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { ENGINE_DIR, engineModulesDir } from '@frametell/engine/tools/project.mjs';
 
 const real = (p: string) => { try { return fs.realpathSync(p); } catch { return undefined; } };
 const extraHidden = () => (process.env.FRAMETELL_SANDBOX_HIDE || '').split(',').map((s) => s.trim()).filter(Boolean);
 const inside = (p: string, dir: string) => p === dir || p.startsWith(dir.endsWith(path.sep) ? dir : dir + path.sep);
 
 /** what a tool run from the project needs to read besides it: the engine and its modules (pnpm links them from
- *  node_modules folders further up), and the Node that runs them (a version manager or the app keeps it in home) */
-function readable(root: string): string[] {
+ *  node_modules folders further up), and the Node that runs them (a version manager or the app keeps it in home).
+ *  The installed engine's own folders, never where the project's engine/ and engine_modules/ links point: the shell
+ *  can repoint those (at the folder of every account's projects), and that folder would be let back in. */
+function readable(): string[] {
   const out = new Set<string>();
-  for (const link of ['engine', 'engine_modules']) {
-    const r = real(path.join(root, link));
+  for (const dir of [ENGINE_DIR, engineModulesDir()]) {
+    const r = real(dir);
     if (!r) continue;
     out.add(r);
     // Node resolves a module through every node_modules above the file asking for it
@@ -68,9 +71,10 @@ export function confine(root: string, cmd: string, argv: string[], platform: Nod
       '(allow default)',
       ...(nonet() ? ['(deny network*)'] : []),
       `(deny file-read-data file-write* ${hidden.map((d) => `(subpath ${q(d)})`).join(' ')})`,
-      `(allow file-read-data ${readable(root).map((d) => `(subpath ${q(d)})`).join(' ')})`,
+      `(allow file-read-data ${readable().map((d) => `(subpath ${q(d)})`).join(' ')})`,
       `(allow file-read-data file-write* (subpath ${q(r)}))`,
       `(deny file-read-data file-write* (subpath ${q(path.join(r, '.studio'))}))`,   // the studio's record of the run
+      `(deny file-write* (subpath ${q(path.join(r, '.git'))}))`,   // its hooks and config run in the studio's own git
     ].join('\n');
     return ['/usr/bin/sandbox-exec', ['-p', profile, cmd, ...argv]];
   }
@@ -82,8 +86,9 @@ export function confine(root: string, cmd: string, argv: string[], platform: Nod
       ...(nonet() ? ['--unshare-net', '--unshare-pid', '--unshare-ipc', '--new-session', '--tmpfs', '/dev/shm'] : []),
       ...hidden.flatMap((d) => ['--tmpfs', d]),
       // what the project needs from a hidden folder comes back: the project itself (writable), the engine and Node
-      ...readable(root).filter((d) => hidden.some((h) => inside(d, h))).flatMap((d) => ['--ro-bind', d, d]),
+      ...readable().filter((d) => hidden.some((h) => inside(d, h))).flatMap((d) => ['--ro-bind', d, d]),
       '--bind', r, r, ...(fs.existsSync(path.join(r, '.studio')) ? ['--tmpfs', path.join(r, '.studio')] : []),   // the studio's record of the run
+      ...(fs.existsSync(path.join(r, '.git')) ? ['--ro-bind', path.join(r, '.git'), path.join(r, '.git')] : []),   // its hooks and config run in the studio's own git
       '--chdir', r, '--die-with-parent', cmd, ...argv,
     ]];
   }

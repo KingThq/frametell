@@ -7,7 +7,9 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { execFile, execFileSync, spawnSync } from 'node:child_process';
 import { confine } from './tools/sandbox.js';
-import { engineCmd } from './project.js';
+import { engineCmd, nodeEnv } from './project.js';
+import { fileTools } from './tools/files.js';
+import { ENGINE_DIR, engineModulesDir } from '@frametell/engine/tools/project.mjs';
 
 const sandboxed = process.platform === 'darwin' || (process.platform === 'linux' && (() => { try { execFileSync('bwrap', ['--ro-bind', '/', '/', '--dev', '/dev', '--proc', '/proc', 'true'], { stdio: 'ignore' }); return true; } catch { return false; } })());
 
@@ -29,6 +31,11 @@ test('the shell reads and writes its project, and nothing in a folder kept out n
     assert.ok(h.code !== 0 || h.out === '', h.out);
     fs.mkdirSync(path.join(root, '.studio'), { recursive: true }); fs.writeFileSync(path.join(root, '.studio/events.jsonl'), 'history');
     assert.notEqual(sh('cat .studio/events.jsonl').out, 'history');
+    // the studio's git runs outside the sandbox: a hook or a config line planted in .git would run there
+    fs.mkdirSync(path.join(root, '.git/hooks'), { recursive: true }); fs.writeFileSync(path.join(root, '.git/config'), '[core]\n');
+    sh('echo "#!/bin/sh" > .git/hooks/pre-commit; echo "[core] fsmonitor = touch /tmp/x" >> .git/config; mv .git .git-old; mkdir -p .git');
+    assert.ok(!fs.existsSync(path.join(root, '.git/hooks/pre-commit')) && !fs.existsSync(path.join(root, '.git-old')));
+    assert.equal(fs.readFileSync(path.join(root, '.git/config'), 'utf8'), '[core]\n');
   } finally {
     if (was === undefined) delete process.env.FRAMETELL_SANDBOX_HIDE; else process.env.FRAMETELL_SANDBOX_HIDE = was;
   }
@@ -106,4 +113,48 @@ test('every engine tool is launched through engineCmd, so none can bypass the sa
   const code = src.split('\n').filter((l) => l.includes('process.execPath') && !/^\s*(\/\/|\*|\/\*)/.test(l));
   const outside = code.filter((l) => !l.includes('confine(dir, process.execPath, args)'));   // the one line that defines engineCmd
   assert.deepEqual(outside, [], 'process.execPath may only appear in the engineCmd definition');
+});
+
+test('the shell and the engine tools see only what they need of the environment, never a secret under any name', async () => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ft-env-')));
+  const planted = { BILLING_DATABASE_URL: 'postgres://u:p@h/db', REDIS_URL: 'rediss://default:pw@r:6379', STRIPE_SECRET_KEY: 'sk_x', NODE_OPTIONS: '--require /tmp/evil.js', FRAMETELL_SANDBOX_HIDE_X: 'kept' };
+  const was = Object.fromEntries(Object.keys(planted).map((k) => [k, process.env[k]]));
+  Object.assign(process.env, planted);
+  try {
+    const bash = fileTools(root).find((t) => t.name === 'bash')!;
+    const r = await bash.execute('1', { command: 'env' }, undefined as never);
+    const out = (r.content[0] as { text: string }).text;
+    for (const k of ['BILLING_DATABASE_URL', 'REDIS_URL', 'STRIPE_SECRET_KEY', 'NODE_OPTIONS']) assert.ok(!out.includes(k + '='), `${k} reached the shell`);
+    assert.ok(!out.includes('u:p@h') && !out.includes('default:pw'), 'a password reached the shell');
+    assert.match(out, /^PATH=/m); assert.match(out, /^HOME=/m);
+    const env = nodeEnv({ SNAP_TILE: '320' });
+    assert.equal(env.BILLING_DATABASE_URL, undefined); assert.equal(env.REDIS_URL, undefined); assert.equal(env.NODE_OPTIONS, undefined);
+    assert.equal(env.SNAP_TILE, '320'); assert.equal(env.PATH, process.env.PATH); assert.equal(env.FRAMETELL_SANDBOX_HIDE_X, 'kept');
+  } finally {
+    for (const [k, v] of Object.entries(was)) if (v === undefined) delete process.env[k]; else process.env[k] = v;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a project\'s engine link pointed at a folder kept out does not let that folder back in; the real engine stays readable', { skip: !sandboxed && 'no sandbox here' }, () => {
+  const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ft-relink-')));
+  const root = path.join(base, 'project'), others = path.join(base, 'others');
+  fs.mkdirSync(root); fs.mkdirSync(path.join(others, 'node_modules'), { recursive: true });
+  fs.writeFileSync(path.join(others, 'secret.txt'), 'theirs');
+  fs.writeFileSync(path.join(others, 'node_modules', 'secret.txt'), 'theirs too');
+  fs.symlinkSync(others, path.join(root, 'engine'));
+  fs.symlinkSync(path.join(others, 'node_modules'), path.join(root, 'engine_modules'));
+  const was = process.env.FRAMETELL_SANDBOX_HIDE;
+  process.env.FRAMETELL_SANDBOX_HIDE = others;
+  const sh = (c: string) => { const [cmd, argv] = confine(root, 'bash', ['-c', c]); const r = spawnSync(cmd, argv, { cwd: root, encoding: 'utf8' }); return (r.stdout + r.stderr).trim(); };
+  try {
+    assert.ok(!sh('cat engine/secret.txt').includes('theirs'));
+    assert.ok(!sh(`cat ${JSON.stringify(path.join(others, 'secret.txt'))}`).includes('theirs'));
+    assert.ok(!sh('cat engine_modules/secret.txt').includes('theirs'));
+    assert.equal(JSON.parse(sh(`cat ${JSON.stringify(path.join(ENGINE_DIR, 'package.json'))}`)).name, '@frametell/engine');
+    assert.match(sh(`cat ${JSON.stringify(path.join(engineModulesDir(), 'roughjs', 'package.json'))}`), /"name": "roughjs"/);
+  } finally {
+    if (was === undefined) delete process.env.FRAMETELL_SANDBOX_HIDE; else process.env.FRAMETELL_SANDBOX_HIDE = was;
+    fs.rmSync(base, { recursive: true, force: true });
+  }
 });

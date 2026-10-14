@@ -24,9 +24,20 @@ export interface Beat { at: string; object: string; action: string; camera?: str
 export interface StoryPage { id: string; section: string; say: string; core?: boolean; beats: Beat[] }
 export interface Storyboard { title: string; summary: string; durationSec?: number; style: string; cast: string; lang?: 'zh' | 'en'; pages: StoryPage[] }
 
+/** what a child of the agent (its shell, the engine tools, git, ffmpeg) may see of this process's environment: what a
+ *  shell, Node, Chrome and ffmpeg need, and nothing else. A list of what passes, not of what doesn't: an agent can print
+ *  its environment, every word it reads goes to the model's provider, and on a hosted service the environment holds
+ *  the service's own secrets under any name (a database URL carries its password). NODE_OPTIONS and NODE_PATH stay out:
+ *  they make every Node the shell starts load other code. */
+const PASSES = /^(PATH|HOME|USER|LOGNAME|SHELL|LANG|LANGUAGE|LC_[A-Z]+|TZ|TMPDIR|TEMP|TMP|TERM|CHROME_PATH|FFMPEG_PATH|PLAYWRIGHT_BROWSERS_PATH|NODE_EXTRA_CA_CERTS|RENDER_FRAME_TIMEOUT_MS|FRAMETELL_[A-Z_]+|SYSTEMROOT|WINDIR|COMSPEC|PATHEXT|USERPROFILE|APPDATA|LOCALAPPDATA|PROGRAMDATA|PROGRAMFILES|PROGRAMFILES\(X86\))$/i;
+const SECRET = /KEY|SECRET|TOKEN|PASSWORD|CREDENTIAL|AUTH|URL/i;   // never, even under a name that passes (FRAMETELL_*)
+export const childEnv = (): Record<string, string> =>
+  Object.fromEntries(Object.entries(process.env).filter((e): e is [string, string] => e[1] !== undefined && PASSES.test(e[0]) && !SECRET.test(e[0])));
+
 /** The environment for a child that runs process.execPath as Node: inside Electron the executable is the app, which runs
- * as plain Node only with ELECTRON_RUN_AS_NODE (it must not be set for the app's own helper processes, so only here). */
-export const nodeEnv = (extra: Record<string, string | undefined> = {}) => ({ ...process.env, ...(process.versions.electron ? { ELECTRON_RUN_AS_NODE: '1' } : {}), ...extra });
+ * as plain Node only with ELECTRON_RUN_AS_NODE (it must not be set for the app's own helper processes, so only here).
+ * `extra` is what the caller hands this one child on purpose. */
+export const nodeEnv = (extra: Record<string, string | undefined> = {}): Record<string, string | undefined> => ({ ...childEnv(), ...(process.versions.electron ? { ELECTRON_RUN_AS_NODE: '1' } : {}), ...extra });
 
 /** run a program to completion without blocking the process */
 const run = (cmd: string, args: string[], cwd?: string) => new Promise<void>((ok, fail) => execFile(cmd, args, { cwd, timeout: 120_000, env: nodeEnv() }, (e, _o, err) => (e ? fail(new Error(String(err || e.message).slice(0, 1000))) : ok())));
@@ -202,9 +213,9 @@ export class Project {
   gate(file: string): FilmGateResult { return measure(file); }
 
   // ── history: every change the agent makes is a commit, so any step can be undone (git revert) ──
-  private git(args: string[]) { return spawnSync('git', args, { cwd: this.dir, encoding: 'utf8' }); }
+  private git(args: string[]) { return spawnSync('git', args, { cwd: this.dir, encoding: 'utf8', env: childEnv() }); }
   private gitAsync(args: string[]) {
-    return new Promise<{ status: number; stdout: string }>((ok) => execFile('git', args, { cwd: this.dir, encoding: 'utf8', maxBuffer: 16 << 20 }, (e, stdout) => ok({ status: e ? 1 : 0, stdout: stdout || '' })));
+    return new Promise<{ status: number; stdout: string }>((ok) => execFile('git', args, { cwd: this.dir, encoding: 'utf8', maxBuffer: 16 << 20, env: childEnv() }, (e, stdout) => ok({ status: e ? 1 : 0, stdout: stdout || '' })));
   }
   initHistory() {
     if (!fs.existsSync(this.file('.git'))) {

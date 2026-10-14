@@ -38,9 +38,8 @@ const EditP = Type.Object({ path: Type.String(), old_string: Type.String(), new_
   finish: Type.Optional(Type.Boolean({ description: 'true when this reply holds all of this round\'s edits: the round ends once they apply, no reply needed' })) });
 const BashP = Type.Object({ command: Type.String() });
 
-/** the shell's environment, without the keys: an agent can print its environment, and every word it reads goes to the
- *  model's provider (on a hosted service, the environment holds the service's own keys) */
-const shellEnv = () => Object.fromEntries(Object.entries(nodeEnv()).filter(([k]) => !/KEY|SECRET|TOKEN|PASSWORD|CREDENTIAL|AUTH/i.test(k)));
+/** the shell's environment: only what a shell and the engine tools need (nodeEnv), never the service's secrets */
+const shellEnv = () => nodeEnv();
 
 export function fileTools(root: string, opts: { timeoutMs?: number } = {}): AgentTool<any>[] {
   const read: AgentTool<typeof ReadP> = {
