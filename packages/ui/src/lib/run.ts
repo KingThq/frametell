@@ -207,8 +207,10 @@ function step(v: RunView, e: LoggedEvent): RunView {
       return r;
     case 'page': {
       const p = r.pages[e.id] ? { ...r.pages[e.id] } : newPage(e.id, r);
-      // a film from before issues had fields logged them as lines of text: kept as notes, which the panel doesn't word
-      p.status = e.status; p.round = e.round ?? p.round; p.issues = e.issues?.map((i: PageIssue | string) => (typeof i === 'string' ? { from: 'agent', msg: i } : i)) ?? p.issues;
+      // a film from before issues had fields logged them as lines of text: kept as notes, which the panel doesn't word.
+      // A page its own check left with a note (flagged) is shown drawn like any other: the note asks nothing of the
+      // person, and "one thing for you to look at" only puzzled them
+      p.status = e.status === 'flagged' ? 'ok' : e.status; p.round = e.round ?? p.round; p.issues = e.issues?.map((i: PageIssue | string) => (typeof i === 'string' ? { from: 'agent', msg: i } : i)) ?? p.issues;
       // a paused film has nothing in progress: a page still winding down after the pause (older runs went on for
       // minutes) waits as queued until the film continues
       if (r.paused && (p.status === 'drawing' || p.status === 'checking')) p.status = 'queued';
