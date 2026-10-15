@@ -7,7 +7,7 @@ import crypto from 'node:crypto';
 import { createProject, linkProject } from '@frametell/engine/tools/project.mjs';
 import { createCatalog } from '@frametell/models';
 import { elevenLabsTts, volcengineTts } from '@frametell/voice';
-import { Director, piRuntime, type AgentRuntime, type Renderer, type StudioEvent, type Storyboard, type UserRef } from '@frametell/agent';
+import { Director, Project, piRuntime, type AgentRuntime, type Renderer, type StudioEvent, type Storyboard, type UserRef } from '@frametell/agent';
 import type { Config, ConfigStore } from './config.js';
 import { prepareMaterials } from './materials.js';
 import { applyProxy } from './net.js';
@@ -138,6 +138,11 @@ class Runner {
   private subs = new Set<(e: Logged) => void>();
   private seq = 0;
   private abort?: AbortController;
+  /** this process is going away (a sandbox rolled out): what runs is stopped without a word in the log, and nothing
+   *  starts again here. The next process to open the film finds it cut short and carries it on */
+  private halted = false;
+  /** the task now running, settled once it has wound down (its children stopped) */
+  private task?: Promise<void>;
   private gate?: (feedback: string | undefined) => void;
   /** an approval that arrived before the run reached the gate (e.g. right after a server restart) */
   private pending?: { feedback?: string };
@@ -166,7 +171,10 @@ class Runner {
     this.log = studioFile(dir, 'events.jsonl');
     if (fs.existsSync(this.log)) {
       const lines = fs.readFileSync(this.log, 'utf8').trim().split('\n').filter(Boolean);
-      this.seq = lines.length;
+      // the next event follows the highest number logged, not the count of lines: a host that rebuilt this log from its
+      // own store (a sandbox restored elsewhere) may have left out an event it could not keep, and a number a browser has
+      // already seen must never be given again
+      this.seq = lines.reduce((m, l) => { try { const s = (JSON.parse(l) as Logged).seq; return Number.isInteger(s) && s > m ? s : m; } catch { return m; } }, 0);
       const last = lines.length ? (JSON.parse(lines[lines.length - 1]) as Logged) : undefined;
       this.status = last?.type === 'approval' ? 'awaiting_approval' : this.stateStage() === 'done' ? 'done' : lines.length ? 'stopped' : 'idle';
       // an export cut short by the app closing: the film is still there to preview, the export can simply run again
@@ -258,14 +266,14 @@ class Runner {
 
   /** render the finished film to mp4 (only on request: the live preview is the film until then) */
   export(): boolean {
-    if (this.status === 'running' || this.stateStage() !== 'done') return false;
+    if (this.halted || this.status === 'running' || this.stateStage() !== 'done') return false;
     void this.launch((d) => d.render(), { exporting: true });
     return true;
   }
 
   /** build the director and run `task` with it: one run at a time, across processes; the outcome is always logged */
   private async launch(task: (d: Director) => Promise<unknown>, o: { exporting?: boolean } = {}) {
-    if (this.status === 'running') return;
+    if (this.status === 'running' || this.halted) return;
     const other = heldElsewhere(this.dir);
     if (other) { this.emit({ type: 'error', message: this.tr(`这个项目正在另一个帧言窗口里制作（进程 ${other}），请在那里继续`, `This project is being made in another Frametell window (process ${other}). Continue there.`) }); return; }
     const lock = studioFile(this.dir, 'run.lock');
@@ -275,7 +283,12 @@ class Runner {
     const cfg = this.config.load({ project: this.id });
     const dir = this.dir;
     linkProject(dir);
+    // the history exists before any agent's shell runs: else the shell could make .git itself, with a config of its own
+    // that the studio's git would then follow
+    if (!fs.existsSync(path.join(dir, '.git'))) new Project(dir).initHistory();
     this.abort = new AbortController();
+    let finished!: () => void;
+    this.task = new Promise<void>((r) => { finished = r; });
     // a paused run that continues says so at once: getting the director ready can take seconds (the model catalog), and
     // until its first step every client still showed it paused, with a Continue that seemed to do nothing
     if (this.status === 'stopped' || this.status === 'failed') this.emit({ type: 'resumed' });
@@ -303,6 +316,8 @@ class Runner {
     } catch (e) {
       this.status = 'failed';
       release();
+      finished();
+      if (this.halted) return;
       this.emit({ type: 'error', message: (e as Error).message });
       this.emit({ type: 'paused', reason: 'error', message: (e as Error).message });
       return;
@@ -319,6 +334,7 @@ class Runner {
     task(director).finally(() => { release(); this.director = undefined; this.exporting = false; })
       .then(() => { this.status = 'done'; writeMeta(this.dir, readMetaAt(this.dir)); next(); })
       .catch((e: Error) => {
+        if (this.halted) { this.status = o.exporting ? 'done' : 'stopped'; return; }
         const stage = this.stateStage();
         // a failed or cancelled export leaves a finished film: say what happened to the export, nothing is paused
         if (o.exporting) {
@@ -331,7 +347,8 @@ class Runner {
         }
         if (e.name === 'AbortError' || this.abort?.signal.aborted) { this.status = 'stopped'; this.emit({ type: 'paused', reason: 'user', stage }); }
         else { this.status = 'failed'; this.emit({ type: 'error', message: e.message }); this.emit({ type: 'paused', reason: 'error', stage, message: e.message }); }
-      });
+      })
+      .finally(finished);
   }
 
   /** the user confirmed the storyboard (optionally with change requests) */
@@ -342,6 +359,12 @@ class Runner {
   }
 
   stop() { this.abort?.abort(); }
+
+  halt(): Promise<void> {
+    this.halted = true;
+    this.abort?.abort();
+    return this.task ?? Promise.resolve();
+  }
 
   /**
    * The user said something. At the storyboard it is the change request; while the director works it is a note the

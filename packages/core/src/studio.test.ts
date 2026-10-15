@@ -355,3 +355,78 @@ test('a host hears every event of every run, with its project, and a host that t
     assert.equal(fs.readFileSync(path.join(dir, '.studio', 'events.jsonl'), 'utf8').trim().split('\n').length, 5);
   } finally { console.error = err; fs.rmSync(dataDir, { recursive: true, force: true }); }
 });
+
+test('a run numbers on from the highest event logged, not the count of lines (a host rebuilt the log with a gap)', async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'frametell-maxseq-'));
+  try {
+    const id = '2026-10-15-max000000001', dir = path.join(dataDir, 'projects', id), now = new Date().toISOString();
+    fs.mkdirSync(path.join(dir, '.studio'), { recursive: true });
+    fs.writeFileSync(path.join(dir, '.studio', 'project.json'), JSON.stringify({ id, title: id, style: 'whiteboard', durationSec: 60, model: 'nowhere/none', runtime: 'pi', subtitles: true, materials: [], createdAt: now, updatedAt: now }));
+    fs.writeFileSync(path.join(dir, '.studio', 'state.json'), JSON.stringify({ stage: 'pages' }));
+    // events 3 and 4 were never stored, so the log rebuilt from the store skips them
+    fs.writeFileSync(path.join(dir, '.studio', 'events.jsonl'), [1, 2, 5].map((seq) => JSON.stringify({ type: 'note', text: 'n', seq, at: seq })).join('\n') + '\n');
+    const heard: number[] = [];
+    const studio = new Studio({ dataDir, config: memoryConfig(), onEvent: (_p, e) => heard.push(e.seq) });
+    studio.projects();   // opening it finds the run cut short and logs that
+    assert.deepEqual(heard, [6]);
+  } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
+});
+
+test('a host can open a Studio that leaves every project folder as it is, and create a project without starting it', () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'frametell-nolink-'));
+  try {
+    const stray = path.join(dataDir, 'projects', '2026-10-15-stray0000001');
+    fs.mkdirSync(stray, { recursive: true });
+    new Studio({ dataDir, config: memoryConfig({ keys: { anthropic: 'k' }, defaults: { model: 'anthropic/claude-opus-5-5' } as never }), linkProjects: false });
+    assert.equal(fs.existsSync(path.join(stray, 'engine')), false);
+    const studio = new Studio({ dataDir, config: memoryConfig({ keys: { anthropic: 'k' }, defaults: { model: 'anthropic/claude-opus-5-5' } as never }), linkProjects: false });
+    const p = studio.createProject({ topic: 'tides' }, [], { start: false });
+    assert.equal(studio.project(p.id).status, 'idle');
+    assert.ok(fs.existsSync(path.join(dataDir, 'projects', p.id, 'index.html')));
+    assert.equal(fs.existsSync(path.join(dataDir, 'projects', p.id, '.studio', 'events.jsonl')), false);
+  } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
+});
+
+test('a run gives its project a history before any agent can touch it', async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'frametell-githist-'));
+  try {
+    const studio = new Studio({ dataDir, config: memoryConfig({ defaults: { model: 'nowhere/none' } as never }) });
+    const p = studio.createProject({ topic: 'tides' }, [], { start: false });
+    const dir = path.join(dataDir, 'projects', p.id);
+    fs.rmSync(path.join(dir, '.git'), { recursive: true, force: true });
+    await studio.start(p.id);   // no model here: the run stops at once, after making the history
+    assert.ok(fs.statSync(path.join(dir, '.git')).isDirectory());
+  } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
+});
+
+test('a halted run stops at once and logs nothing; the host that opens the film next finds it cut short', async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'frametell-halt-'));
+  try {
+    const id = '2026-10-15-halt00000001', dir = path.join(dataDir, 'projects', id), now = new Date().toISOString();
+    fs.mkdirSync(path.join(dir, '.studio'), { recursive: true });
+    fs.writeFileSync(path.join(dir, '.studio', 'project.json'), JSON.stringify({ id, title: id, style: 'whiteboard', durationSec: 60, model: 'nowhere/none', runtime: 'pi', subtitles: true, materials: [], createdAt: now, updatedAt: now }));
+    fs.writeFileSync(path.join(dir, '.studio', 'state.json'), JSON.stringify({ stage: 'done' }));
+    fs.writeFileSync(path.join(dir, 'script.js'), "const SCRIPT = {\n  META: { style: 'whiteboard', lang: 'zh' },\n  PAGES: [],\n};\n");
+    let drawing!: () => void;
+    const started = new Promise<void>((r) => { drawing = r; });
+    // an export that draws until it is stopped
+    const studio = new Studio({ dataDir, config: memoryConfig(), renderer: (_d, o) => new Promise<void>((_ok, fail) => {
+      drawing();
+      o.signal?.addEventListener('abort', () => fail(Object.assign(new Error('aborted'), { name: 'AbortError' })));
+    }) });
+    const seen: { type: string }[] = [];
+    const off = [studio.subscribe(id, 0, (e) => seen.push(e as never))];   // each holds a file watch: let go in the end
+    assert.equal(studio.export(id), true);
+    await started;
+    const before = seen.length;
+    await studio.halt(id);
+    assert.deepEqual(seen.slice(before), []);           // no "export canceled", no "paused"
+    assert.equal(studio.export(id), false);              // a halted runner starts nothing more
+    assert.equal(fs.existsSync(path.join(dir, '.studio', 'run.lock')), false);
+    const next = new Studio({ dataDir, config: memoryConfig() });
+    const again: { type: string; stage?: string; status?: string }[] = [];
+    off.push(next.subscribe(id, 0, (e) => again.push(e as never)));
+    assert.ok(again.some((e) => e.type === 'stage' && e.stage === 'render' && e.status === 'failed'), 'the export is found cut short');
+    for (const f of off) f();
+  } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
+});

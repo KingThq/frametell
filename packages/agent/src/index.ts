@@ -1,5 +1,8 @@
 export { Director, type DirectorOptions, type Prices } from './director.js';
 export { Project, type Renderer, type Storyboard, type StoryPage, type Beat, type Timeline, type PageTiming, type LintIssue } from './project.js';
+/** how a host runs the engine's tools and children: confined when the network is taken away, with only the environment they need */
+export { engineCmd, nodeEnv, childEnv } from './project.js';
+export { confine } from './tools/sandbox.js';
 export { gitSync, gitAsync, GIT_SAFE } from './git.js';
 export { cleanLook, type Look } from './look.js';
 export { STYLES, type Brief } from './prompts.js';

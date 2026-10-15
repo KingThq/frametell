@@ -115,3 +115,14 @@ test('removeNestedRepos keeps the project\'s own history and does not follow lin
     assert.ok(fs.existsSync(path.join(elsewhere, 'r/.git')), 'a link out of the project is not walked');
   } finally { fs.rmSync(base, { recursive: true, force: true }); }
 });
+
+test('a commit in a project with no history makes the repository first, so a shell cannot plant one, and commits what is there', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'frametell-commitinit-'));
+  try {
+    fs.writeFileSync(path.join(dir, 'script.js'), 'const SCRIPT = {};');
+    const id = await new Project(dir).commit('first');
+    assert.ok(id, 'the first commit has the files in it');
+    assert.ok(fs.statSync(path.join(dir, '.git')).isDirectory());
+    assert.equal(gitSync(dir, ['log', '--format=%s']).stdout.trim(), 'first');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});

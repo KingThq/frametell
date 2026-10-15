@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Hosts that run projects elsewhere can open a Studio that leaves project folders as they are (`linkProjects: false`) and create a project without starting it (`createProject(…, { start: false })`). The engine's runner helpers (`engineCmd`, `nodeEnv`, `childEnv`, `confine`) are exported.
+- A run numbers its events on from the highest number in its log, so a log rebuilt by a host with an event left out never reuses a number.
+- `Studio.halt(id)` stops a film's task without logging a pause, for a host that is going away: the next host to open the film finds it cut short and carries it on.
+
+### Security
+
+- A project gets its git history before any agent's shell runs (and before any commit), so a shell can no longer make `.git` itself first.
+
 ## [0.5.1] - 2026-10-14
 
 ### Added

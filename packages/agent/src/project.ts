@@ -256,16 +256,21 @@ export class Project {
   // ── history: every change the agent makes is a commit, so any step can be undone (git revert) ──
   private git(args: string[]) { return gitSync(this.dir, args, childEnv()); }
   private gitAsync(args: string[]) { return gitAsync(this.dir, args, childEnv()); }
+  /** an empty history: the repository and its author, nothing committed */
+  initRepo() {
+    if (fs.existsSync(this.file('.git'))) return;
+    this.git(['init', '-q', '-b', 'main']);
+    this.git(['config', 'user.name', 'Frametell']);
+    this.git(['config', 'user.email', 'studio@frametell.local']);
+  }
   initHistory() {
-    if (!fs.existsSync(this.file('.git'))) {
-      this.git(['init', '-q', '-b', 'main']);
-      this.git(['config', 'user.name', 'Frametell']);
-      this.git(['config', 'user.email', 'studio@frametell.local']);
-    }
+    this.initRepo();
     this.commitSync('Project created');
   }
-  /** Commit everything that changed; returns the commit id, or null when nothing changed. */
+  /** Commit everything that changed; returns the commit id, or null when nothing changed. The repository is made first
+   *  when there is none, so a shell can never make .git itself first (with a config of its own) */
   async commit(message: string): Promise<string | null> {
+    this.initRepo();
     await stageAll(this.dir, childEnv());
     const r = await this.gitAsync(['commit', '-q', '-m', message]);
     if (r.status !== 0) return null;

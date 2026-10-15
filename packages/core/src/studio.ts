@@ -49,6 +49,12 @@ export interface StudioOptions {
    * events itself. Called after the event is in the project's events.jsonl; what it throws is logged and stops nothing.
    */
   onEvent?: (project: string, e: LoggedEvent) => void;
+  /**
+   * point every project's engine links at this install when the Studio opens (default). A host that keeps projects as
+   * data and never runs them here (a service whose runs happen in sandboxes) passes false, so nothing in a project
+   * folder is touched
+   */
+  linkProjects?: boolean;
 }
 
 export class Studio {
@@ -62,7 +68,7 @@ export class Studio {
     this.store = new Projects(path.join(this.dataDir, 'projects'), this.config, o.renderer, o.review, o.onEvent);
     applyProxy(this.config.load().proxy);
     // every project reaches the engine through links; point them at this install (it may have moved, or been renamed)
-    try { for (const id of fs.readdirSync(this.store.root)) { try { linkProject(this.store.dir(id)); } catch {} } } catch {}
+    if (o.linkProjects !== false) try { for (const id of fs.readdirSync(this.store.root)) { try { linkProject(this.store.dir(id)); } catch {} } } catch {}
   }
 
   /** the directory holding this Studio's projects */
@@ -159,7 +165,8 @@ export class Studio {
   project(id: string): ProjectSummary { return { ...this.store.read(id), ...this.store.runner(id).summary() }; }
 
   /** create a project from materials and start it right away (it pauses at the storyboard for approval) */
-  createProject(input: NewProjectInput, files: MaterialFile[]): ProjectMeta {
+  /** `start: false` only creates it (a host that runs it elsewhere starts it there) */
+  createProject(input: NewProjectInput, files: MaterialFile[], o: { start?: boolean } = {}): ProjectMeta {
     const cfg = this.config.load(), d = cfg.defaults;
     const model = input.model || d.model;
     const pages = input.pageModel ?? d.pageModel;
@@ -186,7 +193,7 @@ export class Studio {
       lang: input.lang ?? resolveLocale(cfg.locale), topic, notes: topic ? undefined : input.notes,
       styleNotes: input.styleNotes?.trim().slice(0, 4000) || undefined, look: cleanLook(input.look),
     }, files.map((f) => ({ name: f.name, data: Buffer.from(f.data) })));
-    void this.store.runner(meta.id).start();
+    if (o.start !== false) void this.store.runner(meta.id).start();
     return meta;
   }
 
@@ -248,6 +255,9 @@ export class Studio {
   export(id: string) { return this.store.runner(id).export(); }
   approve(id: string, feedback?: string) { return this.store.runner(id).approve(feedback); }
   stop(id: string) { this.store.runner(id).stop(); }
+  /** a host going away (a sandbox rolled out) stops the film's task without logging a pause: the next host finds it cut
+   *  short and carries it on. Settles once the task has wound down */
+  halt(id: string): Promise<void> { return this.store.runner(id).halt(); }
   /** delete a project and its files; refused while it is being made */
   deleteProject(id: string) { this.store.remove(id); this.timelines.delete(id); }
   /** talk to the director: storyboard feedback, a note mid-run, or a change to the finished film */
