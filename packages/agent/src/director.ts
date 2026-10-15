@@ -41,6 +41,8 @@ export interface DirectorOptions {
   signal?: AbortSignal;
   /** where exports are drawn; this process when absent */
   renderer?: Renderer;
+  /** a folder each export is also copied into (the user's 「导出位置」) */
+  exportDir?: string;
   /**
    * the whole-film check after the pages: 'full' (the default) whenever the film's lint finds anything or a page is
    * still flagged after its own rounds; 'defects' only for what breaks a film (a frame that renders differently, page
@@ -201,12 +203,12 @@ export class Director {
     return { amount: this.state.spent ?? priced(this.state.usage, this.o.prices, currency), currency };
   }
   /** usage is counted per model turn as it happens, so the running cost is live even inside a long exchange */
-  private countTurn(u: TokenUsage, prices?: Prices) {
+  private countTurn(u: TokenUsage, prices: Prices | undefined, model: AgentRuntime['model']) {
     const { amount, currency } = this.cost();
     this.state.spent = amount + priced(u, prices, currency);
     this.state.usage = addUsage(this.state.usage, u);
     this.save();
-    this.emit({ type: 'cost', usage: this.state.usage, ...this.cost() });
+    this.emit({ type: 'cost', usage: this.state.usage, ...this.cost(), turn: u, model: `${model.provider}/${model.id}` });
   }
   /** the page model draws the pages and checks the whole film; the director's takes everything else */
   private model(name: string) {
@@ -222,7 +224,7 @@ export class Director {
     const shown = !name.startsWith('check-');
     return runtime.open({ name, system, cwd: this.o.dir, maxTurns, signal, ...tools, onEvent: (event) => {
       if (shown || event.type === 'turn') this.emit({ type: 'agent', session: name, event });
-      if (event.type === 'turn') { this.countTurn(event.usage, prices); if (name.startsWith('page-')) this.firstTurn?.(); }
+      if (event.type === 'turn') { this.countTurn(event.usage, prices, runtime.model); if (name.startsWith('page-')) this.firstTurn?.(); }
     } }, resume);
   }
   private async send(s: AgentSession, text: string, images?: string[], thinking?: Thinking) {
@@ -640,9 +642,25 @@ export class Director {
     const g = this.project.gate(out.withSubs);
     this.emit({ type: 'gate', red: g.red, blank: g.gates.find((x) => x.key === 'blank')?.value ?? [], report: g.report.map((r) => ({ name: r.name, value: r.value, unit: r.unit })) });
     this.state.video = out.withSubs; this.state.exported = true; this.save();
+    const saved = this.saveCopies(out);
     this.emit({ type: 'stage', stage: 'render', status: 'done' });
-    this.emit({ type: 'done', video: out.withSubs, videoNoSubs: out.noSubs, duration: g.duration });
+    this.emit({ type: 'done', video: out.withSubs, videoNoSubs: out.noSubs, duration: g.duration, saved });
     return out;
+  }
+
+  /** both films copied into the export folder, replacing an earlier export of the same name; a folder that can't be
+   * written is said, and the export still stands (the films are in the project) */
+  private saveCopies(out: { withSubs: string; noSubs: string }) {
+    const dir = this.o.exportDir;
+    if (!dir) return undefined;
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+      const copy = (f: string) => { const to = path.join(dir, path.basename(f)); fs.copyFileSync(f, to); return to; };
+      return { withSubs: copy(out.withSubs), noSubs: copy(out.noSubs) };
+    } catch (e) {
+      this.emit({ type: 'error', message: this.say(`没能存到导出位置 ${dir}：${(e as Error).message}。片子还在项目里，可以直接下载`, `Couldn't save to the export folder ${dir}: ${(e as Error).message}. The film is still in the project and can be downloaded`) });
+      return undefined;
+    }
   }
 
   /**

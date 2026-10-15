@@ -54,12 +54,14 @@ export type StudioEvent =
   | { type: 'voice'; voice: { provider: 'volcengine' | 'elevenlabs'; id: string; name?: string } }
   | { type: 'render'; line: string }
   | { type: 'gate'; red: boolean; blank: { at: number; seconds: number }[]; report: { name: string; value: number; unit?: string }[] }
-  | { type: 'cost'; usage: TokenUsage; amount: number; currency: 'CNY' | 'USD' }
+  /** the film's running cost after a model turn: `usage` and `amount` are the film's so far; `turn` is the turn that just
+   *  ran, on `model` ("provider/id", the one that really took it), for whoever prices turns on their own */
+  | { type: 'cost'; usage: TokenUsage; amount: number; currency: 'CNY' | 'USD'; turn?: TokenUsage; model?: string }
   | { type: 'commit'; id: string; message: string }
   | { type: 'error'; message: string; stage?: Stage }
   /** the film is drawn and checked: it plays in the live preview. An mp4 is made only on export (then `done`) */
   | { type: 'ready'; duration: number }
   /** the film was exported to mp4 */
-  | { type: 'done'; video: string; videoNoSubs: string; duration: number };
+  | { type: 'done'; video: string; videoNoSubs: string; duration: number; /** the copies in the user's export folder */ saved?: { withSubs: string; noSubs: string } };
 
 export type { LintIssue };

@@ -43,6 +43,8 @@ export interface StudioClient {
   voicePreviewUrl(v: Voice): string;
   /** show a file in Finder / Explorer — the desktop app only */
   reveal?(file: string): Promise<void>;
+  /** choose a folder with the system dialog (starting at `current`); undefined when dismissed — the desktop app only */
+  pickFolder?(current?: string): Promise<string | undefined>;
   /** a URL for a file inside the project (preview player, snapshot, video) */
   fileUrl(p: ProjectView, rel: string): string;
   /** set by a hosted service (Frametell Cloud): it runs the models and voices, so the panel leaves out settings, the
@@ -58,8 +60,9 @@ export interface Hosted {
   credits?: {
     read(): Promise<{ available: number; perMinute: number; plan?: string; styles?: string[] | null } | null>; url: string;
     /** the credits one film has spent so far, shown instead of what it cost in money, and what its go-ahead needs in the
-     * balance (a storyboard waiting for it says so before the button is pressed); null when nothing is metered */
-    spent?(project: string): Promise<{ spent: number; goAhead?: number } | null>;
+     * balance (a storyboard waiting for it says so before the button is pressed); null when nothing is metered. `cost`:
+     * what the film cost the service in US dollars, given only to its admins, to trace costs */
+    spent?(project: string): Promise<{ spent: number; goAhead?: number; cost?: number } | null>;
   };
 }
 

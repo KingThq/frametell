@@ -1,6 +1,6 @@
 // Electron main process: hosts the core and serves the panel and project files over a private studio:// scheme.
 // The renderer reaches the core only through the preload bridge (contextIsolation on, no Node in the page).
-import { app, BrowserWindow, ipcMain, net, protocol, shell, type WebContents } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, net, protocol, shell, type WebContents } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
@@ -35,11 +35,19 @@ ipcMain.handle('studio:subscribe', (e, subId: string, id: string, since: number)
   subs.set(subId, off);
   target.once('destroyed', () => { off(); subs.delete(subId); });
 });
-// show an exported file in Finder / Explorer: only files of Studio's own projects
+// show an exported file in Finder / Explorer: only files of Studio's own projects, or of the export folder
 ipcMain.handle('studio:reveal', (_e, file: string) => {
   const abs = path.resolve(String(file));
-  if (!abs.startsWith(studio.projectsDir + path.sep) || !fs.existsSync(abs)) throw new Error('file not found');
+  const roots = [studio.projectsDir, studio.exportDir].filter((d): d is string => !!d);
+  if (!roots.some((d) => abs.startsWith(d + path.sep)) || !fs.existsSync(abs)) throw new Error('file not found');
   shell.showItemInFolder(abs);
+});
+// choose the export folder; undefined when the dialog was dismissed
+ipcMain.handle('studio:pickFolder', async (e, current?: string) => {
+  const win = BrowserWindow.fromWebContents(e.sender);
+  const o = { defaultPath: current || app.getPath('videos'), properties: ['openDirectory', 'createDirectory'] as ('openDirectory' | 'createDirectory')[] };
+  const r = win ? await dialog.showOpenDialog(win, o) : await dialog.showOpenDialog(o);
+  return r.canceled ? undefined : r.filePaths[0];
 });
 ipcMain.handle('studio:unsubscribe', (_e, subId: string) => { subs.get(subId)?.(); subs.delete(subId); });
 

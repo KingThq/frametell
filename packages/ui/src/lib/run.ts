@@ -29,7 +29,7 @@ export type FeedItem = In & (
   /** the film is finished and plays in the preview (newer runs; older logs go straight to `done`) */
   | { kind: 'ready'; key: string; duration: number; at: number }
   /** an mp4 export: running, then done with the file, or failed */
-  | { kind: 'export'; key: string; status: 'running' | 'done' | 'failed'; detail?: string; video?: string; noSubs?: string; at: number; endedAt?: number }
+  | { kind: 'export'; key: string; status: 'running' | 'done' | 'failed'; detail?: string; video?: string; noSubs?: string; saved?: string; at: number; endedAt?: number }
   | { kind: 'done'; key: string; video: string; duration: number; at: number });
 
 export interface PageView {
@@ -59,7 +59,7 @@ export interface RunView {
   awaitingApproval: boolean;
   cost?: { amount: number; currency: 'CNY' | 'USD'; usage: Ev<'cost'>['usage'] };
   gate?: Ev<'gate'>;
-  video?: { path: string; noSubs: string; duration: number };
+  video?: { path: string; noSubs: string; duration: number; /** the copies in the export folder */ saved?: { withSubs: string; noSubs: string } };
   /** the film is finished: drawn, checked, playable in the live preview */
   ready?: { duration: number; at: number };
   /** the exported mp4 is older than the film (a revision changed it since) */
@@ -261,14 +261,14 @@ function step(v: RunView, e: LoggedEvent): RunView {
       return r;
     case 'done': {
       r.resuming = undefined;
-      r.video = { path: e.video, noSubs: e.videoNoSubs, duration: e.duration };
+      r.video = { path: e.video, noSubs: e.videoNoSubs, duration: e.duration, saved: e.saved };
       r.stale = false;
       r.exporting = undefined;
       r.paused = undefined;
       r.activity = undefined;
       r.revising = undefined;
       const i = r.feed.map((f) => f.kind === 'export' && f.status === 'running').lastIndexOf(true);
-      if (i >= 0) r.feed = r.feed.map((f, j) => (j === i ? { ...f, status: 'done', video: e.video, noSubs: e.videoNoSubs, endedAt: at } as FeedItem : f));
+      if (i >= 0) r.feed = r.feed.map((f, j) => (j === i ? { ...f, status: 'done', video: e.video, noSubs: e.videoNoSubs, saved: e.saved?.withSubs, endedAt: at } as FeedItem : f));
       else push({ kind: 'done', key, video: e.video, duration: e.duration, at });   // a run from before exports were separate
       return r;
     }
@@ -284,12 +284,17 @@ function newPage(id: string, r: RunView): PageView {
 /** a project-relative path from an absolute one the core reported (snapshots, video) */
 export const relPath = (abs: string, projectId: string) => { const i = abs.indexOf(projectId + '/'); return i >= 0 ? abs.slice(i + projectId.length + 1) : abs.split('/').slice(-2).join('/'); };
 
-export const money = (c?: { amount: number; currency: 'CNY' | 'USD' }, currency: 'CNY' | 'USD' = 'CNY') => { const cur = c?.currency ?? currency, a = c?.amount ?? 0; return `${cur === 'CNY' ? '¥' : '$'}${a < 10 ? a.toFixed(2) : a.toFixed(1)}`; };
+const CNY_PER_USD = 7.2;
+/** what a film cost, always in US dollars: every model is priced in them now, and a film from when one was priced in
+ * yuan (its log says CNY) is turned into dollars at the director's rate, so the figure never switches between ¥ and $ */
+export const money = (c?: { amount: number; currency: 'CNY' | 'USD' }) => { const a = c ? (c.currency === 'CNY' ? c.amount / CNY_PER_USD : c.amount) : 0; return `$${a < 10 ? a.toFixed(2) : a.toFixed(1)}`; };
 export const clock = (ms: number) => { const s = Math.max(0, Math.round(ms / 1000)); return s < 60 ? t('run.sec', { s }) : t('run.minSec', { m: Math.floor(s / 60), s: String(s % 60).padStart(2, '0') }); };
 
 /** something is being made right now (a stage, or the director planning a change to the finished film) */
 export const isWorking = (r: RunView) => (!!r.current && !r.awaitingApproval) || !!r.revising || !!r.exporting || !!r.resuming;
 /** the film is finished (whether or not an mp4 of it exists) */
 export const finished = (r: RunView) => !!r.ready || !!r.video;
+/** where to show an exported file: its copy in the export folder when there is one */
+export const savedAt = (v: NonNullable<RunView['video']>, file: string) => (file === v.path ? v.saved?.withSubs : file === v.noSubs ? v.saved?.noSubs : undefined) ?? file;
 /** the exported mp4, when it shows the film as it is now */
 export const film = (r: RunView) => (r.video && !r.stale ? r.video : undefined);

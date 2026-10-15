@@ -298,7 +298,7 @@ class Runner {
       director = new Director({
         dir, runtime, pages, reviewer, style: meta.style, look: meta.look, prices, tts, voice, concurrency: cfg.defaults.concurrency,
         brief: { durationSec: meta.durationSec, topic: meta.topic, notes: meta.notes, styleNotes: meta.styleNotes, lang: meta.lang ?? 'zh', replyLang: this.replyIn(meta), voice: provider, preferences: cfg.preferences },
-        emit: this.emit, signal: this.abort.signal, renderer: this.renderer, review: this.review,
+        emit: this.emit, signal: this.abort.signal, renderer: this.renderer, review: this.review, exportDir: this.renderer ? undefined : cfg.exportDir,
       });
     } catch (e) {
       this.status = 'failed';

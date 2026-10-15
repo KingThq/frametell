@@ -43,4 +43,5 @@ contextBridge.exposeInMainWorld('studioBridge', {
   fileUrl: (p, rel) => `studio://app/p/${p.id}/` + rel.split('/').map(encodeURIComponent).join('/'),
   platform: process.platform,
   reveal: (file) => ipcRenderer.invoke('studio:reveal', file),
+  pickFolder: (current) => ipcRenderer.invoke('studio:pickFolder', current),
 });

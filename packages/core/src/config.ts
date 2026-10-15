@@ -34,6 +34,8 @@ export interface Config {
   locale?: LocalePref;
   /** what the user wants in every film (「创作偏好」), in their own words; every agent session reads it */
   preferences?: string;
+  /** a folder every export is also copied into, so the films land where the user keeps them; absent = only the project's out/ */
+  exportDir?: string;
   defaults: {
     model?: string;          // "provider/model-id"
     pageModel?: string;      // the pages' model, when not the director's
@@ -105,6 +107,7 @@ export function publicConfig(c: Config): PublicSettings {
     myVoices: c.myVoices ?? [],
     locale: c.locale || 'auto',
     preferences: c.preferences ?? '',
+    exportDir: c.exportDir ?? '',
     defaults: c.defaults,
   };
 }
@@ -131,6 +134,11 @@ export function patchConfig(c: Config, patch: SettingsPatch): Config {
     const p = patch.preferences.replace(/\r\n?/g, '\n').trim();
     if (p.length > MAX_PREFERENCES) throw new Error(tr(`创作偏好最多 ${MAX_PREFERENCES} 个字`, `Preferences can be at most ${MAX_PREFERENCES} characters`));
     if (p) next.preferences = p; else delete next.preferences;
+  }
+  if (patch.exportDir !== undefined) {
+    const d = patch.exportDir.trim().replace(/^~(?=$|[\\/])/, os.homedir());
+    if (d && !path.isAbsolute(d)) throw new Error(tr('导出位置要写完整路径，例如 ~/Movies/帧言', 'Write the export folder as a full path, e.g. ~/Movies/Frametell'));
+    if (d) next.exportDir = path.resolve(d); else delete next.exportDir;
   }
   if (patch.locale) { if (patch.locale === 'auto') delete next.locale; else next.locale = patch.locale; }
   if (patch.custom) {

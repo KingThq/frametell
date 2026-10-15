@@ -39,3 +39,18 @@ test('without a page model, every session runs on the director’s', async () =>
   assert.deepEqual(opened, ['one:page-p01']);
   assert.deepEqual(d.cost(), { amount: 1, currency: 'CNY' });
 });
+
+test('each cost names the turn and the model that took it, and a page drawn again runs on the director’s', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ft-models-'));
+  const costs: { model?: string; input?: number }[] = [];
+  const d = new Director({
+    dir, style: 'chalkboard', brief: { durationSec: 60 },
+    runtime: fake('opus', [], 10), prices: { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25, currency: 'USD' },
+    pages: { runtime: fake('flash', [], 20), prices: { input: 0.3, output: 2.5, cacheRead: 0.03, cacheWrite: 0.3, currency: 'USD' } },
+    emit: (e) => { if (e.type === 'cost') costs.push({ model: e.model, input: e.turn?.input }); },
+  });
+  (d as unknown as { redraw: Set<string> }).redraw.add('p02');
+  const open = (name: string) => (d as unknown as { session(n: string, s: string, t: number): Promise<unknown> }).session(name, '', 1);
+  for (const name of ['planner', 'page-p01', 'page-p02']) await open(name);
+  assert.deepEqual(costs, [{ model: 'x/opus', input: 10 }, { model: 'x/flash', input: 20 }, { model: 'x/opus', input: 10 }]);
+});

@@ -102,6 +102,8 @@ export interface PublicSettings {
   locale: LocalePref;
   /** 「创作偏好」: what the user wants in every film; '' when none */
   preferences: string;
+  /** the folder exports are also copied into; '' when only the project's own out/ */
+  exportDir: string;
   defaults: { model?: string; pageModel?: string; reviewModel?: string; runtime: RuntimeId; style: string; durationSec: number; voice?: VoiceChoice; subtitles: boolean; concurrency: number };
 }
 export interface SettingsPatch {
@@ -120,6 +122,8 @@ export interface SettingsPatch {
   locale?: LocalePref;
   /** the whole text; '' removes it */
   preferences?: string;
+  /** a full path (~ allowed); '' removes it */
+  exportDir?: string;
   defaults?: Partial<PublicSettings['defaults']>;
 }
 
