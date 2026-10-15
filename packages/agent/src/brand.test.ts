@@ -54,6 +54,8 @@ test('the brand follows the style card and its notes in the director\'s prompt, 
     '`assets/brand/a1.svg`: logo, 600×200, transparent background, “Logo”: the main logo', '`assets/brand/a3.png`: image, 1170×2532, opaque background, “Home screen”: the app\'s home screen',
     '## Brand moments', BRAND_MOMENT_RULES, 'only where the content calls for them', 'The rules on facts still hold']) assert.ok(sys.includes(s), s);
   assert.ok(!sys.includes('first page'), 'no rule puts the logo on fixed pages');
+  assert.ok(sys.includes('The film ends on the sign-off.'));
+  assert.ok(sys.includes('never a substitute for it, and it stays for a whole section (at least about 8 seconds)'));
   const off = brandSection({ ...brand, showLogo: false });
   assert.ok(off.includes('No logo on screen anywhere in this film: the brand shows in its colours and its tone only.'));
   assert.ok(!off.includes('Brand moments') && !off.includes('a1.svg') && !off.includes('a2.svg'), 'no logo is even listed');
