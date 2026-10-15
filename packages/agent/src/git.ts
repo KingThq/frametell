@@ -76,18 +76,34 @@ const dropGitlinks = async (dir: string, env?: Env) => {
 const gitlinksSync = (dir: string, env?: Env) =>
   (gitSync(dir, ['ls-files', '-s', '-z'], env).stdout || '').split('\0').filter((l) => l.startsWith('160000 ')).map((l) => l.slice(l.indexOf('\t') + 1));
 
+/** what a project's history never holds, whatever its .gitignore says (the agent can edit or delete that file): the
+ *  engine links, the studio's record and the exported films. On Windows the links are junctions, which git walks into:
+ *  without this, staging a project with no .gitignore read the whole engine and its node_modules and ran into the
+ *  two-minute timeout. Kept in .git/info/exclude, which the agent cannot write */
+const KEEP_OUT = '/engine\n/engine_modules\n/out/\n/.studio/\n';
+function keepOut(dir: string) {
+  const git = path.join(dir, '.git');
+  try { if (!fs.lstatSync(git).isDirectory()) return; } catch { return; }
+  const file = path.join(git, 'info', 'exclude');
+  try { if (fs.readFileSync(file, 'utf8') === KEEP_OUT) return; } catch {}
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, KEEP_OUT);
+}
+
 /**
  * Stages everything in the project, so that git never looks into a repo nested in it: none is left on disk, the index
  * holds no gitlink when `add` runs (an old one included), and none is left when the commit runs (one planted between
  * the sweep and `add` is added as a gitlink by reading its HEAD only, and is taken out again here).
  */
 export async function stageAll(dir: string, env?: Env) {
+  keepOut(dir);
   removeNestedRepos(dir);
   await dropGitlinks(dir, env);
   await gitAsync(dir, ['add', '-A'], env);
   await dropGitlinks(dir, env);
 }
 export function stageAllSync(dir: string, env?: Env) {
+  keepOut(dir);
   removeNestedRepos(dir);
   const drop = () => { const l = gitlinksSync(dir, env); if (l.length) gitSync(dir, ['update-index', '--force-remove', '--', ...l], env); };
   drop();

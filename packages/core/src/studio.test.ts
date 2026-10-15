@@ -229,7 +229,8 @@ test('a preview serves only the project\'s own files and the installed engine, n
 test('openProjectFile opens first and checks what it opened: a link out is refused and closed, a file of the project or the engine is served from its descriptor', async () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'frametell-studio-'));
   const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'frametell-outside-'));
-  const fds = () => fs.readdirSync('/dev/fd').length;
+  // the open descriptors, where the system lists them (not on Windows, which has no /dev/fd)
+  const fds = () => (fs.existsSync('/dev/fd') ? fs.readdirSync('/dev/fd').length : 0);
   const read = (fd: number, size: number) => { const b = Buffer.alloc(size); fs.readSync(fd, b, 0, size, 0); return b.toString(); };
   try {
     const studio = new Studio({ dataDir, config: memoryConfig() });

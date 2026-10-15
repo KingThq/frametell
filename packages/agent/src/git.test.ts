@@ -117,3 +117,20 @@ test('a commit in a project with no history makes the repository first, so a she
     assert.equal(gitSync(dir, ['log', '--format=%s']).stdout.trim(), 'first');
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('a project whose .gitignore is gone still keeps the engine links, the studio\'s record and the films out of its history', () => {
+  const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ft-keepout-')));
+  const engine = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ft-keepout-engine-')));
+  try {
+    fs.writeFileSync(path.join(engine, 'big.js'), 'the engine');
+    fs.symlinkSync(engine, path.join(dir, 'engine'), process.platform === 'win32' ? 'junction' : 'dir');
+    fs.symlinkSync(engine, path.join(dir, 'engine_modules'), process.platform === 'win32' ? 'junction' : 'dir');
+    for (const d of ['.studio', 'out', 'pages']) fs.mkdirSync(path.join(dir, d));
+    fs.writeFileSync(path.join(dir, '.studio', 'events.jsonl'), '{}\n');
+    fs.writeFileSync(path.join(dir, 'out', 'film.mp4'), 'mp4');
+    fs.writeFileSync(path.join(dir, 'pages', 'p01.js'), 'page');
+    new Project(dir).initHistory();
+    const tracked = (gitSync(dir, ['ls-files']).stdout || '').trim().split('\n');
+    assert.deepEqual(tracked, ['pages/p01.js']);
+  } finally { for (const d of [dir, engine]) fs.rmSync(d, { recursive: true, force: true }); }
+});
