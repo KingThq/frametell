@@ -91,8 +91,8 @@ const line = (a: BrandAsset) => `- \`${pathOf(a)}\`: ${a.kind}, ${size(a)}, ${a.
  *  rules as the director reads them (a host writing the brand down for a film, as brand.md, can use the same words). */
 export const BRAND_MOMENT_RULES = `- The logo appears only in brand moments you plan: 0 to 3 in the film, and a short film usually needs one. Restraint beats repetition.
 - Each brand moment is its own beat, and that beat says so in its object: \`brand moment: ${BRAND_DIR}/<file>\`, the kind of moment, and roughly where and when (e.g. \`brand moment: ${BRAND_DIR}/logo.svg, closing sign-off, centred once the scene has cleared, tagline under it\`). The page agent draws exactly that, and only there.
-- A typical moment is a closing sign-off as a composed beat of its own: the scene clears or settles first, then the logo enters with the style's own motion (drawn, stamped, faded in), the tagline under it, and holds at least 2 seconds.
-- Or a placement native to the style: in ink and wash a seal-like mark in a corner near the title, on a chalkboard signed in a corner, in an editorial layout a masthead.
+- A typical moment is a closing sign-off as a composed beat of its own: the scene clears or settles first, then the logo enters with the style's own motion (drawn, stamped, faded in), the tagline under it, and holds at least 2 seconds. In a sign-off the logo is the largest thing in the moment, about 18–30% of the frame's width, centred or on a clear axis, on clean ground: no line, horizon, edge or object within its clear space. The tagline is narrower than the logo and clearly smaller.
+- Or a placement native to the style: in ink and wash a seal-like mark in a corner near the title, on a chalkboard signed in a corner, in an editorial layout a masthead. A small corner mark (about 6–10% of the frame's width, no tagline) is this kind of moment, not a sign-off.
 - Never on top of or crowding a title, a label, a diagram or the subject, never in the middle of a content page, and at most one logo in a frame.
 - The logo file itself is never distorted, recoloured, cropped or framed, whatever the moment.`;
 
@@ -154,6 +154,7 @@ ${logos ? `
 - The storyboard plans the brand moment: draw exactly the beat that names the logo, where and when it says, and nowhere else on the page.
 - Compose the moment around the logo: nothing else within about one logo-height of it, never over or crowding a title, a label, a diagram or the subject, and only one logo in a frame.
 - It enters with the style's own motion (drawn on, stamped, faded in: \`pop: 0\` and a slow \`dur\`, as in the calls above), never a pop; a sign-off holds at least 2 seconds.
+- A sign-off makes the logo the largest thing in the moment, about 18–30% of the frame's width, centred or on a clear axis, on clean ground with no line, horizon, edge or object within its clear space; its tagline is narrower than the logo and clearly smaller. A corner mark is small (about 6–10% of the width) and has no tagline.
 - A logo keeps its own proportions (height = width × its h / w, \`fit: 'contain'\`): never stretch, crop, recolour, filter, blend or rotate it, and never draw it yourself.
 - A logo or an icon is never framed, bordered or shadowed: keep \`border: false, shadow: false, r: 0\` as in the calls above, so it stands on the page as it is.
 - ${dark ? `On a dark ground use \`${pathOf(dark)}\`; on a light ground the logo.` : 'On a dark ground, set the logo on a light card of its own rather than on the dark.'}
@@ -167,5 +168,5 @@ export function brandReviewNote(brand: BrandBrief | undefined, files: BrandAsset
   if (!brand?.assets.some((a) => LOGOS.includes(a.kind))) return '';
   const logos = files.filter((a) => LOGOS.includes(a.kind));
   if (!logos.length) return `\nThe storyboard puts no brand logo on this page: fail it if one appears.\n`;
-  return `\nThe storyboard puts the brand's logo on this page (${logos.map((a) => a.file).join(', ')}). Fail the page if the logo is stretched or squashed, cropped, recoloured, framed, covered by anything, overlapping or crowding any other element, in the middle of the content, more than one in a frame, or too small or faint to read.\n`;
+  return `\nThe storyboard puts the brand's logo on this page (${logos.map((a) => a.file).join(', ')}). Fail the page if the logo is stretched or squashed, cropped, recoloured, framed, covered by anything, overlapping or crowding any other element, in the middle of the content, more than one in a frame, or too small or faint to read. In a sign-off (the logo with its tagline), also fail it if the logo is smaller or narrower than its tagline, touches or sits on a line, horizon or edge, or reads as a watermark rather than the moment's subject.\n`;
 }

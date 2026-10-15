@@ -82,6 +82,8 @@ test('a page is told of the brand files only where its storyboard names them, th
   assert.ok(first.includes('draw exactly the beat that names the logo'));
   assert.ok(first.includes('nothing else within about one logo-height of it'));
   assert.ok(first.includes("enters with the style's own motion"));
+  assert.ok(first.includes('A sign-off makes the logo the largest thing in the moment, about 18–30% of the frame\'s width'));
+  assert.ok(first.includes('its tagline is narrower than the logo and clearly smaller'));
   assert.ok(first.includes('never stretch, crop, recolour'));
   assert.ok(first.includes('never framed, bordered or shadowed'));
   assert.ok(first.includes('On a dark ground use `assets/brand/a2.svg`'));
@@ -97,6 +99,7 @@ test('the reviewer checks the logo where the storyboard puts it, and fails one i
   const r = reviewerPrompt(sb, 'p04', t, 1, [], [{ local: 1 }], undefined, brand);
   assert.ok(r.includes("The storyboard puts the brand's logo on this page (a1.svg, a2.svg). Fail the page if the logo is stretched"));
   assert.ok(r.includes('overlapping or crowding any other element, in the middle of the content'));
+  assert.ok(r.includes('if the logo is smaller or narrower than its tagline, touches or sits on a line, horizon or edge, or reads as a watermark'));
   assert.ok(r.indexOf("brand's logo") < r.indexOf('## The checker'));
   assert.ok(reviewerPrompt(sb, 'p02', t, 1, [], [{ local: 1 }], undefined, brand).includes('The storyboard puts no brand logo on this page: fail it if one appears.'));
   const images = { ...brand, assets: brand.assets.filter((a) => a.kind === 'image') };
