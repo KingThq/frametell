@@ -66,16 +66,23 @@ export interface StudioOptions {
    * and nothing is searched
    */
   web?: boolean;
+  /**
+   * take a brand brief and its files with a new project (`NewProjectInput.brand`, createProject's `brandFiles`): for a
+   * host that keeps brands for its users. Off by default: a new project then ignores both
+   */
+  brand?: boolean;
 }
 
 export class Studio {
   readonly dataDir: string;
   private config: ConfigStore;
   private store: Projects;
+  private brands: boolean;
 
   constructor(o: StudioOptions = {}) {
     this.dataDir = o.dataDir ?? DATA_DIR;
     this.config = o.config ?? configFile(this.dataDir);
+    this.brands = o.brand === true;
     this.store = new Projects(path.join(this.dataDir, 'projects'), this.config, o.renderer, o.review, o.onEvent, { localFiles: o.localFiles ?? true, web: o.web ?? true });
     applyProxy(this.config.load().proxy);
     // every project reaches the engine through links; point them at this install (it may have moved, or been renamed)
@@ -177,7 +184,8 @@ export class Studio {
 
   /** create a project from materials and start it right away (it pauses at the storyboard for approval), unless
    * `o.start === false`, which only creates it (a host that runs it elsewhere starts it there). `o.brandFiles`: the
-   * files of `input.brand`, written into assets/brand/ (only those its assets name) */
+   * files of `input.brand`, written into assets/brand/ (only those its assets name); both are ignored unless the
+   * Studio was opened with `brand: true` */
   createProject(input: NewProjectInput, files: MaterialFile[], o: { start?: boolean; brandFiles?: MaterialFile[] } = {}): ProjectMeta {
     const cfg = this.config.load(), d = cfg.defaults;
     const model = input.model || d.model;
@@ -185,7 +193,7 @@ export class Studio {
     const reviews = input.reviewModel ?? d.reviewModel;
     if (!model) throw new Error(tr('请先在设置里配置模型', 'Set up a model in Settings first'));
     const said = input.notes?.trim();
-    const brand = cleanBrand(input.brand);
+    const brand = this.brands ? cleanBrand(input.brand) : undefined;
     if (!files.length && !said && !input.topic) throw new Error(tr('说一句想讲什么，或者附上资料', 'Say what the video is about, or attach some material'));
     // without materials, the sentence the user wrote is the topic; it also names the project
     const topic = input.topic || (files.length ? undefined : said);

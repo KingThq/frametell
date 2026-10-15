@@ -92,7 +92,7 @@ export interface NewProjectInput {
   /** see ProjectMeta.research */
   research?: boolean;
   /** the brand the film is made for (its colours and typeface go in `look`); its files come with createProject's
-   *  `brandFiles`, or the host puts them in assets/brand/ itself */
+   *  `brandFiles`, or the host puts them in assets/brand/ itself. Only a Studio opened with `brand: true` takes it */
   brand?: BrandBrief;
 }
 

@@ -180,7 +180,7 @@ test('a new film keeps its style notes and look, the look checked', async () => 
 test('a new film keeps its brand, checked, and its files in assets/brand/: only those the brief names, under plain names', () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'frametell-brand-'));
   try {
-    const studio = new Studio({ dataDir, config: memoryConfig({ defaults: { model: 'anthropic/x' } as Config['defaults'] }), linkProjects: false });
+    const studio = new Studio({ dataDir, config: memoryConfig({ defaults: { model: 'anthropic/x' } as Config['defaults'] }), linkProjects: false, brand: true });
     const svg = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 20"/>');
     const p = studio.createProject({
       topic: 'tides',
@@ -196,6 +196,19 @@ test('a new film keeps its brand, checked, and its files in assets/brand/: only 
     assert.equal(fs.existsSync(path.join(studio.projectsDir, 'evil.svg')), false);
     const plain = studio.createProject({ topic: 'tides', brand: { name: '  ', assets: [] } }, [], { start: false });
     assert.equal(plain.brand, undefined);
+  } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
+});
+
+test('a Studio not opened for brands ignores a brand brief and its files', () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'frametell-nobrand-'));
+  try {
+    const studio = new Studio({ dataDir, config: memoryConfig({ defaults: { model: 'anthropic/x' } as Config['defaults'] }), linkProjects: false });
+    const p = studio.createProject({ topic: 'tides', brand: { name: 'Tidewise', assets: [{ file: 'a1.svg', kind: 'logo', name: 'Logo', note: '', w: 60, h: 20, alpha: true }] } },
+      [], { start: false, brandFiles: [{ name: 'a1.svg', data: new TextEncoder().encode('<svg/>') }] });
+    const dir = path.join(studio.projectsDir, p.id);
+    assert.equal(p.brand, undefined);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(dir, '.studio', 'project.json'), 'utf8')).brand, undefined);
+    assert.equal(fs.existsSync(path.join(dir, 'assets', 'brand')), false);
   } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
 });
 
