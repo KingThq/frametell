@@ -119,8 +119,13 @@ export function lintStoryboard(sb, { source = '' } = {}) {
   sb.pages.forEach((p, pi) => {
     const beats = Array.isArray(p.beats) ? p.beats : [];
     if (beats.length < 2) add('red', { page: p.id }, `only ${beats.length} beat(s): a page needs at least 2 visible changes`);
+    const ats = new Set();
     beats.forEach((b, bi) => {
       const where = { page: p.id, beat: bi };
+      const at = String(b.at ?? '').trim();
+      // two beats at one cue can follow each other within it, but then neither says when: tie the later one to a word
+      if (at && ats.has(at)) add('yellow', where, `two beats at "${at}": tie this one to the word it happens on (${at.split(':')[0]}:word), move it to another cue, or merge the two`);
+      ats.add(at);
       const obj = String(b.object || '').trim(), act = String(b.action || '').trim();
       if (!obj) add('red', where, 'the object is empty');
       else if (layoutOnly(obj)) add('red', where, `the object is only a layout word: "${obj}". Name a concrete thing in the picture (a snowball, a piggy bank, a mountain road)`);

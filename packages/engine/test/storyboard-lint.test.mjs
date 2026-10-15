@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { lintStoryboard } from '../tools/storyboard-lint.mjs';
 
-const beat = (object, action, text = '', camera = '') => ({ at: 'c0', object, action, text, camera });
+let cue = 0;
+const beat = (object, action, text = '', camera = '') => ({ at: `c${cue++}`, object, action, text, camera });
 const good = () => ({
   style: 'warm-story', cast: 'hands',
   pages: [
@@ -73,4 +74,16 @@ test('an English storyboard is held to the same rules, in English words', () => 
   sb.pages[0].beats[0] = { at: 'c0', object: 'a big title card', action: 'appears', text: 'Compound interest is the eighth wonder of the world' };
   const r = reds(sb);
   assert.ok(r.some((m) => /layout word/.test(m)) && r.some((m) => /catch-all word/.test(m)) && r.some((m) => /9 words/.test(m)), r.join('\n'));
+});
+
+test('two beats at one cue are flagged for the later one to name its word', () => {
+  const sb = good();
+  sb.pages[2].beats[1].at = sb.pages[2].beats[0].at;
+  const found = lintStoryboard(sb, { source }).filter((i) => /two beats at/.test(i.msg));
+  assert.equal(found.length, 1);
+  assert.equal(found[0].level, 'yellow');
+  assert.equal(found[0].page, 'p03');
+  assert.equal(found[0].beat, 1);
+  sb.pages[2].beats[1].at = `${sb.pages[2].beats[0].at}:果子`;
+  assert.ok(!lintStoryboard(sb, { source }).some((i) => /two beats at/.test(i.msg)));
 });
