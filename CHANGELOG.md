@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-15
+
+### Added
+
+- Research before the storyboard. When a request points at something (a web page, a GitHub, GitLab or Gitee repository, or a folder or file on your computer, by its link or path), a research agent reads it first: it clones the repository, finds the idea at its centre and the code that shows it, and hands the director a brief written for the film: a hook, how it works with a way to draw each step, facts with their sources, code and quotes to put on screen, and what not to overclaim. It runs on the pages' model (the cheaper one), may take many steps, and older tool output is cleared as it goes so long sessions fit; it stops after 20 minutes at most. If it fails, the film is made without it.
+- Web search for research, in Settings → Web search: Tavily, Serper, SerpAPI or Jina, several keys per service if you like. With one set up, a film from a topic alone checks its facts on the web first; with material attached, the new Web research switch beside it adds the web. Without a search engine, links, repositories and folders are still read (pages through Jina Reader's free tier, or directly).
+- `new Studio({ localFiles: false })` never reads a folder or file named in a request, for a hosted service.
+- `render.mjs --hw` encodes on an NVIDIA card (h264_nvenc) on Linux, as it already did on a Mac's media engine. `--jpeg-quality N` captures frames at a lower JPEG quality (92 by default; 85 is about a fifth quicker and looks the same once encoded), and `FRAMETELL_CHROME_ARGS` adds flags to every Chrome the tools open.
+- `frametell run` voices an English film with ElevenLabs when both a Volcengine and an ElevenLabs key are set.
+- Third-party notices, in the repository and in the app.
+
+### Changed
+
+- The director finds the film's argument before planning its pages, and pages reveal on the word that names them, move smoothly and keep one lead at a time.
+- An export says it is done as soon as the film is ready; its final check runs afterwards in a process of its own and reports when it finishes. The film's sound is made once and cached, and can be made while the frames are drawn, so joining the film takes milliseconds instead of seconds.
+- Building the desktop app downloads Electron from GitHub by default; `ELECTRON_MIRROR` picks a mirror.
+- In the conversation, the play hint on a drawn page shows as soon as the pointer is on the row, instead of after half a second.
+
 ## [0.5.1] - 2026-10-14
 
 ### Added
@@ -244,7 +262,8 @@ The first release of Frametell: a local, open-source studio that turns an idea o
 - The npm packages are not published yet; install from source (see the README).
 - The Claude Agent SDK and Codex runtimes are in the code but not offered; every film runs on the built-in agent, which works with any provider.
 
-[Unreleased]: https://github.com/sitor-ai/frametell/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/sitor-ai/frametell/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/sitor-ai/frametell/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/sitor-ai/frametell/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/sitor-ai/frametell/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/sitor-ai/frametell/compare/v0.3.2...v0.4.0
