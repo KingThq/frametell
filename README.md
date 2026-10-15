@@ -6,6 +6,10 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/sitor-ai/frametell/releases/latest"><img src="https://img.shields.io/badge/Download-macOS%20(Apple%20Silicon)-1C1917?logo=apple&logoColor=white" alt="Download Frametell for macOS (Apple Silicon)"></a>
+</p>
+
+<p align="center">
   <b>English</b> · <a href="README.zh-CN.md">简体中文</a>
 </p>
 
@@ -41,13 +45,23 @@ Frametell makes Chinese films just as well; see the <a href="README.zh-CN.md">Ch
 
 1. **Idea or material.** Type what you want to explain, as one sentence or a page of thoughts, or drop in a document, PDF, slide deck, images or Markdown. Either is enough, and you can give it both.
 2. **Storyboard.** The director turns your idea or material into pages and story beats, and you approve or edit them.
-3. **Narration and voice.** It writes the script and voices it with Volcengine TTS or ElevenLabs.
+3. **Narration and voice.** It writes the script and voices it with ElevenLabs (or Volcengine TTS for Chinese).
 4. **Pages.** It draws every page in the style you chose and checks each one with lint and screenshots.
 5. **Film.** It runs a final check on the full video, then renders a 1080p MP4 with subtitles.
 
 Built-in styles: `warm-story`, `study`, `chalkboard`, `whiteboard`, `tech-dark`.
 
-## Quick start
+## Get started
+
+### Download the app
+
+**macOS on Apple Silicon:** download the `.dmg` from the [latest release](https://github.com/sitor-ai/frametell/releases/latest), open it and drag Frametell into Applications. The app is signed and notarized by Apple. You also need Chrome, Edge or Chromium installed; Frametell uses it to draw and render the pages.
+
+When it opens, add a key for a model provider (Anthropic, OpenAI, Google, OpenRouter …) under Settings, and an [ElevenLabs](https://elevenlabs.io) key for the voiceover.
+
+Windows and Intel Macs don't have an app yet. Until they do, run Frametell from source.
+
+### Run from source
 
 You need Node.js 22.19 or later, pnpm, and Chrome, Edge or Chromium installed. FFmpeg is bundled.
 
@@ -56,13 +70,13 @@ git clone https://github.com/sitor-ai/frametell.git && cd frametell
 pnpm install && pnpm build
 
 export ANTHROPIC_API_KEY=...         # or OPENAI_API_KEY, GEMINI_API_KEY …
-export VOLCENGINE_TTS_API_KEY=...    # optional, or ELEVENLABS_API_KEY for voiceover
+export ELEVENLABS_API_KEY=...        # optional, for the voiceover (VOLCENGINE_TTS_API_KEY for Chinese voices)
 
 # Open the studio in your browser
 node apps/cli/dist/cli.js serve
 
 # Or make a video straight from the command line
-node apps/cli/dist/cli.js run notes.pdf --style warm-story --duration 60
+node apps/cli/dist/cli.js run notes.pdf --style warm-story --duration 60 --lang en
 ```
 
 ## Community

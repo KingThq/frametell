@@ -1,6 +1,7 @@
 // One stage run = one agent session working in the project directory with file and shell tools. The orchestrator drives
 // every stage through this interface, so Pi (any provider), the Claude Agent SDK and the Codex SDK are interchangeable.
 import type { TSchema } from 'typebox';
+import type { AgentTool } from '@earendil-works/pi-agent-core';
 
 export interface TokenUsage { input: number; output: number; cacheRead: number; cacheWrite: number }
 
@@ -44,6 +45,14 @@ export interface SessionOptions {
   answers?: AnswerTool[];
   signal?: AbortSignal;
   onEvent?: (e: RuntimeEvent) => void;
+  /** Pi only: the session's tools instead of the project's file tools (the research session reads outside the project) */
+  agentTools?: AgentTool<any>[];
+  /**
+   * Pi only: a long session's older tool results are cleared once all of them together pass this many characters,
+   * newest kept, so a session that reads for hundreds of turns stays inside the model's context (what it concluded
+   * from them stays in its own words)
+   */
+  keepToolChars?: number;
 }
 
 export interface TurnResult {

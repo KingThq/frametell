@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, CircleAlert, FileText, Image as ImageIcon, Loader2, NotebookPen, Paperclip, Play, Settings2, Square, Trash2, X } from 'lucide-react';
+import { ArrowRight, CircleAlert, FileText, Globe, Image as ImageIcon, Loader2, NotebookPen, Paperclip, Play, Settings2, Square, Trash2, X } from 'lucide-react';
 import { client, hosted, type ProjectView, type PublicSettings, type Voice } from '../lib/client';
 import { go, useLoad, useVoices } from '../lib/hooks';
 import { STAGE_NAME, type Stage } from '../lib/run';
@@ -65,6 +65,8 @@ export function Home({ openSettings, prefsStamp }: { openSettings: (section?: st
   const [pageModel, setPageModel] = useState<string | null>();   // null: the director's
   // null: no voice; undefined: the default one
   const [voice, setVoice] = useState<string | null>();
+  // search the web before the storyboard: on by default when there is no material (undefined: follow that)
+  const [web, setWeb] = useState<boolean>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [drag, setDrag] = useState(false);
@@ -94,6 +96,8 @@ export function Home({ openSettings, prefsStamp }: { openSettings: (section?: st
   const hasInput = !!topic.trim() || files.length > 0;
   // a hosted plan may draw in only some styles: the others show, marked, and say how to get them
   const lockedStyle = (id: string) => !!credits?.styles && !credits.styles.includes(id);
+  const canSearch = !!settings.data?.search?.provider;
+  const webOn = web ?? !files.length;
   const ready = hasInput && !!modelId && !voiceNoKey && !busy && !lockedStyle(styleId);
   const add = (list: FileList | null) => {
     if (!list) return;
@@ -111,7 +115,7 @@ export function Home({ openSettings, prefsStamp }: { openSettings: (section?: st
       if (!hosted && (modelId !== settings.data?.defaults.model || (pagesOwn ? pagesId : '') !== (savedPages ?? ''))) {
         await client.updateSettings({ defaults: { model: modelId, pageModel: pagesOwn ? pagesId : '' } }).catch(() => {});
       }
-      const p = await client.createProject({ durationSec: duration, lang: filmLang, style: styleId, model: modelId, pageModel: pagesOwn ? pagesId : '', notes: topic.trim() || undefined, voice: v ? { provider: v.provider, id: v.id, name: v.name } : voiceId === null ? null : undefined }, files);
+      const p = await client.createProject({ durationSec: duration, lang: filmLang, style: styleId, model: modelId, pageModel: pagesOwn ? pagesId : '', notes: topic.trim() || undefined, research: canSearch ? webOn : undefined, voice: v ? { provider: v.provider, id: v.id, name: v.name } : voiceId === null ? null : undefined }, files);
       go(`#/p/${p.id}`);
     } catch (e) { setError((e as Error).message); setBusy(false); }
   };
@@ -160,7 +164,12 @@ export function Home({ openSettings, prefsStamp }: { openSettings: (section?: st
             <button type="button" className="fs-chip" onClick={() => input.current?.click()}>
               <Paperclip size={13} aria-hidden /> {files.length ? t('home.addMore') : t('home.attach')}
             </button>
-            {!files.length && <span className="text-[12px] text-ink-3">{t('home.formats')}</span>}
+            {canSearch && (
+              <button type="button" role="switch" aria-checked={webOn} className="fs-chip" onClick={() => setWeb(!webOn)} title={t('home.webTitle')}>
+                <Globe size={13} aria-hidden /> {t('home.web')}
+              </button>
+            )}
+            {!files.length && <span className="text-[12px] text-ink-3">{t(hosted ? 'home.formatsHosted' : 'home.formats')}</span>}
           </div>
           <input ref={input} type="file" multiple accept={ACCEPT} className="sr-only" aria-label={t('home.chooseFiles')} onChange={(e) => { add(e.target.files); e.target.value = ''; }} />
         </div>

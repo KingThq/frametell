@@ -66,6 +66,14 @@ export function toolAct(name: string, summary: string): Act | undefined {
   if (n === 'edit') return aboutPath(arg(summary, 'path') || arg(summary, 'file_path') || guessPath(summary), 'edit');
   if (n === 'bash') return { id: aboutCommand(arg(summary, 'command') || summary) };
   if (n === 'glob' || n === 'grep') return { id: 'findFiles' };
+  // the research session
+  const clip = (s = '', max = 40) => (s.length > max ? s.slice(0, max) + '…' : s);
+  if (n === 'web_search') return { id: 'webSearch', vars: { q: clip(arg(summary, 'query')) } };
+  if (n === 'read_url') { const u = arg(summary, 'url') ?? ''; let site = u; try { const x = new URL(u); site = x.hostname.replace(/^www\./, '') + (x.pathname.length > 1 ? clip(x.pathname, 30) : ''); } catch {} return { id: 'readUrl', vars: { site } }; }
+  if (n === 'list_files') return { id: 'listSource', vars: { path: clip(arg(summary, 'path') || '/', 50) } };
+  if (n === 'read_file') return { id: 'readSource', vars: { path: clip(arg(summary, 'path') ?? '', 60) } };
+  if (n === 'search_files') return { id: 'grepSource', vars: { q: clip(arg(summary, 'pattern')) } };
+  if (n === 'finish') return { id: 'finishResearch' };
   return undefined;
 }
 

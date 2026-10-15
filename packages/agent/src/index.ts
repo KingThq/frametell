@@ -11,3 +11,6 @@ export type { AgentRuntime, AgentSession, RuntimeEvent, TokenUsage, TurnResult }
 export { piRuntime } from './runtime/pi.js';
 // parked runtimes (Claude Agent SDK, Codex): not loaded with the package; import '@frametell/agent/runtime/claude' or '/codex'
 export { openIn, openProjectFile, readIn, writeIn, listIn, editIn, readFd, Refused, type OpenFile, type Reach } from './projectfs.js';
+export { findSources, hasSources, type Sources } from './research/sources.js';
+export { createWeb, searchProvider, SEARCH_PROVIDERS, type SearchProviderId, type SearchSettings, type Web } from './research/web.js';
+export { RESEARCH_LIMITS, type ResearchLimits } from './research/research.js';

@@ -14,6 +14,20 @@ const short = toolSummary;
 
 const LEVELS: Thinking[] = ['off', 'low', 'medium', 'high'];
 
+/** older tool results past `keep` characters (newest first) cleared to a stub; the messages themselves are kept */
+export function trimToolResults(messages: AgentMessage[], keep: number): AgentMessage[] {
+  const size = (m: any) => (m.content as any[]).reduce((a, c) => a + (c.type === 'text' ? c.text.length : 3000), 0);
+  let total = 0;
+  const out = [...messages];
+  for (let i = out.length - 1; i >= 0; i--) {
+    const m = out[i] as any;
+    if (m.role !== 'toolResult') continue;
+    total += size(m);
+    if (total > keep && size(m) > 200) out[i] = { ...m, content: [{ type: 'text', text: '(an older result, cleared to make room; use what you noted from it, or read it again if you really need it)' }] } as AgentMessage;
+  }
+  return out;
+}
+
 export function piRuntime(models: MutableModels, model: Model<Api>, opts: { thinking?: Thinking } = {}): AgentRuntime {
   const base = opts.thinking ?? 'medium';
   // A turn may ask for less thinking than the session's model. Providers that take a reasoning level get it; gateways
@@ -34,10 +48,11 @@ export function piRuntime(models: MutableModels, model: Model<Api>, opts: { thin
       const named = (m: Model<Api>): Model<Api> => ({ ...m, headers: { ...m.headers, 'x-frametell-session': o.name } });
       const transcript = resume && fs.existsSync(resume) ? (JSON.parse(fs.readFileSync(resume, 'utf8')) as AgentMessage[]) : [];
       let answers: Answer[] = [];
-      const tools = [...(o.tools === 'none' ? [] : fileTools(o.cwd)), ...answerTools(o.answers ?? [], (a) => answers.push(a))];
+      const tools = [...(o.agentTools ?? (o.tools === 'none' ? [] : fileTools(o.cwd))), ...answerTools(o.answers ?? [], (a) => answers.push(a))];
       const agent = new Agent({
         initialState: { systemPrompt: o.system, model: named(model), thinkingLevel: opts.thinking ?? 'medium', tools, messages: transcript },
         streamFn: models.streamSimple.bind(models),
+        ...(o.keepToolChars ? { transformContext: async (m: AgentMessage[]) => trimToolResults(m, o.keepToolChars!) } : {}),
         sessionId: o.name,
         toolExecution: 'sequential',
       });

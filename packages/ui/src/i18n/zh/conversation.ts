@@ -11,7 +11,7 @@ export default {
   pagesCount: (v: { n: number }) => `${v.n} 页`,
   scriptDetail: (v: { pages: string; cues: string; min: number; sec: number }) => `${v.pages} 页 · ${v.cues} 句 · 约 ${v.min ? `${v.min} 分 ` : ''}${v.sec} 秒`,
   voiceDetail: '音频共 {s} 秒',
-  doing: { storyboard: '正在构思分镜', script: '正在写口播', narrate: '正在配音', pages: '正在逐页作画', review: '正在检查全片', render: '正在渲染成片' } as Record<Stage, string>,
+  doing: { research: '正在调研', storyboard: '正在构思分镜', script: '正在写口播', narrate: '正在配音', pages: '正在逐页作画', review: '正在检查全片', render: '正在渲染成片' } as Record<Stage, string>,
   approval: { hint: '要改哪里，直接在下面说', approve: '确认分镜，开始制作', approved: '已确认', look: '这部片的风格' },
   page: {
     queued: '排队',

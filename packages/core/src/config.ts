@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { CustomProviderConfig } from '@frametell/models';
+import { SEARCH_PROVIDERS, searchProvider, type SearchProviderId, type SearchSettings } from '@frametell/agent';
 import { maskProxy } from './net.js';
 import type { LocalePref, PublicSettings, RuntimeId, SettingsPatch, VoiceChoice } from './types.js';
 import { tr } from './i18n.js';
@@ -28,6 +29,8 @@ export interface Config {
   tts: { volcengine?: string; elevenlabs?: string };
   /** where the narration services are reached, when not at their own addresses (a host's gateway) */
   ttsBaseUrls?: { volcengine?: string; elevenlabs?: string };
+  /** web search for research before the storyboard: the engine and its keys (several keys: comma-separated, used in turn) */
+  search: SearchSettings;
   /** voices the user added by id (「我的音色」), checked when added */
   myVoices?: VoiceChoice[];
   /** interface language; absent = follow the system */
@@ -40,6 +43,7 @@ export interface Config {
     model?: string;          // "provider/model-id"
     pageModel?: string;      // the pages' model, when not the director's
     reviewModel?: string;    // the page reviewer's model, when not the pages'
+    researchModel?: string;  // the research's model; absent: the pages' (else the director's)
     runtime: RuntimeId;
     style: string;
     durationSec: number;
@@ -50,7 +54,7 @@ export interface Config {
 }
 
 const DEFAULTS: Config = {
-  keys: {}, custom: [], baseUrls: {}, models: {}, tts: {},
+  keys: {}, custom: [], baseUrls: {}, models: {}, tts: {}, search: {},
   defaults: { runtime: 'pi', style: 'warm-story', durationSec: 60, subtitles: true, concurrency: 10, voice: { provider: 'volcengine', id: 'zh_male_yuanboxiaoshu_uranus_bigtts', name: '渊博小叔' } },
 };
 
@@ -68,7 +72,7 @@ export interface ConfigStore {
 export function withDefaults(c: Partial<Config>): Config {
   const defaults = { ...DEFAULTS.defaults, ...(c.defaults || {}) };
   if (defaults.concurrency === 3) defaults.concurrency = 10;   // the old default: pages now draw up to 10 at once
-  return { ...DEFAULTS, ...c, defaults, tts: { ...(c.tts || {}) }, keys: { ...(c.keys || {}) }, baseUrls: { ...(c.baseUrls || {}) }, models: { ...(c.models || {}) }, custom: c.custom || [] };
+  return { ...DEFAULTS, ...c, defaults, tts: { ...(c.tts || {}) }, search: { ...(c.search || {}) }, keys: { ...(c.keys || {}) }, baseUrls: { ...(c.baseUrls || {}) }, models: { ...(c.models || {}) }, custom: c.custom || [] };
 }
 
 /** <dir>/config.json, readable only by the user (0600) */
@@ -95,6 +99,9 @@ export const saveConfig = (c: Config) => local.save(c);
 /** sk-ant-5e45…8487 */
 export const mask = (k?: string) => (!k ? '' : k.length <= 12 ? '••••' : `${k.slice(0, 8)}…${k.slice(-4)}`);
 
+/** several keys (comma-separated) masked one by one */
+const maskKeys = (k?: string) => (k ?? '').split(',').map((x) => x.trim()).filter(Boolean).map(mask).join(', ');
+
 /** What the panel may see: keys reduced to masked hints. */
 export function publicConfig(c: Config): PublicSettings {
   return {
@@ -104,6 +111,7 @@ export function publicConfig(c: Config): PublicSettings {
     models: c.models,
     proxy: maskProxy(c.proxy),
     tts: { volcengine: mask(c.tts.volcengine), elevenlabs: mask(c.tts.elevenlabs) },
+    search: { provider: searchProvider(c.search) ?? '', ...Object.fromEntries(SEARCH_PROVIDERS.map((p) => [p, maskKeys(c.search[p])])) as Record<SearchProviderId, string> },
     myVoices: c.myVoices ?? [],
     locale: c.locale || 'auto',
     preferences: c.preferences ?? '',
@@ -117,6 +125,10 @@ export function patchConfig(c: Config, patch: SettingsPatch): Config {
   const next = structuredClone(c);
   for (const [k, v] of Object.entries(patch.keys || {})) { if (v) next.keys[k] = v.trim(); else delete next.keys[k]; }
   for (const [k, v] of Object.entries(patch.tts || {}) as [keyof Config['tts'], string][]) { if (v) next.tts[k] = v.trim(); else delete next.tts[k]; }
+  for (const [k, v] of Object.entries(patch.search || {})) {
+    if (k === 'provider') { if (v && SEARCH_PROVIDERS.includes(v as SearchProviderId)) next.search.provider = v as SearchProviderId; else delete next.search.provider; }
+    else if (SEARCH_PROVIDERS.includes(k as SearchProviderId)) { const keys = (v ?? '').split(',').map((x) => x.trim()).filter(Boolean).join(','); if (keys) next.search[k as SearchProviderId] = keys; else delete next.search[k as SearchProviderId]; }
+  }
   for (const [k, v] of Object.entries(patch.baseUrls || {})) { if (v.trim()) next.baseUrls[k] = v.trim().replace(/\/+$/, ''); else delete next.baseUrls[k]; }
   for (const [k, ids] of Object.entries(patch.models || {})) {
     const clean = [...new Set((ids || []).map((x) => x.trim()).filter((x) => /^[\w./:@-]{1,120}$/.test(x)))];

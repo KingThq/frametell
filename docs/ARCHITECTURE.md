@@ -5,7 +5,7 @@
 Frametell is an open-source product that runs locally. One command starts it and opens a full studio in your browser. The user uploads materials and picks a length and a style. The director agent first drafts a storyboard for the user to approve. Then it writes the narration, voices it, draws each page and checks its own work. Finally it renders a 1080p video, with SRT subtitles and publishing notes. The user never touches code.
 
 ```bash
-npx frametell          # start the local server and open http://localhost:5317
+node apps/cli/dist/cli.js serve    # start the local server and open the studio (see the README for setup)
 ```
 
 ## Design principles

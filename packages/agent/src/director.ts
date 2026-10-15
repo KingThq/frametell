@@ -11,6 +11,9 @@ import type { PageIssue, PageStatus, Stage, StudioEvent } from './events.js';
 import { designedFonts, designedIssues, designedLook, type Look } from './look.js';
 import { ENGINE_DIR } from '@frametell/engine/tools/project.mjs';
 import { openIn } from './projectfs.js';
+import { briefFile, runResearch, type ResearchLimits } from './research/research.js';
+import type { Sources } from './research/sources.js';
+import type { Web } from './research/web.js';
 
 export interface Prices { input: number; output: number; cacheRead: number; cacheWrite: number; currency: 'CNY' | 'USD' }
 
@@ -50,6 +53,11 @@ export interface DirectorOptions {
    * code that fails), one round, at most MAX.reviewDefectsMs — a hosted service paying for every turn
    */
   review?: 'full' | 'defects';
+  /**
+   * research before the storyboard, on its own (cheaper) model: what the request points at is read, and the web
+   * searched when `search`; the brief becomes materials/research.md. Absent: no research
+   */
+  research?: { runtime: AgentRuntime; prices?: Prices; web: Web; sources: Sources; search: boolean; limits?: Partial<ResearchLimits> };
 }
 
 interface PageState { status: PageStatus; rounds: number; issues: PageIssue[]; ref?: string; /** runs this page has failed in */ failures?: number }
@@ -70,6 +78,8 @@ interface State {
   change?: string;
   /** what the film has cost so far, in the director's currency: each turn at the price of the model that took it */
   spent?: number;
+  /** research before the storyboard has run (its brief is in materials/research.md) or was given up */
+  research?: 'done' | 'failed';
 }
 
 /** a USD↔CNY rate for adding up a film whose two models are priced in different currencies (rare; an estimate) */
@@ -213,6 +223,7 @@ export class Director {
   }
   /** the page model draws the pages and checks the whole film; the director's takes everything else */
   private model(name: string) {
+    if (name === 'research' && this.o.research) return this.o.research;
     // a page that failed before is drawn again by the film's own model: the same model, asked the same way, failed the
     // same pages again on every Continue
     if (name.startsWith('page-') && this.redraw.has(name.slice(5))) return { runtime: this.o.runtime, prices: this.o.prices };
@@ -238,6 +249,38 @@ export class Director {
     this.emit({ type: 'stage', stage, status: 'failed', detail: message });
     this.emit({ type: 'error', stage, message });
     throw new Error(message);
+  }
+
+  // ── ⓪ research ───────────────────────────────────────────────────────────────────────────────
+  /**
+   * Reads what the request points at and, when it may, searches the web, then leaves a brief for the storyboard.
+   * Never holds the film up: if it fails, the film is made from what there is, as it would have been without it.
+   */
+  async research() {
+    const r = this.o.research;
+    if (!r || this.state.research) return;
+    this.emit({ type: 'stage', stage: 'research', status: 'start' });
+    const { prices } = this.model('research');
+    try {
+      const out = await runResearch({
+        dir: this.o.dir, runtime: r.runtime, web: r.web, sources: r.sources, search: r.search, brief: this.o.brief, limits: r.limits, signal: this.o.signal,
+        onEvent: (event) => { this.emit({ type: 'agent', session: 'research', event }); if (event.type === 'turn') this.countTurn(event.usage, prices, r.runtime.model); },
+        onNote: (repo) => this.emit({ type: 'note', text: this.say(`正在下载代码仓库 ${repo}`, `Downloading the repository ${repo}`) }),
+      });
+      fs.mkdirSync(this.project.file('materials'), { recursive: true });
+      fs.writeFileSync(this.project.file('materials/research.md'), briefFile(out));
+      this.state.research = 'done'; this.save();
+      const { searches, pages, folders } = out.read;
+      const detail = this.o.brief.replyLang === 'en'
+        ? [searches && `${searches} searches`, pages && `${pages} pages read`, folders && `${folders} folder${folders > 1 ? 's' : ''} read`, `${out.sources.length} sources`].filter(Boolean).join(', ')
+        : [searches && `搜索 ${searches} 次`, pages && `读了 ${pages} 个网页`, folders && `看了 ${folders} 个文件夹`, `引用 ${out.sources.length} 处来源`].filter(Boolean).join('，');
+      this.emit({ type: 'stage', stage: 'research', status: 'done', detail });
+    } catch (e) {
+      if ((e as Error).name === 'AbortError' || this.o.signal?.aborted) throw e;
+      this.state.research = 'failed'; this.save();
+      this.emit({ type: 'stage', stage: 'research', status: 'failed', detail: (e as Error).message });
+      this.emit({ type: 'note', text: this.say('调研没有完成，先按现有的材料来做', 'The research did not finish; going ahead with what there is') });
+    }
   }
 
   // ── ① storyboard ──────────────────────────────────────────────────────────────────────────────
@@ -782,7 +825,7 @@ ${this.project.read('script.js')}
     if (this.state.stage === 'done' && this.state.change) return this.revise(this.state.change);
     // a switch of voice that stopped before the film was narrated again: finish it
     if (this.state.stage === 'done' && this.voiceStale()) return this.revoice();
-    if (this.state.stage === 'storyboard') await this.storyboard();
+    if (this.state.stage === 'storyboard') { await this.research(); await this.storyboard(); }
     if (this.state.stage === 'approval') await this.script(await approve(this.project.storyboard()));
     if (this.state.stage === 'script') await this.script();
     if (this.state.stage === 'narrate') await this.narrate();

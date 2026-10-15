@@ -7,7 +7,7 @@ import crypto from 'node:crypto';
 import { createProject, linkProject } from '@frametell/engine/tools/project.mjs';
 import { createCatalog } from '@frametell/models';
 import { elevenLabsTts, volcengineTts } from '@frametell/voice';
-import { Director, Project, piRuntime, type AgentRuntime, type Renderer, type StudioEvent, type Storyboard, type UserRef } from '@frametell/agent';
+import { createWeb, Director, findSources, hasSources, piRuntime, Project, type AgentRuntime, type DirectorOptions, type Renderer, type StudioEvent, type Storyboard, type UserRef } from '@frametell/agent';
 import type { Config, ConfigStore } from './config.js';
 import { prepareMaterials } from './materials.js';
 import { applyProxy } from './net.js';
@@ -33,7 +33,8 @@ function writeMeta(dir: string, m: ProjectMeta) { m.updatedAt = new Date().toISO
 /** The projects under one directory and the settings their runs use: one per Studio, so several can share a process. */
 export class Projects {
   private runners = new Map<string, Runner>();
-  constructor(readonly root: string, readonly config: ConfigStore, private renderer?: Renderer, private review?: 'full' | 'defects', private onEvent?: (project: string, e: Logged) => void) {}
+  /** `local`: a folder or file on this machine named in a request may be read (off on a hosted service) */
+  constructor(readonly root: string, readonly config: ConfigStore, private renderer?: Renderer, private review?: 'full' | 'defects', private onEvent?: (project: string, e: Logged) => void, private local = true) {}
 
   dir(id: string) { return path.join(this.root, id); }
 
@@ -77,23 +78,38 @@ export class Projects {
   runner(id: string): Runner {
     if (!fs.existsSync(studioFile(this.dir(id), 'project.json'))) throw new Error(tr('项目不存在', 'Project not found'));
     let r = this.runners.get(id);
-    if (!r) { r = new Runner(id, this.dir(id), this.config, this.renderer, this.review, this.onEvent); this.runners.set(id, r); }
+    if (!r) { r = new Runner(id, this.dir(id), this.config, this.renderer, this.review, this.onEvent, this.local); this.runners.set(id, r); }
     return r;
   }
 }
 
 type Prices = { input: number; output: number; cacheRead: number; cacheWrite: number; currency: 'CNY' | 'USD' };
 
-/** the director's runtime, and the pages' when the film draws them with another model */
 /** a message that only says to go on */
 const GO_ON = /^(继续|接着|继续制作|接着做|继续做|继续吧|go on|continue|resume|keep going)[\s.!。！~～]*$/i;
 
-async function buildRuntime(meta: ProjectMeta, cfg: Config): Promise<{ runtime: AgentRuntime; prices: Prices; pages?: { runtime: AgentRuntime; prices: Prices }; reviewer?: { runtime: AgentRuntime; prices: Prices } }> {
+/**
+ * What research the film gets before its storyboard, if any: links, repositories and (on this machine) folders named in
+ * the request are always read; the web is searched when a search engine is set up and either the film has no material
+ * or the user asked for it (`meta.research`).
+ */
+export function researchPlan(meta: ProjectMeta, cfg: Config, local: boolean) {
+  const sources = findSources([meta.topic, meta.notes].filter(Boolean).join('\n'), { local });
+  const web = createWeb(cfg.search);
+  const search = !!web.provider && (meta.research ?? !meta.materials.length);
+  return hasSources(sources) || search ? { sources, web, search } : undefined;
+}
+
+type Model = { runtime: AgentRuntime; prices: Prices };
+/** the director's runtime, the pages' and the reviewer's when the film uses other models, and the research's when it has any */
+async function buildRuntime(meta: ProjectMeta, cfg: Config, research?: boolean): Promise<Model & { pages?: Model; reviewer?: Model; research?: Model }> {
   applyProxy(cfg.proxy);
   // the user's own base URL per provider and the model ids they typed in are applied by the catalog
   // only the film's own providers' lists: every keyed provider's took seconds (12 s seen), and one that hangs held the
   // run from starting
-  const only = [meta.model, meta.pageModel, meta.reviewModel].filter((m): m is string => !!m).map((m) => m.split('/')[0]);
+  // research runs on the cheaper model: the one set for it, else the pages', else the director's
+  const researchRef = research ? cfg.defaults.researchModel || meta.pageModel || meta.model : undefined;
+  const only = [meta.model, meta.pageModel, meta.reviewModel, researchRef].filter((m): m is string => !!m).map((m) => m.split('/')[0]);
   const catalog = await createCatalog({ keys: Object.entries(cfg.keys).map(([providerId, apiKey]) => ({ providerId, apiKey })), custom: cfg.custom, baseUrls: cfg.baseUrls, models: cfg.models, only });
   const one = (ref: string) => {
     const [provider, ...rest] = ref.split('/');
@@ -121,7 +137,14 @@ async function buildRuntime(meta: ProjectMeta, cfg: Config): Promise<{ runtime: 
   // keep in step was not worth it yet. To bring one back, branch on meta.runtime here, e.g.:
   //   if (meta.runtime === 'claude-agent-sdk') return { runtime: claudeRuntime({ apiKey, baseUrl, model: id }), prices };
   //   if (meta.runtime === 'codex') return { runtime: codexRuntime({ apiKey, baseUrl, model: id }), prices };
-  return { runtime: piRuntime(catalog.models, model), prices, pages, reviewer };
+  let forResearch: Model | undefined;
+  if (researchRef) {
+    // a research model that is not available (its key removed) falls back to the film's own
+    let r: ReturnType<typeof one> | undefined;
+    for (const ref of [researchRef, meta.pageModel, meta.model]) { try { if (ref) { r = one(ref); break; } } catch {} }
+    if (r) forResearch = { runtime: piRuntime(catalog.models, r.model), prices: r.prices };
+  }
+  return { runtime: piRuntime(catalog.models, model), prices, pages, reviewer, research: forResearch };
 }
 
 /** the film's narrator as the director takes it; no tts when the film has no voice, or its service has no key */
@@ -167,7 +190,7 @@ class Runner {
   }
   private tr(zh: string, en: string) { return this.replyIn() === 'zh' ? zh : en; }
 
-  constructor(readonly id: string, private dir: string, private config: ConfigStore, private renderer?: Renderer, private review?: 'full' | 'defects', private onEvent?: (project: string, e: Logged) => void) {
+  constructor(readonly id: string, private dir: string, private config: ConfigStore, private renderer?: Renderer, private review?: 'full' | 'defects', private onEvent?: (project: string, e: Logged) => void, private local = true) {
     this.log = studioFile(dir, 'events.jsonl');
     if (fs.existsSync(this.log)) {
       const lines = fs.readFileSync(this.log, 'utf8').trim().split('\n').filter(Boolean);
@@ -301,17 +324,20 @@ class Runner {
       // reported but does not stop the run
       const { files } = await prepareMaterials(path.join(dir, 'materials'), meta.lang ?? 'zh');
       for (const f of files) if (f.kind === 'document' && !f.parsedTo) this.emit({ type: 'error', message: this.tr(`资料 ${f.name} 读不了：${f.warning}`, `Couldn't read ${f.name}: ${f.warning}`) });
+      // an export reads nothing new
+      const plan = o.exporting ? undefined : researchPlan(meta, cfg, this.local);
       // an export draws the film the pages already are: it needs no model, so one that is gone (its provider removed, its
       // key deleted) must not hold it; a model that is asked for anyway says why it can't answer
-      const { runtime, prices, pages, reviewer } = await buildRuntime(meta, cfg).catch((e: Error) => {
+      const { runtime, prices, pages, reviewer, research } = await buildRuntime(meta, cfg, !!plan).catch((e: Error) => {
         if (!o.exporting) throw e;
         const [provider, ...id] = meta.model.split('/');
         const none: AgentRuntime = { id: 'pi', model: { provider, id: id.join('/') }, open: async () => { throw e; } };
-        return { runtime: none, prices: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, currency: 'USD' } as Prices, pages: undefined, reviewer: undefined };
+        return { runtime: none, prices: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, currency: 'USD' } as Prices, pages: undefined, reviewer: undefined, research: undefined };
       });
       const { tts, voice, provider } = voiceFor(meta, cfg);
       director = new Director({
-        dir, runtime, pages, reviewer, style: meta.style, look: meta.look, prices, tts, voice, concurrency: cfg.defaults.concurrency,
+        dir, runtime, pages, reviewer, research: plan && research ? { ...research, ...plan } satisfies DirectorOptions['research'] : undefined,
+        style: meta.style, look: meta.look, prices, tts, voice, concurrency: cfg.defaults.concurrency,
         brief: { durationSec: meta.durationSec, topic: meta.topic, notes: meta.notes, styleNotes: meta.styleNotes, lang: meta.lang ?? 'zh', replyLang: this.replyIn(meta), voice: provider, preferences: cfg.preferences },
         emit: this.emit, signal: this.abort.signal, renderer: this.renderer, review: this.review, exportDir: this.renderer ? undefined : cfg.exportDir,
       });

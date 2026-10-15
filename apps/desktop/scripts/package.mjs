@@ -19,7 +19,8 @@ const ROOT = path.resolve(DESKTOP, '../..');
 const RELEASE = path.join(DESKTOP, 'release');
 const APP = path.join(RELEASE, 'app');
 const pkg = JSON.parse(fs.readFileSync(path.join(DESKTOP, 'package.json'), 'utf8'));
-const run = (cmd, args, cwd = ROOT) => execFileSync(cmd, args, { cwd, stdio: 'inherit', env: { ...process.env, ELECTRON_MIRROR: process.env.ELECTRON_MIRROR || 'https://npmmirror.com/mirrors/electron/' } });
+// Electron downloads from GitHub; set ELECTRON_MIRROR (e.g. https://npmmirror.com/mirrors/electron/ in China) for a mirror
+const run = (cmd, args, cwd = ROOT) => execFileSync(cmd, args, { cwd, stdio: 'inherit' });
 
 run('pnpm', ['-r', 'build']);
 fs.rmSync(RELEASE, { recursive: true, force: true });
@@ -73,6 +74,8 @@ await esbuild.build({
   banner: { js: "import { createRequire as __frametellRequire } from 'node:module'; const require = __frametellRequire(import.meta.url);" },
 });
 fs.copyFileSync(path.join(DESKTOP, 'dist/bins.js'), path.join(APP, 'dist/bins.js'));
+// our licence and the third-party notices, at the top of the app
+for (const f of ['LICENSE', 'THIRD_PARTY_NOTICES.md']) fs.copyFileSync(path.join(ROOT, f), path.join(APP, f));
 fs.mkdirSync(path.join(APP, 'src'), { recursive: true });
 fs.copyFileSync(path.join(DESKTOP, 'src/preload.cjs'), path.join(APP, 'src/preload.cjs'));
 

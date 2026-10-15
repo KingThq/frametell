@@ -2,7 +2,7 @@
 // tool.*: each action in three forms. step: a finished step in the process list; start: the live line when it starts;
 // doing: the live line while the model is still writing it.
 export default {
-  stage: { storyboard: '分镜', script: '口播', narrate: '配音', pages: '画面', review: '全片检查', render: '渲染' },
+  stage: { research: '调研', storyboard: '分镜', script: '口播', narrate: '配音', pages: '画面', review: '全片检查', render: '渲染' },
   page: '第 {n} 页',
   wholeFilm: '全片',
   issue: '{where}：{msg}',
@@ -54,5 +54,11 @@ export default {
     readTimeline: { step: '看时间轴', start: '看时间轴', doing: '看时间轴' },
     findFiles: { step: '查找文件', start: '查找文件', doing: '查找文件' },
     runCommand: { step: '运行一条命令', start: '运行一条命令', doing: '运行一条命令' },
+    webSearch: { step: '搜索「{q}」', start: '搜索「{q}」', doing: '在搜索「{q}」' },
+    readUrl: { step: '读网页 {site}', start: '读网页 {site}', doing: '在读网页 {site}' },
+    listSource: { step: '看目录 {path}', start: '看目录 {path}', doing: '在看目录 {path}' },
+    readSource: { step: '读 {path}', start: '读 {path}', doing: '在读 {path}' },
+    grepSource: { step: '在代码和文档里找「{q}」', start: '在代码和文档里找「{q}」', doing: '在代码和文档里找「{q}」' },
+    finishResearch: { step: '写好调研简报', start: '在写调研简报', doing: '在写调研简报' },
   },
 };

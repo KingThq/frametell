@@ -44,6 +44,10 @@ html, body { margin: 0; width: 1280px; height: 640px; overflow: hidden; backgrou
 .screen .coin { position: absolute; left: 30px; top: 26px; width: 52px; height: 52px; border-radius: 50%; background: #C9A26B; box-shadow: inset 0 0 0 5px #B48A52; display: grid; place-items: center; }
 .screen .coin::after { content: ""; width: 14px; height: 14px; background: #EFE6D6; }
 .screen .coin.two { left: 66px; top: 50px; transform: scale(.75); opacity: .9; }
+/* the English page is about the sky, so a low sun stands where the Chinese page has its coins */
+.screen .sun { display: none; position: absolute; left: 34px; top: 28px; width: 48px; height: 48px; border-radius: 50%; background: #D9A54E; box-shadow: 0 0 0 10px rgb(217 165 78 / .22), 0 0 0 22px rgb(217 165 78 / .1); }
+:root[lang="en"] .screen .coin { display: none; }
+:root[lang="en"] .screen .sun { display: block; }
 .screen .subt { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); background: rgb(12 10 9 / .74); color: #F5F5F4; font: 500 14px var(--f-ui); padding: 4px 12px; border-radius: 5px; white-space: nowrap; }
 .corner { position: absolute; width: 56px; height: 56px; border-color: var(--accent); border-style: solid; }
 .corner.tl { left: -22px; top: -22px; border-width: 9px 0 0 9px; }
@@ -74,9 +78,9 @@ html, body { margin: 0; width: 1280px; height: 640px; overflow: hidden; backgrou
   <div class="right">
     <div class="frame">
       <div class="screen">
-        <div class="coin"></div><div class="coin two"></div>
-        <p class="t" data-zh="宋朝的钱，为什么不够用？<small>第 3 页 · 钱荒</small>" data-en="Why did Song China<br>run out of money?<small>PAGE 3 · THE COIN SHORTAGE</small>"></p>
-        <span class="subt" data-zh="朝廷发现，铜不够用了。" data-en="The court realized there wasn't enough copper."></span>
+        <div class="coin"></div><div class="coin two"></div><div class="sun"></div>
+        <p class="t" data-zh="宋朝的钱，为什么不够用？<small>第 3 页 · 钱荒</small>" data-en="Why is the sky blue?<small>PAGE 3 · RAYLEIGH SCATTERING</small>"></p>
+        <span class="subt" data-zh="朝廷发现，铜不够用了。" data-en="Air scatters blue light far more than red."></span>
         <span class="rec"><i></i>00:42</span>
       </div>
       <span class="corner tl"></span><span class="corner br"></span>

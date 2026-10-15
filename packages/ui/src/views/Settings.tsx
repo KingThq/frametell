@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, AudioLines, Boxes, Check, CircleAlert, FolderOpen, Globe, KeyRound, Monitor, NotebookPen, SlidersHorizontal, Trash2, X, type LucideIcon } from 'lucide-react';
+import { ArrowLeft, AudioLines, Boxes, Check, CircleAlert, FolderOpen, Globe, KeyRound, Monitor, NotebookPen, Search, SlidersHorizontal, Trash2, X, type LucideIcon } from 'lucide-react';
 import { client, hosted, type ModelInfo, type PublicSettings, type SettingsPatch } from '../lib/client';
 import { forgetVoices, useLoad } from '../lib/hooks';
 import { t, useT, type MessageKey, getLocale } from '../i18n';
@@ -31,6 +31,14 @@ const VOICES = [
   { id: 'elevenlabs', key: 'elevenlabs' as const, url: 'https://elevenlabs.io/app/settings/api-keys', hint: 'sk_…' },
 ];
 
+// the web search the research uses before a storyboard; reading pages needs no key, searching needs one of these
+const SEARCH = [
+  { id: 'tavily', url: 'https://app.tavily.com/home', hint: 'tvly-…' },
+  { id: 'serper', url: 'https://serper.dev/api-key', hint: '' },
+  { id: 'serpapi', url: 'https://serpapi.com/manage-api-key', hint: '' },
+  { id: 'jina', url: 'https://jina.ai/api-dashboard/key-manager', hint: 'jina_…' },
+] as const;
+
 const SECTIONS: Section[] = [
   {
     id: 'models', icon: Boxes, label: 'settings.nav.models',
@@ -59,6 +67,11 @@ const SECTIONS: Section[] = [
     detail: (c, open) => { const v = VOICES.find((x) => x.id === open) ?? VOICES[0]; return <VoiceDetail key={v.id} v={v} c={c} />; },
   },
   { id: 'preferences', icon: NotebookPen, label: 'settings.nav.preferences', hosted: true, detail: (c) => <PreferenceSettings s={c.s} patch={c.patch} /> },
+  {
+    id: 'search', icon: Search, label: 'settings.nav.search',
+    list: (c) => ({ items: SEARCH.map((x) => ({ id: x.id, name: t(`settings.search.${x.id}` as MessageKey), logo: x.id, on: !!c.s.search?.[x.id] })) }),
+    detail: (c, open) => { const x = SEARCH.find((y) => y.id === open) ?? SEARCH.find((y) => y.id === c.s.search?.provider) ?? SEARCH[0]; return <SearchDetail key={x.id} x={x} c={c} />; },
+  },
   { id: 'general', icon: SlidersHorizontal, label: 'settings.nav.general', detail: (c) => <General c={c} /> },
   { id: 'network', icon: Globe, label: 'settings.nav.network', detail: (c) => <Network c={c} /> },
   { id: 'machine', icon: Monitor, label: 'settings.nav.machine', detail: () => <Machine /> },
@@ -114,6 +127,32 @@ function VoiceDetail({ v, c }: { v: (typeof VOICES)[number]; c: Ctx }) {
         <p className="text-[12.5px] leading-relaxed text-ink-3">{t('settings.voice.desc')}</p>
       </div>
       {v.id === 'volcengine' && on && <MyVoices c={c} />}
+    </div>
+  );
+}
+
+function SearchDetail({ x, c }: { x: (typeof SEARCH)[number]; c: Ctx }) {
+  const on = !!c.s.search?.[x.id];
+  const current = c.s.search?.provider === x.id;
+  const name = t(`settings.search.${x.id}` as MessageKey);
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <header className="flex items-start gap-3.5 border-b border-line pb-5 pl-7 pr-14 pt-6">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-line bg-paper"><ProviderLogo id={x.id} name={name} size={24} /></span>
+        <div className="min-w-0 flex-1">
+          <h3 className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[17px] font-semibold leading-tight text-ink">
+            {name}
+            <span className={`inline-flex items-center gap-1.5 text-[12px] font-normal ${current ? 'text-jade' : 'text-ink-3'}`}><span className={`h-1.5 w-1.5 rounded-full ${current ? 'bg-jade' : on ? 'bg-ink-3' : 'bg-line-2'}`} aria-hidden />{current ? t('settings.search.inUse') : on ? t('providers.connected') : t('providers.notConnected')}</span>
+          </h3>
+          <p className="mt-1 text-[12.5px] text-ink-3">{t(`settings.search.${x.id}Blurb` as MessageKey)}</p>
+        </div>
+      </header>
+      <div className="space-y-4 px-7 py-6">
+        <SecretField id={`search-${x.id}`} label={t('providers.key')} saved={c.s.search?.[x.id]} hint={x.hint || t('settings.search.keysHint')} onSave={(v) => c.patch({ search: { [x.id]: v } })} />
+        {on && !current && <button type="button" className="fs-btn fs-btn-ghost h-9" onClick={() => void c.patch({ search: { provider: x.id } })}>{t('settings.search.use', { name })}</button>}
+        {!on && <a href={x.url} target="_blank" rel="noreferrer" className="inline-flex text-[12.5px] text-accent-ink hover:underline">{t('providers.getKey', { name })} ↗</a>}
+        <p className="text-[12.5px] leading-relaxed text-ink-3">{t('settings.search.desc')}</p>
+      </div>
     </div>
   );
 }

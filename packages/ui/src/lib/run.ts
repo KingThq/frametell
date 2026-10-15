@@ -88,7 +88,9 @@ export interface RunView {
   activeAt?: number;
 }
 
-export const STAGES: Stage[] = ['storyboard', 'script', 'narrate', 'pages', 'review', 'render'];
+export const STAGES: Stage[] = ['research', 'storyboard', 'script', 'narrate', 'pages', 'review', 'render'];
+/** the stages this run shows, numbered in order: research only when it ran */
+export const shownStages = (r: RunView) => STAGES.filter((s) => s !== 'research' || r.stages.research.status !== 'pending');
 /** stage names in the interface language, read when used: STAGE_NAME[stage] */
 export const STAGE_NAME = new Proxy({} as Record<Stage, string>, { get: (_, k) => t(`run.stage.${String(k) as Stage}`) });
 
