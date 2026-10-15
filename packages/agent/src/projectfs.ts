@@ -163,10 +163,14 @@ export function editIn(root: string, p: string, change: (src: string) => string,
 }
 
 /**
- * Writes a file of the project: a new one created, an existing one replaced in place. Never through a link: the
- * nearest folder that exists must really be in the project; missing folders are made one at a time, each checked to
- * be a real folder of the project; an existing file that is a link or has another hard link is refused; a new file is
- * created exclusively and an existing one opened without following a link, then checked again as opened.
+ * Writes a file of the project: a new one created, an existing one replaced in place. Never through a link. On Linux
+ * (production) any link on the way is refused, even one inside the project to a folder of the project: each folder is
+ * opened (never following a link) under the one opened before, and the next made and opened through it, never by its
+ * path again; a new file is created exclusively in the last opened folder and taken back if the check of the opened
+ * file then fails (the folder moved out of the project meanwhile). Elsewhere (local development only) a weaker
+ * fallback checks names first: the nearest folder that exists must really be in the project, missing folders are made
+ * one at a time and checked, then the file is opened without following a link and checked again as opened. On both,
+ * an existing file that is a link or has another hard link is refused.
  * `before` sees the existing content (undefined for a new file) and can throw to leave everything as it was.
  */
 export function writeIn(root: string, p: string, data: string | Uint8Array, o: Reach & { shown?: string; before?: (existing: string | undefined) => void } = {}): void {
@@ -288,7 +292,14 @@ function writeAtFds(root: string, p: string, data: string | Uint8Array, o: Reach
       return;
     }
     o.before?.(undefined);
-    const f = check(fs.openSync(target, C.O_WRONLY | C.O_CREAT | C.O_EXCL | QUIET | NOFOLLOW, 0o666), path.join(dir, name), realRoot, shown, rules);
+    const created = fs.openSync(target, C.O_WRONLY | C.O_CREAT | C.O_EXCL | QUIET | NOFOLLOW, 0o666);
+    const made = fs.fstatSync(created);
+    let f: OpenFile;
+    try { f = check(created, path.join(dir, name), realRoot, shown, rules); } catch (e) {
+      // the folder moved out of the project in between: take back only that very file, through the folder as opened
+      try { const now = fs.lstatSync(target); if (now.ino === made.ino && now.dev === made.dev) fs.unlinkSync(target); } catch { /* gone */ }
+      throw e;
+    }
     try { rewrite(f.fd, bytes); } finally { fs.closeSync(f.fd); }
   } finally { fs.closeSync(fd); }
 }

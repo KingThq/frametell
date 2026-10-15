@@ -213,6 +213,29 @@ test('on Linux, a folder swapped for a link while a write makes the folders unde
   } finally { fs.rmSync(root, { recursive: true, force: true }); fs.rmSync(outside, { recursive: true, force: true }); }
 });
 
+test('on Linux, a new file whose folder moved out of the project as it was made is taken back', { skip: process.platform !== 'linux' }, () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'writein-moved-')), outside = fs.mkdtempSync(path.join(os.tmpdir(), 'writein-out-'));
+  const open = fs.openSync;
+  let moved = false;
+  try {
+    fs.mkdirSync(path.join(root, 'a'));
+    // right after the new file is created, its folder is moved out of the project: the check of the opened file fails
+    (fs as { openSync: typeof fs.openSync }).openSync = ((p: fs.PathLike, flags: fs.OpenMode, mode?: fs.Mode) => {
+      const fd = open(p, flags, mode);
+      if (!moved && path.basename(String(p)) === 'new.txt' && typeof flags === 'number' && (flags & fs.constants.O_CREAT)) {
+        moved = true;
+        fs.renameSync(path.join(root, 'a'), path.join(outside, 'a'));
+      }
+      return fd;
+    }) as typeof fs.openSync;
+    assert.throws(() => writeIn(root, 'a/new.txt', 'x'), /outside/);
+  } finally { (fs as { openSync: typeof fs.openSync }).openSync = open; }
+  try {
+    assert.equal(moved, true, 'the write created the file');
+    assert.deepEqual(fs.readdirSync(path.join(outside, 'a')), []);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); fs.rmSync(outside, { recursive: true, force: true }); }
+});
+
 test('a write the rules refuse leaves no folder behind', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'writein-place-'));
   try {
