@@ -31,6 +31,10 @@ export interface StudioClient {
   say(id: string, text: string, refs?: UserRef[]): Promise<boolean>;
   /** save a file the user attached to a message into the project; returns the reference to send with it */
   attach(id: string, file: File): Promise<UserRef>;
+  /** files the user keeps to hand (a hosted service's brand kits), offered in the composer's attach menu */
+  library?(): Promise<LibraryGroup[]>;
+  /** put one of them into the project, as attach does with an uploaded file; returns the reference to send with it */
+  attachFrom?(projectId: string, item: { brand: string; asset: string }): Promise<UserRef>;
   /** pages with their narration lines and times; null until the script exists */
   timeline(id: string): Promise<Timeline | null>;
   /** full-resolution frames of the film at `times`, as project-relative paths (from the mp4 when current, else live) */
@@ -51,6 +55,10 @@ export interface StudioClient {
    * model choice and voices it cannot use, and shows the account instead */
   hosted?: Hosted;
 }
+
+/** a brand's files, as the attach menu offers them: `kind` 'logo', 'logo-dark', 'mark', 'icon' or 'image'; `thumb` a
+ *  small picture's URL */
+export interface LibraryGroup { brand: { id: string; name: string }; items: { id: string; name: string; kind: string; thumb: string }[] }
 
 export interface Hosted {
   /** the signed-in account, shown in the top bar */

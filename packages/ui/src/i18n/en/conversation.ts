@@ -100,6 +100,17 @@ const en: typeof zh = {
     voiceSend: 'Sending narrates the whole film again · pictures stay',
     voiceSendEarly: 'Once sent, the narration uses this voice',
     queueHint: '↵ Queue · sent when done',
+    library: {
+      upload: 'Upload a file or image',
+      title: 'Brand assets',
+      group: 'Brand assets of {name}',
+      apply: 'Apply the whole brand',
+      applyTitle: 'Ask the director to bring {name}’s tone, colours and logo to this film',
+      applyText: 'Apply the brand “{name}” to this film: its colours, its tone of voice and its logo (attached). Redraw only the pages it changes.',
+      loading: 'Loading brand assets…',
+      failed: 'Couldn’t load brand assets: {error}',
+      empty: 'No brand assets yet',
+    },
     queue: {
       title: 'Queued · {n}',
       waiting: 'Goes to the director once the film is done',

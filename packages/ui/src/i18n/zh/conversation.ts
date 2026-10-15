@@ -102,6 +102,17 @@ export default {
     voiceSend: '发送后整片重新配音 · 画面不变',
     voiceSendEarly: '发送后，配音就用这个音色',
     queueHint: '↵ 排队 · 做完就发',
+    library: {
+      upload: '上传文件或图片',
+      title: '品牌素材',
+      group: '{name} 的品牌素材',
+      apply: '套用整套品牌',
+      applyTitle: '让导演把「{name}」的语气、配色和 logo 用到这部片子上',
+      applyText: '把品牌「{name}」套用到这部片子上：用它的配色、文案语气和 logo（已附上）。只重画受影响的页面。',
+      loading: '正在载入品牌素材…',
+      failed: '品牌素材没能载入：{error}',
+      empty: '还没有品牌素材',
+    },
     queue: {
       title: '排队中 · {n} 条',
       waiting: '片子做完就交给导演',
