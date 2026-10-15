@@ -10,6 +10,7 @@ import { addUsage, emptyUsage, type AgentRuntime, type AgentSession, type Sessio
 import type { PageIssue, PageStatus, Stage, StudioEvent } from './events.js';
 import { designedFonts, designedIssues, designedLook, type Look } from './look.js';
 import { ENGINE_DIR } from '@frametell/engine/tools/project.mjs';
+import { openIn } from './projectfs.js';
 
 export interface Prices { input: number; output: number; cacheRead: number; cacheWrite: number; currency: 'CNY' | 'USD' }
 
@@ -655,7 +656,19 @@ export class Director {
     if (!dir) return undefined;
     try {
       fs.mkdirSync(dir, { recursive: true });
-      const copy = (f: string) => { const to = path.join(dir, path.basename(f)); fs.copyFileSync(f, to); return to; };
+      // the film is read through a checked descriptor (never through a link the agent's shell planted in out/)
+      const copy = (f: string) => {
+        const to = path.join(dir, path.basename(f));
+        const src = openIn(this.o.dir, f);
+        try {
+          const dst = fs.openSync(to, 'w');
+          try {
+            const b = Buffer.allocUnsafe(1 << 20);
+            for (let pos = 0, n; (n = fs.readSync(src.fd, b, 0, b.length, pos)); pos += n) for (let off = 0; off < n;) off += fs.writeSync(dst, b, off, n - off);
+          } finally { fs.closeSync(dst); }
+        } finally { fs.closeSync(src.fd); }
+        return to;
+      };
       return { withSubs: copy(out.withSubs), noSubs: copy(out.noSubs) };
     } catch (e) {
       this.emit({ type: 'error', message: this.say(`没能存到导出位置 ${dir}：${(e as Error).message}。片子还在项目里，可以直接下载`, `Couldn't save to the export folder ${dir}: ${(e as Error).message}. The film is still in the project and can be downloaded`) });
