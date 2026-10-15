@@ -112,7 +112,10 @@ export function brandFilesOn(brand: BrandBrief | undefined, pages: { id: string;
 
 const call = (a: BrandAsset) => {
   const h = a.w && a.h ? `w * ${a.h} / ${a.w}` : 'h';
-  return `P.img('${pathOf(a)}', x, y, w, ${h}, { fit: '${LOGOS.includes(a.kind) || a.kind === 'icon' ? 'contain' : 'cover'}' })`;
+  // a logo or an icon stands on the page as it is: P.img frames a picture (rounded corners, an outline, a shadow) unless told not to
+  return LOGOS.includes(a.kind) || a.kind === 'icon'
+    ? `P.img('${pathOf(a)}', x, y, w, ${h}, { fit: 'contain', border: false, shadow: false, r: 0 })`
+    : `P.img('${pathOf(a)}', x, y, w, ${h}, { fit: 'cover' })`;
 };
 
 /** For the page agent: the brand's files this page places, with the call that places each, and how a logo is treated.
@@ -127,6 +130,7 @@ export function brandPageNote(files: BrandAsset[]) {
 ${files.map((a) => `${line(a)}\n  \`${call(a)}\``).join('\n')}
 ${logos ? `
 - A logo keeps its own proportions (height = width × its h / w, \`fit: 'contain'\`): never stretch, crop, recolour, filter, blend or rotate it, and never draw it yourself.
+- A logo or an icon is never framed, bordered or shadowed: keep \`border: false, shadow: false, r: 0\` as in the calls above, so it stands on the page as it is.
 - Leave clear space around a logo, at least half its height, with nothing else in it; nothing passes over it.
 - ${dark ? `On a dark ground use \`${pathOf(dark)}\`; on a light ground the logo.` : 'On a dark ground, set the logo on a light card of its own rather than on the dark.'}
 - A logo with an opaque background sits on a ground that matches it, or on a card, never cut out.` : ''}

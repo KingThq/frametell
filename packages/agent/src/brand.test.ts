@@ -69,14 +69,16 @@ test('a page is told of the brand files it places: the logos on the first and la
 
   const first = pagePrompt(sb, 'p01', t, 'en', 'en', false, brand);
   assert.ok(first.includes("## The brand's files on this page"));
-  assert.ok(first.includes("P.img('assets/brand/a1.svg', x, y, w, w * 200 / 600, { fit: 'contain' })"));
+  assert.ok(first.includes("P.img('assets/brand/a1.svg', x, y, w, w * 200 / 600, { fit: 'contain', border: false, shadow: false, r: 0 })"));
   assert.ok(first.includes('never stretch, crop, recolour'));
+  assert.ok(first.includes('never framed, bordered or shadowed'));
   assert.ok(first.includes('Leave clear space around a logo'));
   assert.ok(first.includes('On a dark ground use `assets/brand/a2.svg`'));
   assert.ok(first.indexOf("## The brand's files") < first.indexOf('Stop once pages/p01.js'));
   const shot = pagePrompt(sb, 'p02', t, 'en', 'en', false, brand);
   assert.ok(shot.includes("P.img('assets/brand/a3.png', x, y, w, w * 2532 / 1170, { fit: 'cover' })"));
   assert.ok(!shot.includes('clear space'), 'no logo rules for a page without a logo');
+  assert.ok(!shot.includes('border: false'), 'a picture that is not a logo is framed as any picture');
   assert.equal(pagePrompt(sb, 'p03', t, 'en', 'en', false, brand), pagePrompt(sb, 'p03', t, 'en', 'en', false));
 });
 
