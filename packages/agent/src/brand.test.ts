@@ -117,3 +117,12 @@ test('the brand\'s main colour, when the host names its palette name, is the one
   assert.ok(first.includes(rule) && first.includes("## The brand's files on this page"));
   assert.equal(pagePrompt(sb, 'p03', t, 'en', 'en', false, brand), pagePrompt(sb, 'p03', t, 'en', 'en', false));
 });
+
+test('the film\'s palette as the host set it from the brand is spelled out, so colours are described as they are now', () => {
+  const b = cleanBrand({ ...brand, palette: { red: '#0b6e99', green: '#2a9d8f', 'bad name': '#000000', blue: 'teal', ink: '#1A1714' } })!;
+  assert.deepEqual(b.palette, { red: '#0B6E99', green: '#2A9D8F', ink: '#1A1714' });
+  assert.equal(cleanBrand({ ...brand, palette: { red: 'x' } })!.palette, undefined);
+  assert.equal(cleanBrand({ ...brand, palette: ['#000000'] })!.palette, undefined);
+  assert.ok(brandSection(b).includes("- In this film the palette's colours are: red #0B6E99, green #2A9D8F, ink #1A1714. Describe colours by what they are now, not by the style card's names.\n"));
+  assert.ok(!brandSection(brand).includes("palette's colours are"));
+});

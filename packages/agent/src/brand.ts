@@ -30,6 +30,9 @@ export interface BrandBrief {
   showLogo?: boolean;
   /** the palette name that carries the brand's main colour in the film's style (the host maps the colours) */
   emphasis?: string;
+  /** the film's palette as the host set it from the brand's colours (name → #RRGGBB), so its colours are described as
+   *  they are now */
+  palette?: Record<string, string>;
   assets: BrandAsset[];
 }
 
@@ -72,6 +75,11 @@ export function cleanBrand(x: unknown): BrandBrief | undefined {
   if (tagline) brief.tagline = tagline;
   if (o.showLogo === false) brief.showLogo = false;
   if (typeof o.emphasis === 'string' && NAME.test(o.emphasis)) brief.emphasis = o.emphasis;
+  if (o.palette && typeof o.palette === 'object' && !Array.isArray(o.palette)) {
+    const palette = Object.fromEntries(Object.entries(o.palette as Record<string, unknown>)
+      .filter((e): e is [string, string] => NAME.test(e[0]) && typeof e[1] === 'string' && /^#[0-9a-f]{6}$/i.test(e[1])).slice(0, 24).map(([k, v]) => [k, v.toUpperCase()]));
+    if (Object.keys(palette).length) brief.palette = palette;
+  }
   return brief;
 }
 
@@ -106,7 +114,7 @@ Its files, in the project (open a picture with read to see it):
 ${files.length ? files.map(line).join('\n') : '(none)'}
 
 ${logo && shown ? `## Brand moments\n\n${BRAND_MOMENT_RULES}\n\n## Everything else\n\n` : ''}${!shown ? '- No logo on screen anywhere in this film: the brand shows in its colours and its tone only.\n' : ''}- Use the other files only where the content calls for them (the product's screenshot where the film shows the product); never put one in because it is there. A beat that places one names its path in its object (\`${BRAND_DIR}/…\`), so the page agent places that very file.
-${brand.emphasis ? `${emphasisRule(brand.emphasis)}\n` : ''}- Write the narration and the words on screen in the brand's tone. The rules on facts still hold: the tone never adds a claim, a number or a promise the material doesn't support.`;
+${brand.palette ? `- In this film the palette's colours are: ${Object.entries(brand.palette).map(([k, v]) => `${k} ${v}`).join(', ')}. Describe colours by what they are now, not by the style card's names.\n` : ''}${brand.emphasis ? `${emphasisRule(brand.emphasis)}\n` : ''}- Write the narration and the words on screen in the brand's tone. The rules on facts still hold: the tone never adds a claim, a number or a promise the material doesn't support.`;
 }
 
 /** the brand's files a page places: those its storyboard names (no logo when the film shows none), the logo bringing
