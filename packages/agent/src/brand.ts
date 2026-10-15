@@ -25,8 +25,9 @@ export interface BrandBrief {
   /** how its words sound */
   tone?: string;
   tagline?: string;
-  /** the logo opens and closes the film (default: yes) */
-  bookends?: boolean;
+  /** the director may give the logo a few planned moments (default: yes); false: no logo on screen at all, the brand
+   *  only in its colours and tone */
+  showLogo?: boolean;
   /** the palette name that carries the brand's main colour in the film's style (the host maps the colours) */
   emphasis?: string;
   assets: BrandAsset[];
@@ -69,7 +70,7 @@ export function cleanBrand(x: unknown): BrandBrief | undefined {
   if (about) brief.about = about;
   if (tone) brief.tone = tone;
   if (tagline) brief.tagline = tagline;
-  if (o.bookends === false) brief.bookends = false;
+  if (o.showLogo === false) brief.showLogo = false;
   if (typeof o.emphasis === 'string' && NAME.test(o.emphasis)) brief.emphasis = o.emphasis;
   return brief;
 }
@@ -78,11 +79,22 @@ const pathOf = (a: BrandAsset) => `${BRAND_DIR}/${a.file}`;
 const size = (a: BrandAsset) => (a.w && a.h ? `${a.w}×${a.h}` : 'size unknown');
 const line = (a: BrandAsset) => `- \`${pathOf(a)}\`: ${a.kind}, ${size(a)}, ${a.alpha ? 'transparent background' : 'opaque background'}${a.name && a.name !== a.file ? `, “${a.name}”` : ''}${a.note ? `: ${a.note}` : ''}`;
 
+/** How the brand's logo shows in a film: in a few moments the director plans, never stamped on pages by rule. The
+ *  rules as the director reads them (a host writing the brand down for a film, as brand.md, can use the same words). */
+export const BRAND_MOMENT_RULES = `- The logo appears only in brand moments you plan: 0 to 3 in the film, and a short film usually needs one. Restraint beats repetition.
+- Each brand moment is its own beat, and that beat says so in its object: \`brand moment: ${BRAND_DIR}/<file>\`, the kind of moment, and roughly where and when (e.g. \`brand moment: ${BRAND_DIR}/logo.svg, closing sign-off, centred once the scene has cleared, tagline under it\`). The page agent draws exactly that, and only there.
+- A typical moment is a closing sign-off as a composed beat of its own: the scene clears or settles first, then the logo enters with the style's own motion (drawn, stamped, faded in), the tagline under it, and holds at least 2 seconds.
+- Or a placement native to the style: in ink and wash a seal-like mark in a corner near the title, on a chalkboard signed in a corner, in an editorial layout a masthead.
+- Never on top of or crowding a title, a label, a diagram or the subject, never in the middle of a content page, and at most one logo in a frame.
+- The logo file itself is never distorted, recoloured, cropped or framed, whatever the moment.`;
+
 /** The brand, for the director (storyboard, script, changes): after the style card, so it reads as who the film
  *  speaks for, not as a new style. '' without a brand, so the prompt stays as it was. */
 export function brandSection(brand?: BrandBrief) {
   if (!brand) return '';
-  const bookends = brand.bookends !== false && brand.assets.some((a) => a.kind === 'logo' || a.kind === 'mark');
+  const logo = brand.assets.some((a) => LOGOS.includes(a.kind));
+  const shown = brand.showLogo !== false;
+  const files = brand.assets.filter((a) => shown || !LOGOS.includes(a.kind));
   return `---
 # This film's brand
 
@@ -91,35 +103,30 @@ The film is made for a brand and speaks for it. Its colours and typeface, when i
 - Name: ${brand.name}${brand.about ? `\n- About: ${brand.about}` : ''}${brand.tagline ? `\n- Tagline: “${brand.tagline}”` : ''}${brand.tone ? `\n- Tone of voice:\n\n<brand-tone>\n${brand.tone}\n</brand-tone>` : ''}
 
 Its files, in the project (open a picture with read to see it):
-${brand.assets.length ? brand.assets.map(line).join('\n') : '(none)'}
+${files.length ? files.map(line).join('\n') : '(none)'}
 
-- ${bookends ? 'The first page opens on the brand\'s logo and the last page closes on it; the last page may also carry the tagline.' : 'Show the logo only where the content calls for it.'}
-- Use the other files only where the content calls for them (the product's screenshot where the film shows the product); never put one in because it is there.
-- A beat that places a file names its path in its object (\`${BRAND_DIR}/…\`), so the page agent places that very file.
+${logo && shown ? `## Brand moments\n\n${BRAND_MOMENT_RULES}\n\n## Everything else\n\n` : ''}${!shown ? '- No logo on screen anywhere in this film: the brand shows in its colours and its tone only.\n' : ''}- Use the other files only where the content calls for them (the product's screenshot where the film shows the product); never put one in because it is there. A beat that places one names its path in its object (\`${BRAND_DIR}/…\`), so the page agent places that very file.
 ${brand.emphasis ? `${emphasisRule(brand.emphasis)}\n` : ''}- Write the narration and the words on screen in the brand's tone. The rules on facts still hold: the tone never adds a claim, a number or a promise the material doesn't support.`;
 }
 
-/** the brand's files a page places: those its storyboard names, and on the first and last page the logos when the
- *  film opens and closes on them */
+/** the brand's files a page places: those its storyboard names (no logo when the film shows none), the logo bringing
+ *  its dark version along for a dark ground */
 export function brandFilesOn(brand: BrandBrief | undefined, pages: { id: string; section?: string; say?: string; beats?: { object?: string; action?: string; text?: string }[] }[], id: string): BrandAsset[] {
   if (!brand?.assets.length) return [];
-  const i = pages.findIndex((p) => p.id === id);
-  const p = pages[i];
+  const p = pages.find((x) => x.id === id);
   if (!p) return [];
+  const allowed = brand.assets.filter((a) => brand.showLogo !== false || !LOGOS.includes(a.kind));
   const words = [p.section, p.say, ...(p.beats ?? []).flatMap((b) => [b.object, b.action, b.text])].filter(Boolean).join('\n');
-  const named = brand.assets.filter((a) => words.includes(a.file));
-  const bookend = brand.bookends !== false && (i === 0 || i === pages.length - 1);
-  const used = brand.assets.filter((a) => named.includes(a) || (bookend && LOGOS.includes(a.kind)));
-  // a page with the logo also gets its dark version, for a dark ground
-  if (used.some((a) => a.kind === 'logo')) for (const a of brand.assets) if (a.kind === 'logo-dark' && !used.includes(a)) used.push(a);
-  return brand.assets.filter((a) => used.includes(a));
+  const used = allowed.filter((a) => words.includes(a.file));
+  if (used.some((a) => a.kind === 'logo')) for (const a of allowed) if (a.kind === 'logo-dark' && !used.includes(a)) used.push(a);
+  return allowed.filter((a) => used.includes(a));
 }
 
 const call = (a: BrandAsset) => {
   const h = a.w && a.h ? `w * ${a.h} / ${a.w}` : 'h';
   // a logo or an icon stands on the page as it is: P.img frames a picture (rounded corners, an outline, a shadow) unless told not to
   return LOGOS.includes(a.kind) || a.kind === 'icon'
-    ? `P.img('${pathOf(a)}', x, y, w, ${h}, { fit: 'contain', border: false, shadow: false, r: 0 })`
+    ? `P.img('${pathOf(a)}', x, y, w, ${h}, { fit: 'contain', border: false, shadow: false, r: 0, pop: 0, at, dur: 0.8 })`
     : `P.img('${pathOf(a)}', x, y, w, ${h}, { fit: 'cover' })`;
 };
 
@@ -136,17 +143,21 @@ export function brandPageNote(files: BrandAsset[], emphasis?: string) {
 ## The brand's files on this page
 ${files.map((a) => `${line(a)}\n  \`${call(a)}\``).join('\n')}
 ${logos ? `
+- The storyboard plans the brand moment: draw exactly the beat that names the logo, where and when it says, and nowhere else on the page.
+- Compose the moment around the logo: nothing else within about one logo-height of it, never over or crowding a title, a label, a diagram or the subject, and only one logo in a frame.
+- It enters with the style's own motion (drawn on, stamped, faded in: \`pop: 0\` and a slow \`dur\`, as in the calls above), never a pop; a sign-off holds at least 2 seconds.
 - A logo keeps its own proportions (height = width × its h / w, \`fit: 'contain'\`): never stretch, crop, recolour, filter, blend or rotate it, and never draw it yourself.
 - A logo or an icon is never framed, bordered or shadowed: keep \`border: false, shadow: false, r: 0\` as in the calls above, so it stands on the page as it is.
-- Leave clear space around a logo, at least half its height, with nothing else in it; nothing passes over it.
 - ${dark ? `On a dark ground use \`${pathOf(dark)}\`; on a light ground the logo.` : 'On a dark ground, set the logo on a light card of its own rather than on the dark.'}
 - A logo with an opaque background sits on a ground that matches it, or on a card, never cut out.` : ''}
-- Place only these files, where the storyboard puts them; reveal them as you would any element.${emphasis ? `\n${emphasisRule(emphasis)}` : ''}`;
+- Place only these files, where and when the storyboard puts them.${emphasis ? `\n${emphasisRule(emphasis)}` : ''}`;
 }
 
-/** For the page's reviewer: one more check when a logo is on the page. '' otherwise. */
-export function brandReviewNote(files: BrandAsset[]) {
+/** For the page's reviewer: the logo checked where the storyboard puts it, and looked for where it doesn't. '' for a
+ *  film with no logo of a brand. */
+export function brandReviewNote(brand: BrandBrief | undefined, files: BrandAsset[]) {
+  if (!brand?.assets.some((a) => LOGOS.includes(a.kind))) return '';
   const logos = files.filter((a) => LOGOS.includes(a.kind));
-  if (!logos.length) return '';
-  return `\nThe brand's logo is on this page (${logos.map((a) => a.file).join(', ')}). Fail the page if the logo is stretched or squashed, cropped, recoloured, covered by anything, crowded by other marks, or too small or faint to read.\n`;
+  if (!logos.length) return `\nThe storyboard puts no brand logo on this page: fail it if one appears.\n`;
+  return `\nThe storyboard puts the brand's logo on this page (${logos.map((a) => a.file).join(', ')}). Fail the page if the logo is stretched or squashed, cropped, recoloured, framed, covered by anything, overlapping or crowding any other element, in the middle of the content, more than one in a frame, or too small or faint to read.\n`;
 }
