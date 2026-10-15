@@ -120,9 +120,10 @@ function tool(dir: string, name: string, args: string[], opts: { timeoutMs?: num
 /**
  * Draws a project's film somewhere other than this process (a hosted service sends it to a render container). It must
  * leave the two mp4s in <dir>/out as engine/tools/render.mjs names them, pass progress lines to onLine, and stop on
- * signal. Without one, render.mjs runs here.
+ * signal. It may answer the final plan's segment names, the backend that drew them and why not the GPU; they go on the done event.
+ * Without one, render.mjs runs here.
  */
-export type Renderer = (dir: string, o: { fps: number; workers: number; onLine?: (l: string) => void; signal?: AbortSignal }) => Promise<void>;
+export type Renderer = (dir: string, o: { fps: number; workers: number; onLine?: (l: string) => void; signal?: AbortSignal }) => Promise<void | { segments: string[]; backend?: string; fallback?: string }>;
 
 export class Project {
   /** `signal` stops the engine tools it runs (lint, screenshots, the time line) */
@@ -249,10 +250,11 @@ export class Project {
   }
 
   /** Render the film; progress lines are passed through. Resolves with the output files. */
-  async render(o: { fps?: number; workers?: number; onLine?: (l: string) => void; signal?: AbortSignal } = {}): Promise<{ withSubs: string; noSubs: string }> {
+  async render(o: { fps?: number; workers?: number; onLine?: (l: string) => void; signal?: AbortSignal } = {}): Promise<{ withSubs: string; noSubs: string; segments?: string[]; backend?: string; fallback?: string }> {
     if (this.renderer) {
-      await this.renderer(this.dir, { fps: o.fps ?? 30, workers: o.workers ?? 4, onLine: o.onLine, signal: o.signal });
-      return this.films();
+      const r = await this.renderer(this.dir, { fps: o.fps ?? 30, workers: o.workers ?? 4, onLine: o.onLine, signal: o.signal });
+      return { ...this.films(), ...(r && Array.isArray(r.segments) ? { segments: r.segments } : {}),
+        ...(r && typeof r.backend === 'string' ? { backend: r.backend } : {}), ...(r && typeof r.fallback === 'string' ? { fallback: r.fallback } : {}) };
     }
     return new Promise((resolve, reject) => {
       const [cmd, argv] = engineCmd(this.dir, [path.join(ENGINE_DIR, 'tools/render.mjs'), '--fps', String(o.fps ?? 30), '--workers', String(o.workers ?? 4)]);

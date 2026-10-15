@@ -368,3 +368,24 @@ test('narration never writes outside the project: a page id that is a path is re
     assert.equal(fs.existsSync(target), false);
   } finally { fs.rmSync(base, { recursive: true, force: true }); }
 });
+
+test('an export through a renderer hands on the final plan\'s segment names, its backend and why not the GPU', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'frametell-segs-'));
+  try {
+    const renderer = async (d: string) => {
+      fs.mkdirSync(path.join(d, 'out'), { recursive: true });
+      for (const f of ['film-with-subtitles.mp4', 'film-no-subtitles.mp4']) fs.writeFileSync(path.join(d, 'out', f), 'x');
+      return { segments: ['seg-aa.mp4', 'seg-bb.mp4'], backend: 'render boxes', fallback: 'no gpu' };
+    };
+    const out = await new Project(dir, renderer).render();
+    assert.deepEqual(out.segments, ['seg-aa.mp4', 'seg-bb.mp4']);
+    // where it was drawn and why not on the GPU flow from the renderer to the result (the Director puts them on `done`)
+    assert.equal(out.backend, 'render boxes');
+    assert.equal(out.fallback, 'no gpu');
+    // a renderer that says nothing: no list, as before
+    const quiet = await new Project(dir, async () => {}).render();
+    assert.equal(quiet.segments, undefined);
+    assert.equal(quiet.backend, undefined);
+    assert.equal(quiet.fallback, undefined);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});

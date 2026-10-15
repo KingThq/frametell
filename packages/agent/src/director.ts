@@ -645,7 +645,8 @@ export class Director {
     this.state.video = out.withSubs; this.state.exported = true; this.save();
     const saved = this.saveCopies(out);
     this.emit({ type: 'stage', stage: 'render', status: 'done' });
-    this.emit({ type: 'done', video: out.withSubs, videoNoSubs: out.noSubs, duration: g.duration, saved });
+    this.emit({ type: 'done', video: out.withSubs, videoNoSubs: out.noSubs, duration: g.duration, saved,
+      ...(out.segments ? { segments: out.segments } : {}), ...(out.backend ? { backend: out.backend } : {}), ...(out.fallback ? { fallback: out.fallback } : {}) });
     return out;
   }
 

@@ -62,6 +62,9 @@ export type StudioEvent =
   /** the film is drawn and checked: it plays in the live preview. An mp4 is made only on export (then `done`) */
   | { type: 'ready'; duration: number }
   /** the film was exported to mp4 */
-  | { type: 'done'; video: string; videoNoSubs: string; duration: number; /** the copies in the user's export folder */ saved?: { withSubs: string; noSubs: string } };
+  | { type: 'done'; video: string; videoNoSubs: string; duration: number; /** the copies in the user's export folder */ saved?: { withSubs: string; noSubs: string };
+      /** the final plan's segment file names (no `.subs`), when a renderer named them: a hosted export is charged by these.
+       *  backend / fallback: where it was drawn ('gpu' | 'render boxes') and why not on the GPU, when the renderer said */
+      segments?: string[]; backend?: string; fallback?: string };
 
 export type { LintIssue };
