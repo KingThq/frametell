@@ -1,7 +1,7 @@
 import type zh from '../zh/run';
 
 const en: typeof zh = {
-  stage: { storyboard: 'Storyboard', script: 'Narration', narrate: 'Voiceover', pages: 'Pictures', review: 'Final check', render: 'Render' },
+  stage: { research: 'Research', storyboard: 'Storyboard', script: 'Narration', narrate: 'Voiceover', pages: 'Pictures', review: 'Final check', render: 'Render' },
   page: 'Page {n}',
   wholeFilm: 'Whole film',
   issue: '{where}: {msg}',
@@ -53,6 +53,12 @@ const en: typeof zh = {
     readTimeline: { step: 'Looked at the timeline', start: 'Looking at the timeline', doing: 'Looking at the timeline' },
     findFiles: { step: 'Searched the files', start: 'Searching the files', doing: 'Searching the files' },
     runCommand: { step: 'Ran a command', start: 'Running a command', doing: 'Running a command' },
+    webSearch: { step: 'Searched “{q}”', start: 'Searching “{q}”', doing: 'Searching “{q}”' },
+    readUrl: { step: 'Read {site}', start: 'Reading {site}', doing: 'Reading {site}' },
+    listSource: { step: 'Looked through {path}', start: 'Looking through {path}', doing: 'Looking through {path}' },
+    readSource: { step: 'Read {path}', start: 'Reading {path}', doing: 'Reading {path}' },
+    grepSource: { step: 'Looked for “{q}”', start: 'Looking for “{q}”', doing: 'Looking for “{q}”' },
+    finishResearch: { step: 'Wrote the research brief', start: 'Writing the research brief', doing: 'Writing the research brief' },
   },
 };
 

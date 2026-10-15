@@ -1,9 +1,9 @@
 // Types shared by the core and every client (the panel in a browser, the Electron renderer). Type-only: importing it
 // never pulls Node code into a client bundle.
-import type { StudioEvent, Storyboard } from '@frametell/agent';
+import type { SearchProviderId, StudioEvent, Storyboard } from '@frametell/agent';
 import type { CustomProviderConfig, ModelInfo, ProviderSpec } from '@frametell/models';
 
-export type { StudioEvent, Storyboard, ModelInfo, ProviderSpec, CustomProviderConfig };
+export type { StudioEvent, Storyboard, ModelInfo, ProviderSpec, CustomProviderConfig, SearchProviderId };
 export type { Timeline, PageTiming, UserRef, Look, PageIssue } from '@frametell/agent';
 import type { Look } from '@frametell/agent';
 export type RuntimeId = 'pi' | 'claude-agent-sdk' | 'codex';
@@ -59,6 +59,9 @@ export interface ProjectMeta {
   /** this film's own colours and fonts over its style's (script.js META.look) */
   look?: Look;
   materials: string[];
+  /** search the web before the storyboard: absent, only when there is no material (links and folders named in the
+   *  request are read either way) */
+  research?: boolean;
 }
 /** `stale`: the exported mp4 is older than the film (a revision changed it since); the preview shows the film as it is */
 export interface ProjectSummary extends ProjectMeta { status: RunStatus; stage?: string; video?: string; stale?: boolean }
@@ -84,6 +87,8 @@ export interface NewProjectInput {
   styleNotes?: string;
   /** this film's own colours and fonts over its style's (script.js META.look) */
   look?: Look;
+  /** see ProjectMeta.research */
+  research?: boolean;
 }
 
 /** settings as clients see them: keys are masked hints, never the secrets */
@@ -97,6 +102,8 @@ export interface PublicSettings {
   /** the proxy, password masked; '' when none */
   proxy: string;
   tts: { volcengine: string; elevenlabs: string };
+  /** the search engine in use ('' when none has a key) and each engine's keys, masked */
+  search: { provider: SearchProviderId | '' } & Record<SearchProviderId, string>;
   /** voices the user added by id (「我的音色」) */
   myVoices: VoiceChoice[];
   locale: LocalePref;
@@ -104,7 +111,7 @@ export interface PublicSettings {
   preferences: string;
   /** the folder exports are also copied into; '' when only the project's own out/ */
   exportDir: string;
-  defaults: { model?: string; pageModel?: string; reviewModel?: string; runtime: RuntimeId; style: string; durationSec: number; voice?: VoiceChoice; subtitles: boolean; concurrency: number };
+  defaults: { model?: string; pageModel?: string; reviewModel?: string; researchModel?: string; runtime: RuntimeId; style: string; durationSec: number; voice?: VoiceChoice; subtitles: boolean; concurrency: number };
 }
 export interface SettingsPatch {
   keys?: Record<string, string>;
@@ -117,6 +124,8 @@ export interface SettingsPatch {
   /** '' removes the proxy */
   proxy?: string;
   tts?: { volcengine?: string; elevenlabs?: string };
+  /** the search engine ('' to pick the first with a key) and keys ('' removes one; several comma-separated) */
+  search?: Partial<{ provider: SearchProviderId | '' } & Record<SearchProviderId, string>>;
   /** 「我的音色」 renamed or with some removed (the whole list); a voice is added with addVoice, which checks it */
   myVoices?: VoiceChoice[];
   locale?: LocalePref;

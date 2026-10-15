@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronRight, CircleDashed, Clapperboard, Download, Loader2, Pause, Play, TriangleAlert } from 'lucide-react';
 import { client, downloadUrl, hosted, type ProjectView } from '../lib/client';
-import { clock, film, finished, relPath, STAGE_NAME, STAGES, type FeedItem, type PageView, type RunView, type Stage, type Storyboard, isWorking } from '../lib/run';
+import { clock, film, finished, relPath, shownStages, STAGE_NAME, STAGES, type FeedItem, type PageView, type RunView, type Stage, type Storyboard, isWorking } from '../lib/run';
 import { pageName, stepText, summarizeTools } from '../lib/describe';
 import { useNow } from '../lib/hooks';
 import { Crest } from '../components/Logo';
@@ -169,8 +169,7 @@ function Pages({ run, onSelect, onPlay, selected }: { run: RunView; onSelect: (i
         // a page being drawn or checked has nothing steady to show yet: it opens once it is done
         const busy = p?.status === 'drawing' || p?.status === 'checking';
         // a drawn page plays where it is shown, on a double click (one click only opens it). The hint takes the status's
-        // place in the row once the pointer has rested there (never while it merely passes by): no layer over the rows
-        // either side, nothing that moves
+        // place in the row as soon as the pointer is on it: no layer over the rows either side, nothing that moves
         const playable = p?.status === 'ok' || p?.status === 'flagged';
         return (
           <li key={id}>
@@ -181,8 +180,8 @@ function Pages({ run, onSelect, onPlay, selected }: { run: RunView; onSelect: (i
               <span className="min-w-0 flex-1 truncate text-[13px]">{section}</span>
               {playable ? (
                 <span className="relative grid shrink-0 justify-items-end text-[12px]">
-                  <span className={`col-start-1 row-start-1 transition-opacity duration-150 group-hover/page:opacity-0 group-hover/page:delay-500 ${st.tone}`}>{st.text(p)}</span>
-                  <span className="col-start-1 row-start-1 flex items-center gap-1 text-accent-ink opacity-0 transition-opacity duration-150 group-hover/page:opacity-100 group-hover/page:delay-500" aria-hidden>
+                  <span className={`col-start-1 row-start-1 transition-opacity duration-100 group-hover/page:opacity-0 ${st.tone}`}>{st.text(p)}</span>
+                  <span className="col-start-1 row-start-1 flex items-center gap-1 text-accent-ink opacity-0 transition-opacity duration-100 group-hover/page:opacity-100" aria-hidden>
                     <Play size={10} className="fill-current" />{t('conversation.page.playHint')}
                   </span>
                 </span>
@@ -366,7 +365,7 @@ function Chapter({ b, run, project, onSelectPage, onPlayPage, selected }: { b: E
   useT();
   const live = run.stages[b.stage];
   const st = b.latest ? live : { ...live, status: 'done' as const, startedAt: undefined, endedAt: undefined };
-  const n = STAGES.indexOf(b.stage) + 1;
+  const n = shownStages(run).indexOf(b.stage) + 1;
   const now = useNow(st.status === 'running');
   const took = st.startedAt ? clock((st.endedAt ?? now) - st.startedAt) : undefined;
   const statusText = st.status === 'running' ? `${stageDoing(b.stage)} · ${took}` : st.status === 'done' ? [took, humanDetail(b.stage, st.detail, run.storyboard)].filter(Boolean).join(' · ') : st.status === 'skipped' ? t('conversation.chapter.skipped') : st.status === 'stopped' ? t('conversation.chapter.stopped') : st.status === 'failed' ? t('conversation.chapter.failed') : '';
@@ -399,7 +398,7 @@ function Chapter({ b, run, project, onSelectPage, onPlayPage, selected }: { b: E
   );
 }
 
-const ESTIMATE: Record<Stage, (pages: number) => number> = { storyboard: () => 100, script: () => 80, narrate: () => 20, pages: (n) => Math.ceil(Math.max(n, 1) / 10) * 240, review: () => 60, render: () => 120 };
+const ESTIMATE: Record<Stage, (pages: number) => number> = { research: () => 300, storyboard: () => 100, script: () => 80, narrate: () => 20, pages: (n) => Math.ceil(Math.max(n, 1) / 10) * 240, review: () => 60, render: () => 120 };
 
 /** the line above the composer: what is happening now, how long it has taken, about how long is left */
 function NowBar({ run, project }: { run: RunView; project: ProjectView }) {

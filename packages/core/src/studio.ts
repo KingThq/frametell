@@ -44,6 +44,11 @@ export interface StudioOptions {
   renderer?: Renderer;
   /** the whole-film check after the pages: 'full' (default) or only for real defects, briefly ('defects'); see DirectorOptions */
   review?: 'full' | 'defects';
+  /**
+   * a folder or file on this machine named in a request may be read by the research (default true); a hosted service
+   * turns it off, so nothing on its servers is ever read
+   */
+  localFiles?: boolean;
 }
 
 export class Studio {
@@ -54,7 +59,7 @@ export class Studio {
   constructor(o: StudioOptions = {}) {
     this.dataDir = o.dataDir ?? DATA_DIR;
     this.config = o.config ?? configFile(this.dataDir);
-    this.store = new Projects(path.join(this.dataDir, 'projects'), this.config, o.renderer, o.review);
+    this.store = new Projects(path.join(this.dataDir, 'projects'), this.config, o.renderer, o.review, o.localFiles ?? true);
     applyProxy(this.config.load().proxy);
     // every project reaches the engine through links; point them at this install (it may have moved, or been renamed)
     try { for (const id of fs.readdirSync(this.store.root)) { try { linkProject(this.store.dir(id)); } catch {} } } catch {}
@@ -165,6 +170,10 @@ export class Studio {
     // without materials, the sentence the user wrote is the topic; it also names the project
     const topic = input.topic || (files.length ? undefined : said);
     const fromText = (t?: string) => {
+      // a link is not a title: the repository or page it names is
+      const link = /https?:\/\/\S+/.exec(t ?? '')?.[0];
+      t = t?.replace(/https?:\/\/\S+/g, ' ').replace(/\s+/g, ' ').trim();
+      if (!t || /^(讲讲|讲一讲|介绍一下|介绍|聊聊|说说)?(这个|这篇|这个项目|这个仓库)?[。.!！]?$/.test(t)) t = link?.replace(/[/?#]+$/, '').split(/[/?#]/).filter(Boolean).pop() || t;
       const s = t?.replace(/^(讲讲|讲一讲|介绍一下|介绍|聊聊|说说|帮我做一条|做一条|(?:please )?(?:explain|tell me about|talk about|make a video about|a video about)\s+)/i, '').trim();
       if (!s) return undefined;
       if (/[㐀-鿿]/.test(s)) return s.replace(/[。！？!?，,].*$/, '').trim().slice(0, 24) || undefined;
@@ -180,6 +189,7 @@ export class Studio {
       runtime: input.runtime || d.runtime, voice: input.voice === null ? undefined : input.voice ?? d.voice, subtitles: input.subtitles ?? d.subtitles,
       lang: input.lang ?? resolveLocale(cfg.locale), topic, notes: topic ? undefined : input.notes,
       styleNotes: input.styleNotes?.trim().slice(0, 4000) || undefined, look: cleanLook(input.look),
+      ...(input.research !== undefined ? { research: input.research } : {}),
     }, files.map((f) => ({ name: f.name, data: Buffer.from(f.data) })));
     void this.store.runner(meta.id).start();
     return meta;

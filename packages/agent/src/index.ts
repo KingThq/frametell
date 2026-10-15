@@ -6,3 +6,6 @@ export type { StudioEvent, Stage, PageStatus, PageIssue, UserRef } from './event
 export type { AgentRuntime, AgentSession, RuntimeEvent, TokenUsage, TurnResult } from './runtime/types.js';
 export { piRuntime } from './runtime/pi.js';
 // parked runtimes (Claude Agent SDK, Codex): not loaded with the package; import '@frametell/agent/runtime/claude' or '/codex'
+export { findSources, hasSources, type Sources } from './research/sources.js';
+export { createWeb, searchProvider, SEARCH_PROVIDERS, type SearchProviderId, type SearchSettings, type Web } from './research/web.js';
+export { RESEARCH_LIMITS, type ResearchLimits } from './research/research.js';
