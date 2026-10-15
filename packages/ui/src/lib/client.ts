@@ -33,8 +33,9 @@ export interface StudioClient {
   attach(id: string, file: File): Promise<UserRef>;
   /** files the user keeps to hand (a hosted service's brand kits), offered in the composer's attach menu */
   library?(): Promise<LibraryGroup[]>;
-  /** put one of them into the project, as attach does with an uploaded file; returns the reference to send with it */
-  attachFrom?(projectId: string, item: { brand: string; asset: string }): Promise<UserRef>;
+  /** put one of them into the project, as attach does with an uploaded file; returns the reference to send with it.
+   *  Without `asset`, the whole brand: its brief (assets/brand/brand.md) and every file, the reference naming the brief */
+  attachFrom?(projectId: string, item: { brand: string; asset?: string }): Promise<UserRef>;
   /** pages with their narration lines and times; null until the script exists */
   timeline(id: string): Promise<Timeline | null>;
   /** full-resolution frames of the film at `times`, as project-relative paths (from the mp4 when current, else live) */

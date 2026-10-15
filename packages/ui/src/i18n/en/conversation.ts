@@ -106,7 +106,7 @@ const en: typeof zh = {
       group: 'Brand assets of {name}',
       apply: 'Apply the whole brand',
       applyTitle: 'Ask the director to bring {name}’s tone, colours and logo to this film',
-      applyText: 'Apply the brand “{name}” to this film: its colours, its tone of voice and its logo (attached). Redraw only the pages it changes.',
+      applyText: 'Apply the brand “{name}” to this film: its colours, its tone of voice and its logo (its brief and files are attached). Redraw only the pages it changes.',
       loading: 'Loading brand assets…',
       failed: 'Couldn’t load brand assets: {error}',
       empty: 'No brand assets yet',

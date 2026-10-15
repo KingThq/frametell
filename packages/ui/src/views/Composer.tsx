@@ -16,7 +16,14 @@ const ACCEPT = '.png,.jpg,.jpeg,.webp,.gif,.md,.markdown,.txt,.pdf,.docx,.pptx,.
 const isImage = (name: string) => /\.(png|jpe?g|webp|gif)$/i.test(name);
 
 /** a chip in the tray, waiting for its upload, or failed */
-type Item = { key: string; ref?: Ref; name?: string; preview?: string; error?: string };
+type Item = { key: string; ref?: Ref; name?: string; preview?: string; error?: string; ground?: Ground };
+
+/** a logo or an icon is shown whole, on a ground of its own that doesn't follow the theme: a dark logo on a dark tile
+ *  (or a light one on white) disappears. The light ground for most, the dark one for a logo made for dark grounds */
+type Ground = 'light' | 'dark';
+const GROUND: Record<Ground, string> = { light: '#F4F1EA', dark: '#1A1714' };
+const groundOf = (kind: string): Ground | undefined => (kind === 'logo-dark' ? 'dark' : kind === 'image' ? undefined : 'light');
+const isSvg = (src: string) => /^data:image\/svg|\.svg(?:[?#]|$)/i.test(src);
 
 // While the film is being made, a message waits above the box instead of going in: a note sent mid-run was read only by
 // the sessions spoken to after it, and while the pages were drawing that was often none, so it was lost. The queue goes
@@ -64,8 +71,8 @@ function QueuedRow({ q, project, onSave, onRemove }: { q: Queued; project: Proje
 }
 
 /** one reference as a chip: a picture when it has one, else its kind; the label tells which */
-export function RefChip({ r, project, onRemove, onOpen, pending, error, name, preview }: {
-  r?: Ref; project: ProjectView; onRemove?: () => void; onOpen?: () => void; pending?: boolean; error?: string; name?: string; preview?: string;
+export function RefChip({ r, project, onRemove, onOpen, pending, error, name, preview, ground }: {
+  r?: Ref; project: ProjectView; onRemove?: () => void; onOpen?: () => void; pending?: boolean; error?: string; name?: string; preview?: string; ground?: Ground;
 }) {
   const { t } = useT();
   const img = preview ?? (r?.thumb ? client.fileUrl(project, r.thumb) : r?.kind === 'frame' ? client.fileUrl(project, r.path) : r?.kind === 'file' && r.image ? client.fileUrl(project, r.path) : undefined);
@@ -73,11 +80,12 @@ export function RefChip({ r, project, onRemove, onOpen, pending, error, name, pr
   const label = r ? (r.kind === 'line' ? `${r.label}` : r.label) : name ?? '';
   const full = error ? t('conversation.composer.chipError', { name: name ?? '', error }) : r?.kind === 'line' ? t('conversation.composer.chipLine', { label: r.label, text: r.text }) : label;
   const Body = onOpen ? 'button' : 'span';
+  const whole = ground ?? (img && isSvg(img) ? 'light' : undefined);
   return (
     <span className={`group/chip inline-flex h-7 max-w-full animate-pop items-center gap-1.5 rounded-lg border pl-1 text-[12px] ${onRemove ? 'pr-0.5' : 'pr-2'} ${error ? 'border-seal/40 bg-seal/[0.06] text-seal' : 'border-line bg-paper-2 text-ink-2'}`} title={full}>
       <Body type={onOpen ? 'button' : undefined} onClick={onOpen} className="inline-flex min-w-0 items-center gap-1.5 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-accent">
         {img && !error
-          ? <span className="relative h-5 w-[30px] shrink-0 overflow-hidden rounded-[4px] bg-ink/10"><img src={img} alt="" className="h-full w-full object-cover" />{pending && <span className="absolute inset-0 flex items-center justify-center bg-black/40"><Loader2 size={11} className="animate-spin text-white" aria-hidden /></span>}</span>
+          ? <span className="relative h-5 w-[30px] shrink-0 overflow-hidden rounded-[4px] bg-ink/10" style={whole ? { background: GROUND[whole] } : undefined}><img src={img} alt="" className={`h-full w-full ${whole ? 'object-contain p-px' : 'object-cover'}`} />{pending && <span className="absolute inset-0 flex items-center justify-center bg-black/40"><Loader2 size={11} className="animate-spin text-white" aria-hidden /></span>}</span>
           : <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[4px] bg-ink/[0.06]">{pending ? <Loader2 size={11} className="animate-spin" aria-hidden /> : <Icon size={11} aria-hidden />}</span>}
         <span className="min-w-0 max-w-[180px] truncate">{label}</span>
       </Body>
@@ -140,7 +148,8 @@ function AttachMenu({ onUpload, onPick, onApply }: { onUpload: () => void; onPic
                         {g.items.map((x) => (
                           <li key={x.id}>
                             <button type="button" role="menuitem" onClick={() => { close(); onPick({ ...x, brand: g.brand }); }} title={x.name} aria-label={t('conversation.composer.add', { label: x.name })}
-                              className={`flex aspect-square w-full items-center justify-center overflow-hidden rounded-lg border border-line p-1 outline-none transition-colors hover:border-accent/60 focus-visible:ring-2 focus-visible:ring-accent ${x.kind === 'logo-dark' ? 'bg-ink' : 'bg-paper-2'}`}>
+                              style={{ background: GROUND[groundOf(x.kind) ?? 'light'] }}
+                              className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-lg border border-line p-1 outline-none transition-colors hover:border-accent/60 focus-visible:ring-2 focus-visible:ring-accent">
                               <img src={x.thumb} alt="" loading="lazy" decoding="async" className="max-h-full max-w-full object-contain" />
                             </button>
                           </li>
@@ -205,21 +214,23 @@ export function Composer({ run, project, viewing, openSettings }: { run: RunView
     focus();
   };
 
-  /** a brand's file, put into the project by the host; it waits in the tray like an upload */
-  const fromLibrary = (x: LibraryItem) => {
+  /** something the host puts into the project (a brand's file, or a whole brand); it waits in the tray like an upload */
+  const fromHost = (item: { brand: string; asset?: string }, name: string, preview?: string, ground?: Ground) => {
     if (items.length >= MAX_REFS) { setNote(t('conversation.composer.maxRefs', { n: MAX_REFS })); return; }
-    const key = `lib:${x.brand.id}:${x.id}:${Math.random().toString(36).slice(2, 7)}`;
-    setItems((cur) => [...cur, { key, name: x.name, preview: x.thumb }]);
-    client.attachFrom!(project.id, { brand: x.brand.id, asset: x.id })
-      .then((r) => setItems((cur) => cur.map((y) => (y.key === key ? { key: refKey(r), ref: r, preview: x.thumb } : y))))
+    const key = `lib:${item.brand}:${item.asset ?? ''}:${Math.random().toString(36).slice(2, 7)}`;
+    setItems((cur) => [...cur, { key, name, preview, ground }]);
+    client.attachFrom!(project.id, item)
+      .then((r) => setItems((cur) => cur.map((y) => (y.key === key ? { key: refKey(r), ref: r, preview, ground } : y))))
       .catch((e: Error) => setItems((cur) => cur.map((y) => (y.key === key ? { ...y, error: e.message } : y))));
     focus();
   };
-  /** the whole brand: the request in the box and the brand's logo in the tray, to read over and send */
+  const fromLibrary = (x: LibraryItem) => fromHost({ brand: x.brand.id, asset: x.id }, x.name, x.thumb, groundOf(x.kind));
+  /** the whole brand: the request in the box, and in the tray the brand itself (its brief and every file, which the
+   *  host puts into the project), shown by its logo, to read over and send */
   const applyBrand = (g: LibraryGroup) => {
     setText((cur) => (cur.trim() ? `${cur.trimEnd()}\n\n` : '') + t('conversation.composer.library.applyText', { name: g.brand.name }));
     const logo = g.items.find((x) => x.kind === 'logo') ?? g.items.find((x) => x.kind === 'mark');
-    if (logo) fromLibrary({ ...logo, brand: g.brand }); else focus();
+    fromHost({ brand: g.brand.id }, g.brand.name, logo?.thumb, logo ? groundOf(logo.kind) : undefined);
   };
 
   const refs = items.filter((x) => x.ref && !x.error).map((x) => x.ref!);
@@ -315,7 +326,7 @@ export function Composer({ run, project, viewing, openSettings }: { run: RunView
         {items.length > 0 && (
           <div className="flex flex-wrap gap-1.5 border-b border-line/70 px-2.5 pb-2 pt-2.5" aria-label={t('conversation.composer.tray')}>
             {items.map((x) => (
-              <RefChip key={x.key} r={x.ref} project={project} name={x.name} preview={x.preview} pending={!x.ref && !x.error} error={x.error}
+              <RefChip key={x.key} r={x.ref} project={project} name={x.name} preview={x.preview} ground={x.ground} pending={!x.ref && !x.error} error={x.error}
                 onOpen={(x.preview || x.ref?.kind === 'frame' || (x.ref?.kind === 'file' && x.ref.image)) ? () => open(x) : undefined}
                 onRemove={() => setItems((cur) => cur.filter((y) => y.key !== x.key))} />
             ))}
