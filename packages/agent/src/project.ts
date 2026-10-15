@@ -7,7 +7,7 @@ import { ENGINE_DIR, linkProject } from '@frametell/engine/tools/project.mjs';
 import { lintStoryboard, type StoryboardIssue } from '@frametell/engine/tools/storyboard-lint.mjs';
 import type { FilmGateResult } from '@frametell/engine/tools/film-gate.mjs';
 import type { ChildCmd, ProjectFiles } from '@frametell/voice';
-import { FFMPEG, probe } from '@frametell/engine/tools/bins.mjs';
+import { FFMPEG } from '@frametell/engine/tools/bins.mjs';
 import { confine } from './tools/sandbox.js';
 import { gitAsync, gitSync, stageAll, stageAllSync } from './git.js';
 import { openProjectFile, readIn, writeIn, type OpenFile } from './projectfs.js';
@@ -288,8 +288,16 @@ export class Project {
     return gateResult(x);
   }
 
-  /** a media file's length in seconds (ffmpeg's reading of its header: quick) */
-  duration(file: string) { return probe(file).duration; }
+  /** a film's length in seconds: ffmpeg's reading of its header (quick), in a confined child like every other ffmpeg
+   *  over what the agent made, never in this process */
+  async duration(file: string): Promise<number> {
+    const [cmd, argv] = confinedCmd(this.dir, FFMPEG, ['-hide_banner', '-protocol_whitelist', 'file,pipe', '-i', file]);
+    const err = await new Promise<string>((ok) => execFile(cmd, argv, { cwd: this.dir, encoding: 'utf8', timeout: 60_000, maxBuffer: 1 << 20, env: nodeEnv(), signal: this.signal },
+      (_e, _o, stderr) => ok(String(stderr || ''))));
+    const d = /Duration: (\d+):(\d+):([\d.]+)/.exec(err);
+    if (!d) throw new Error(`cannot read ${path.basename(file)}: ${err.trim().split('\n').pop() ?? ''}`.slice(0, 1000));
+    return +d[1] * 3600 + +d[2] * 60 + +d[3];
+  }
 
   // ── history: every change the agent makes is a commit, so any step can be undone (git revert) ──
   private git(args: string[]) { return gitSync(this.dir, args, childEnv()); }
