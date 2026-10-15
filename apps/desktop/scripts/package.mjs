@@ -19,7 +19,8 @@ const ROOT = path.resolve(DESKTOP, '../..');
 const RELEASE = path.join(DESKTOP, 'release');
 const APP = path.join(RELEASE, 'app');
 const pkg = JSON.parse(fs.readFileSync(path.join(DESKTOP, 'package.json'), 'utf8'));
-const run = (cmd, args, cwd = ROOT) => execFileSync(cmd, args, { cwd, stdio: 'inherit', env: { ...process.env, ELECTRON_MIRROR: process.env.ELECTRON_MIRROR || 'https://npmmirror.com/mirrors/electron/' } });
+// Electron downloads from GitHub; set ELECTRON_MIRROR (e.g. https://npmmirror.com/mirrors/electron/ in China) for a mirror
+const run = (cmd, args, cwd = ROOT) => execFileSync(cmd, args, { cwd, stdio: 'inherit' });
 
 run('pnpm', ['-r', 'build']);
 fs.rmSync(RELEASE, { recursive: true, force: true });
