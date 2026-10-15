@@ -6,7 +6,7 @@ import { execFile, spawn } from 'node:child_process';
 import { ENGINE_DIR, linkProject } from '@frametell/engine/tools/project.mjs';
 import { lintStoryboard, type StoryboardIssue } from '@frametell/engine/tools/storyboard-lint.mjs';
 import type { FilmGateResult } from '@frametell/engine/tools/film-gate.mjs';
-import type { ChildCmd } from '@frametell/voice';
+import type { ChildCmd, ProjectFiles } from '@frametell/voice';
 import { FFMPEG } from '@frametell/engine/tools/bins.mjs';
 import { confine } from './tools/sandbox.js';
 import { gitAsync, gitSync, stageAll, stageAllSync } from './git.js';
@@ -55,17 +55,23 @@ const run = (cmd: string, args: string[], cwd?: string) => new Promise<void>((ok
  * only opens local files; the picture comes back on a pipe (the sandbox's /tmp is its own) and is installed with writeIn
  * (never through a link planted at `out`).
  */
-async function cutFrame(dir: string, from: OpenFile, before: string[], after: string[], out: string) {
+export async function cutFrame(dir: string, from: OpenFile, before: string[], after: string[], out: string, max = 16 << 20) {
   const input = process.platform === 'win32' ? from.path : '/dev/fd/3';   // Windows has no /dev/fd: the checked real path
-  const [cmd, argv] = confinedCmd(dir, FFMPEG, ['-loglevel', 'error', ...before, '-protocol_whitelist', 'file,pipe', '-i', input, ...after, '-f', 'image2pipe', '-c:v', 'mjpeg', 'pipe:1']);
+  // one frame, whatever the input holds (a "snapshot" can be a film), and no more than `max` bytes of answer
+  const [cmd, argv] = confinedCmd(dir, FFMPEG, ['-loglevel', 'error', ...before, '-protocol_whitelist', 'file,pipe', '-i', input, ...after, '-frames:v', '1', '-f', 'image2pipe', '-c:v', 'mjpeg', 'pipe:1']);
   const jpg = await new Promise<Buffer>((ok, fail) => {
     const child = spawn(cmd, argv, { cwd: dir, stdio: ['ignore', 'pipe', 'pipe', from.fd], env: nodeEnv(), timeout: 120_000 });
     const parts: Buffer[] = [];
-    let err = '';
-    child.stdout!.on('data', (d: Buffer) => parts.push(d));
-    child.stderr!.on('data', (d: Buffer) => { err += d.toString(); });
+    let err = '', size = 0, over = false;
+    child.stdout!.on('data', (d: Buffer) => {
+      if (over) return;
+      if ((size += d.length) > max) { over = true; parts.length = 0; child.kill('SIGKILL'); return; }
+      parts.push(d);
+    });
+    child.stderr!.on('data', (d: Buffer) => { if (err.length < 4000) err += d.toString(); });
     child.on('error', fail);
-    child.on('close', (code) => (code === 0 && parts.length ? ok(Buffer.concat(parts)) : fail(new Error((err || `ffmpeg exited ${code}`).slice(0, 1000)))));
+    child.on('close', (code) => (over ? fail(new Error(`ffmpeg: the frame came back as more than ${max} bytes`))
+      : code === 0 && parts.length ? ok(Buffer.concat(parts)) : fail(new Error((err || `ffmpeg exited ${code}`).slice(0, 1000)))));
   });
   writeIn(dir, out, jpg, { record: true });
 }
@@ -78,6 +84,22 @@ export const engineCmd = (dir: string, args: string[]): [string, string[]] => co
 /** confinedCmd for a package that cannot import this one (voice's narrate), with the environment a child gets */
 export const childCmd: ChildCmd = (dir, cmd, argv) => { const [c, a] = confinedCmd(dir, cmd, argv); return { cmd: c, argv: a, env: nodeEnv() }; };
 
+/** a project's files for narrate (@frametell/voice): written and read only through projectfs, never through a link */
+export const projectFiles: ProjectFiles = { write: (d, r, x) => writeIn(d, r, x), read: (d, r) => readIn(d, r) };
+
+const isObj = (x: unknown): x is Record<string, unknown> => !!x && typeof x === 'object' && !Array.isArray(x);
+const num = (x: unknown): x is number => typeof x === 'number' && Number.isFinite(x);
+const optStr = (x: unknown) => x === undefined || typeof x === 'string';
+/** what film-gate.mjs printed, if it has the shape of its answer (FilmGateResult); else it throws. The gate decoded a
+ *  film the agent's pages drew, in a child: its answer is checked before the director reads it */
+export function gateResult(x: unknown): FilmGateResult {
+  const ok = isObj(x) && typeof x.file === 'string' && num(x.duration) && typeof x.red === 'boolean'
+    && Array.isArray(x.gates) && x.gates.every((g) => isObj(g) && typeof g.key === 'string' && typeof g.name === 'string' && (g.level === 'red' || g.level === 'green')
+      && Array.isArray(g.value) && g.value.every((v) => isObj(v) && num(v.at) && num(v.seconds)))
+    && Array.isArray(x.report) && x.report.every((r) => isObj(r) && typeof r.key === 'string' && typeof r.name === 'string' && num(r.value) && optStr(r.unit) && optStr(r.note) && optStr(r.level));
+  if (!ok) throw new Error('film gate: its answer has the wrong shape');
+  return x as unknown as FilmGateResult;
+}
 /** run an engine tool and collect its output. Never synchronously: lint and snapshots drive Chrome for seconds, and in the
  *  desktop app this process is also the one answering the panel (ten pages checking themselves froze every click).
  *  A stop kills it at once and rejects with an AbortError: Pause used to wait for every screenshot in flight to end on
@@ -148,7 +170,7 @@ export class Project {
         const out: string[] = [];
         for (const t of ts) {
           const rel = `out/frames/${Math.round(t * 10)}.jpg`, abs = path.join(this.dir, rel);
-          if (!fs.existsSync(abs) || fs.statSync(abs).mtimeMs < vt) await cutFrame(this.dir, film, ['-ss', t.toFixed(2)], ['-frames:v', '1', '-q:v', '2'], rel);
+          if (!fs.existsSync(abs) || fs.statSync(abs).mtimeMs < vt) await cutFrame(this.dir, film, ['-ss', t.toFixed(2)], ['-q:v', '2'], rel);
           out.push(rel);
         }
         return out;
@@ -183,7 +205,7 @@ export class Project {
       for (const p of pages) {
         const rel = `out/thumbs/${p.id}.jpg`, abs = path.join(this.dir, rel);
         try {
-          if (!fs.existsSync(abs) || fs.statSync(abs).mtimeMs < vt) await cutFrame(this.dir, film, ['-ss', Math.max(p.start, p.end - 0.4).toFixed(2)], ['-frames:v', '1', '-vf', 'scale=640:-2', '-q:v', '4'], rel);
+          if (!fs.existsSync(abs) || fs.statSync(abs).mtimeMs < vt) await cutFrame(this.dir, film, ['-ss', Math.max(p.start, p.end - 0.4).toFixed(2)], ['-vf', 'scale=640:-2', '-q:v', '4'], rel);
           out[p.id] = rel;
         } catch { /* a frame that will not cut leaves that page on its check sheet */ }
       }
@@ -257,7 +279,9 @@ export class Project {
   /** the film gate (engine/tools/film-gate.mjs) in a child: it decodes the film, which the agent's pages drew */
   async gate(file: string): Promise<FilmGateResult> {
     const r = await tool(this.dir, 'film-gate.mjs', [file, '--json'], { signal: this.signal });
-    try { return JSON.parse(r.out.split('\n').pop() || ''); } catch { throw new Error(`film gate failed: ${r.err || r.out}`.slice(0, 2000)); }
+    let x: unknown;
+    try { x = JSON.parse(r.out.split('\n').pop() || ''); } catch { throw new Error(`film gate failed: ${r.err || r.out}`.slice(0, 2000)); }
+    return gateResult(x);
   }
 
   // ── history: every change the agent makes is a commit, so any step can be undone (git revert) ──

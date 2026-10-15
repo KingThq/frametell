@@ -12,7 +12,7 @@ function decode(f, rate = 1) {
   const k = f + '@' + rate;
   if (!cache.has(k)) {
     const af = rate === 1 ? [] : ['-af', `asetrate=${Math.round(SR * rate)},aresample=${SR}`];
-    const b = execFileSync(FFMPEG, ['-loglevel', 'error', '-i', f, ...af, '-f', 'f32le', '-ac', '2', '-ar', String(SR), '-'], { maxBuffer: 1 << 30 });
+    const b = execFileSync(FFMPEG, ['-loglevel', 'error', '-protocol_whitelist', 'file,pipe', '-i', f, ...af, '-f', 'f32le', '-ac', '2', '-ar', String(SR), '-'], { maxBuffer: 1 << 30 });
     cache.set(k, new Float32Array(b.buffer.slice(b.byteOffset, b.byteOffset + b.length)));
   }
   return cache.get(k);

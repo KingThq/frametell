@@ -50,3 +50,37 @@ test('ffmpeg reads only local files: a "sound" that is really a playlist of web 
     assert.ok(argv.indexOf('-protocol_whitelist') < argv.indexOf('-i'), 'the whitelist comes before the input it applies to');
   } finally { server.close(); fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+/** a child that prints `answer` whatever it was asked to run: what a script.js that took over its child could print */
+const forged = (answer: unknown) => ((dir: string) => directChild(dir, process.execPath, ['-e', `console.log(${JSON.stringify(JSON.stringify(answer))})`])) as typeof directChild;
+
+test('what the child prints is checked before it is used: page ids that name a path, and fields of the wrong shape, are refused', async () => {
+  const dir = tmp('ft-forged-');
+  const page = { id: 'p01', cues: ['一。', { t: '二。', say: 'two', hold: 0.5, solo: { instruction: 'soft', pitch: 1, rate: 2 } }], instruction: 'calm' };
+  try {
+    // the control: a well-formed answer is taken as it is
+    const ok = await scriptData(dir, forged({ meta: { voice: { speaker: 'v1' } }, pages: [page], duration: 3.5 }));
+    assert.deepEqual(ok.pages, [page]);
+    assert.equal(ok.duration, 3.5);
+    const bad: [string, unknown][] = [
+      ['an id that is a path', { meta: {}, pages: [{ ...page, id: '../../x' }], duration: null }],
+      ['an id with a slash', { meta: {}, pages: [{ ...page, id: 'a/b' }], duration: null }],
+      ['an empty id', { meta: {}, pages: [{ ...page, id: '' }], duration: null }],
+      ['an id too long', { meta: {}, pages: [{ ...page, id: 'a'.repeat(81) }], duration: null }],
+      ['an id that is not a string', { meta: {}, pages: [{ ...page, id: 7 }], duration: null }],
+      ['cues that are not a list', { meta: {}, pages: [{ ...page, cues: 'x' }], duration: null }],
+      ['a cue of the wrong shape', { meta: {}, pages: [{ ...page, cues: [{ t: 5 }] }], duration: null }],
+      ['a cue whose say is not text', { meta: {}, pages: [{ ...page, cues: [{ t: 'a', say: {} }] }], duration: null }],
+      ['a cue whose solo is not an object', { meta: {}, pages: [{ ...page, cues: [{ t: 'a', solo: 'x' }] }], duration: null }],
+      ['an instruction that is not text', { meta: {}, pages: [{ ...page, instruction: 5 }], duration: null }],
+      ['a length that is text', { meta: {}, pages: [page], duration: '3' }],
+      ['meta that is not an object', { meta: [1], pages: [page], duration: null }],
+      ['meta missing', { pages: [page], duration: null }],
+      ['pages that is not a list', { meta: {}, pages: {}, duration: null }],
+    ];
+    for (const [what, answer] of bad) await assert.rejects(scriptData(dir, forged(answer)), /script\.js/, what);
+    // JSON has no Infinity, but 1e999 parses to it
+    const inf = (dir2: string) => directChild(dir2, process.execPath, ['-e', `console.log('{"meta":{},"pages":[],"duration":1e999}')`]);
+    await assert.rejects(scriptData(dir, inf), /script\.js/, 'a length that is not finite');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});

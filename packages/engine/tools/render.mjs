@@ -168,7 +168,7 @@ if (hasSfx && fs.existsSync(nosub)) {
   console.time('audio');
   const SR = 24000, pcm = new Int16Array(Math.ceil((to - from) * SR));
   for (const c of voiced) {
-    const b = execFileSync(FFMPEG, ['-loglevel', 'error', '-i', path.join(process.cwd(), c.audio), '-f', 's16le', '-ac', '1', '-ar', String(SR), '-'], { maxBuffer: 1 << 28 });
+    const b = execFileSync(FFMPEG, ['-loglevel', 'error', '-protocol_whitelist', 'file,pipe', '-i', path.join(process.cwd(), c.audio), '-f', 's16le', '-ac', '1', '-ar', String(SR), '-'], { maxBuffer: 1 << 28 });
     const clip = new Int16Array(b.buffer, b.byteOffset, b.length >> 1), at = Math.round(((c.audioAt ?? c.start) - from) * SR);
     for (let i = 0; i < clip.length; i++) { const j = at + i; if (j >= 0 && j < pcm.length) pcm[j] = Math.max(-32768, Math.min(32767, pcm[j] + clip[i])); }
   }

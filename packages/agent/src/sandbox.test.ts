@@ -7,9 +7,11 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { execFile, execFileSync, spawnSync } from 'node:child_process';
 import { confine } from './tools/sandbox.js';
-import { Project, childCmd, engineCmd, nodeEnv } from './project.js';
+import { Project, childCmd, cutFrame, engineCmd, gateResult, nodeEnv, projectFiles } from './project.js';
+import { openProjectFile } from './projectfs.js';
+import crypto from 'node:crypto';
 import { plantScript } from './testing.js';
-import { scriptData } from '@frametell/voice';
+import { narrate, scriptData, type TtsProvider } from '@frametell/voice';
 import { FFMPEG } from '@frametell/engine/tools/bins.mjs';
 import { fileTools } from './tools/files.js';
 import { ENGINE_DIR, engineModulesDir } from '@frametell/engine/tools/project.mjs';
@@ -217,11 +219,152 @@ test('with no network asked for, frames are cut and the film is checked in the s
 });
 
 test('nothing a host runs evaluates project code or decodes project media in its own process', () => {
-  const src = (rel: string) => fs.readFileSync(new URL(`../../${rel}`, import.meta.url), 'utf8');
-  for (const f of ['agent/src/project.ts', 'agent/src/director.ts', 'voice/src/narrate.ts', 'core/src/runner.ts', 'core/src/studio.ts', 'core/src/refs.ts']) {
-    const s = src(f);
-    assert.doesNotMatch(s, /from ['"](node:)?vm['"]/, `${f} imports vm`);
-    assert.doesNotMatch(s, /\b(spawnSync|execFileSync|spawn|execFile)\(\s*FFMPEG\b/, `${f} starts ffmpeg itself`);
-    assert.doesNotMatch(s, /\b(measure|probe)\(/, `${f} measures media in its own process`);
+  const pkgs = new URL('../../', import.meta.url);
+  // every source file of the packages a host runs (not the tests): a file added later is covered without being listed
+  const files: string[] = [];
+  const walk = (rel: string) => {
+    for (const e of fs.readdirSync(new URL(rel, pkgs), { withFileTypes: true })) {
+      if (e.isDirectory()) walk(`${rel}${e.name}/`);
+      else if (/\.ts$/.test(e.name) && !/\.test\.ts$|\.d\.ts$/.test(e.name)) files.push(`${rel}${e.name}`);
+    }
+  };
+  for (const p of ['agent', 'core', 'voice']) walk(`${p}/src/`);
+  assert.ok(files.length > 20 && files.includes('core/src/materials.ts') && files.includes('agent/src/tools/files.ts'), `the scan found ${files.length} files`);
+  // The exceptions, each by file and rule. Nothing else may match.
+  const allowed: Record<string, string[]> = {
+    // the document parsers: with the network taken away (a hosted host) only materials-child.js reaches them, in a
+    // confined child (prepareMaterials); the desktop app, which keeps its network, parses in its own process
+    'core/src/materials.ts': ['parser'],
+    // `ffmpeg -version` on the bundled binary, to tell the user whether it runs: no project file is opened
+    'core/src/env.ts': ['ffmpeg'],
+  };
+  const rules: [string, RegExp][] = [
+    ['vm', /from\s+['"](node:)?vm['"]|import\(\s*['"](node:)?vm['"]\s*\)|require\(\s*['"](node:)?vm['"]\s*\)/],
+    ['vm', /\brunIn(New)?Context\b|\brunInThisContext\b|\bnew\s+vm\.Script\b/],
+    ['eval', /\bnew\s+Function\s*\(|(^|[^.\w])eval\s*\(/],
+    ['parser', /['"](unpdf|mammoth|jszip)['"]/],
+    ['ffmpeg', /['"]ff(mpeg|probe)-static['"]|\b(spawn|spawnSync|execFile|execFileSync|exec|execSync)\(\s*['"`][^'"`]*ff(mpeg|probe)\b/],
+    ['measure', /\b(measure|probe)\(/],
+  ];
+  // comments say what the code does; only the code is scanned
+  const code = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`\\])\/\/.*$/gm, '$1');
+  const found: string[] = [];
+  for (const f of files) {
+    const s = code(fs.readFileSync(new URL(f, pkgs), 'utf8'));
+    for (const [rule, re] of rules) if (re.test(s) && !allowed[f]?.includes(rule)) found.push(`${f}: ${rule}`);
+    // ffmpeg / ffprobe named in code (not imported) only as what confinedCmd or a narration child (runChild) starts
+    for (const m of s.matchAll(/\bFF(MPEG|PROBE)\b/g)) {
+      const line = s.slice(s.lastIndexOf('\n', m.index) + 1, m.index);
+      if (/^\s*import\b/.test(line)) continue;
+      if (/(confinedCmd\(\s*[\w.]+,\s*|runChild\(\s*[\w.]+,\s*[\w.]+,\s*)$/.test(line)) continue;
+      if (!allowed[f]?.includes('ffmpeg')) found.push(`${f}: ${m[0]} started outside confinedCmd / childCmd: ${line.trim()}${m[0]}`);
+    }
   }
+  assert.deepEqual(found, []);
+});
+
+/** a 2 s test film of 24 frames in `root`/out */
+const testFilm = (root: string) => {
+  fs.mkdirSync(path.join(root, 'out'), { recursive: true });
+  const film = path.join(root, 'out', 'f.mp4');
+  execFileSync(FFMPEG, ['-loglevel', 'error', '-f', 'lavfi', '-i', 'testsrc=size=160x90:rate=12:duration=2', '-pix_fmt', 'yuv420p', film]);
+  return film;
+};
+const jpegStarts = (b: Buffer) => { let n = 0; for (let i = 0; i + 2 < b.length; i++) if (b[i] === 0xff && b[i + 1] === 0xd8 && b[i + 2] === 0xff) n++; return n; };
+
+test('a frame cut is one picture, whatever the input holds, and an answer past the cap is refused', async () => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ft-cutone-')));
+  try {
+    const film = testFilm(root);
+    // a "snapshot" that is really a film: without -frames:v 1 every one of its frames came back, one after another
+    const f = openProjectFile(root, film)!;
+    try { await cutFrame(root, f, [], ['-q:v', '2'], 'out/one.jpg'); } finally { fs.closeSync(f.fd); }
+    assert.equal(jpegStarts(fs.readFileSync(path.join(root, 'out/one.jpg'))), 1);
+    const g = openProjectFile(root, film)!;
+    try { await assert.rejects(cutFrame(root, g, [], ['-q:v', '2'], 'out/big.jpg', 200), /more than 200 bytes/); } finally { fs.closeSync(g.fd); }
+    assert.equal(fs.existsSync(path.join(root, 'out/big.jpg')), false);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('the film gate\'s answer is checked before the director gets it', async () => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ft-gate-')));
+  try {
+    const g = await new Project(root).gate(testFilm(root));
+    assert.ok(Math.abs(g.duration - 2) < 0.2, String(g.duration));
+    assert.deepEqual(gateResult(JSON.parse(JSON.stringify(g))), g);
+    const bad: [string, unknown][] = [
+      ['not an object', [1]],
+      ['no length', { ...g, duration: 'x' }],
+      ['red not a yes or no', { ...g, red: 'no' }],
+      ['gates not a list', { ...g, gates: {} }],
+      ['a gate of the wrong level', { ...g, gates: [{ key: 'blank', name: 'b', level: 'purple', value: [] }] }],
+      ['a gate value of the wrong shape', { ...g, gates: [{ key: 'blank', name: 'b', level: 'red', value: [{ at: 'x', seconds: 1 }] }] }],
+      ['a report line of the wrong shape', { ...g, report: [{ key: 'k', name: 'n', value: '3' }] }],
+      ['a report unit that is not text', { ...g, report: [{ key: 'k', name: 'n', value: 3, unit: 1 }] }],
+    ];
+    for (const [what, x] of bad) assert.throws(() => gateResult(x), /film gate/, what);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+/** a voice that answers with a real one-second mp3, and counts how often it was asked */
+function fakeTts(dir: string) {
+  const mp3 = path.join(dir, 'tone.mp3');
+  execFileSync(FFMPEG, ['-loglevel', 'error', '-f', 'lavfi', '-i', 'anullsrc=r=24000:cl=mono:d=0.2', '-f', 'lavfi', '-i', 'sine=f=440:r=24000:d=0.6', '-f', 'lavfi', '-i', 'anullsrc=r=24000:cl=mono:d=0.2', '-filter_complex', '[0][1][2]concat=n=3:v=0:a=1', mp3]);
+  const tts = { id: 'volcengine' as const, calls: 0, async synth() { tts.calls++; return { audio: fs.readFileSync(mp3), words: [{ word: '一', startTime: 0.2, endTime: 0.8 }] }; } };
+  return tts as TtsProvider & { calls: number };
+}
+
+test('narration writes the takes and voice.js into the project', async () => {
+  const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ft-narrate-')));
+  try {
+    const root = path.join(base, 'project');
+    plantScript(root, path.join(base, 'marker.txt'));
+    const tts = fakeTts(base);
+    const r = await narrate(root, { tts, voice: { speaker: 'v1' }, child: childCmd, files: projectFiles });
+    assert.equal(tts.calls, 1);
+    assert.ok(r.duration > 0.3, String(r.duration));
+    const audio = fs.readdirSync(path.join(root, 'audio'));
+    assert.ok(audio.some((f) => f.endsWith('.mp3')) && audio.some((f) => f.endsWith('-0.wav')), audio.join(' '));
+    const wav = fs.readFileSync(path.join(root, 'audio', audio.find((f) => f.endsWith('-0.wav'))!));
+    assert.equal(wav.subarray(0, 4).toString(), 'RIFF');
+    assert.equal(wav.readUInt32LE(40), wav.length - 44, 'the WAV header gives the real size');
+    assert.match(fs.readFileSync(path.join(root, 'voice.js'), 'utf8'), /SCRIPT\.VOICE = /);
+  } finally { fs.rmSync(base, { recursive: true, force: true }); }
+});
+
+test('narration never writes outside the project: a page id that is a path is refused, a link planted in audio/ is not followed', async () => {
+  const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ft-narrate-out-')));
+  try {
+    const tts = fakeTts(base);
+    const outside = () => fs.readdirSync(base).sort();
+    const before = [...outside(), 'project'].sort();
+    // a page whose id climbs out of audio/ and the project
+    const root = path.join(base, 'project');
+    plantScript(root, path.join(base, 'marker.txt'));
+    fs.writeFileSync(path.join(root, 'script.js'), `SCRIPT = { META: {}, PAGES: [{ id: '../../x', cues: ['一。'] }] };`);
+    await assert.rejects(narrate(root, { tts, voice: { speaker: 'v1' }, child: childCmd, files: projectFiles }), /script\.js/);
+    assert.equal(tts.calls, 0);
+    assert.deepEqual(outside(), before);
+    fs.rmSync(root, { recursive: true, force: true });
+
+    // audio/ itself a link to a folder outside
+    plantScript(root, path.join(base, 'marker.txt'));
+    const elsewhere = path.join(base, 'elsewhere');
+    fs.mkdirSync(elsewhere);
+    fs.symlinkSync(elsewhere, path.join(root, 'audio'));
+    await assert.rejects(narrate(root, { tts, voice: { speaker: 'v1' }, child: childCmd, files: projectFiles }));
+    assert.deepEqual(fs.readdirSync(elsewhere), []);
+    fs.rmSync(root, { recursive: true, force: true });
+
+    // a dangling link at the very name the take is saved under
+    plantScript(root, path.join(base, 'marker.txt'));
+    fs.mkdirSync(path.join(root, 'audio'));
+    const id = crypto.createHash('md5').update(JSON.stringify(['volcengine', '一。', 'v1', { rate: 0 }, ''])).digest('hex').slice(0, 12);
+    const target = path.join(base, 'planted.mp3');
+    fs.symlinkSync(target, path.join(root, 'audio', `p01-${id}.mp3`));
+    const calls = tts.calls;
+    await assert.rejects(narrate(root, { tts, voice: { speaker: 'v1' }, child: childCmd, files: projectFiles }), /link/);
+    assert.equal(tts.calls, calls + 1, 'the take was made (so the name was right) and then not written through the link');
+    assert.equal(fs.existsSync(target), false);
+  } finally { fs.rmSync(base, { recursive: true, force: true }); }
 });

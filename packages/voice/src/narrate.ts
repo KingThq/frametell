@@ -22,7 +22,12 @@ export interface NarrateOptions {
   /** how a child is started (Node reading script.js, ffmpeg): a host confines it to the project with no network
    *  (@frametell/agent's childCmd); directChild runs it as it is */
   child: ChildCmd;
+  /** how a file of the project is written and read (@frametell/agent's projectFiles: never through a link the agent's
+   *  shell planted, never outside the project) */
+  files: ProjectFiles;
 }
+/** a project's files as the host writes and reads them: `rel` is relative to `dir` */
+export interface ProjectFiles { write(dir: string, rel: string, data: string | Uint8Array): void; read(dir: string, rel: string): Buffer }
 export interface NarrateResult { synthesized: number; duration: number; warnings: string[] }
 
 const EDGE = 0.05, TAIL = 0.15, MAXPAUSE = 0.32, SIL_DB = -45;
@@ -36,12 +41,12 @@ export type ChildCmd = (dir: string, cmd: string, argv: string[]) => { cmd: stri
 /** a child run as it is (no sandbox asked for) */
 export const directChild: ChildCmd = (_dir, cmd, argv) => ({ cmd, argv, env: { ...process.env, ...(process.versions.electron ? { ELECTRON_RUN_AS_NODE: '1' } : {}) } });
 
-/** a child to its end; one that could not start, was stopped or ran too long rejects */
-function runChild(child: ChildCmd, dir: string, cmd: string, argv: string[], signal?: AbortSignal): Promise<{ code: number; out: string; err: string }> {
+/** a child to its end; one that could not start, was stopped, ran too long or printed more than 64 MiB rejects */
+function runChild(child: ChildCmd, dir: string, cmd: string, argv: string[], signal?: AbortSignal): Promise<{ code: number; out: Buffer; err: string }> {
   const c = child(dir, cmd, argv);
-  return new Promise((ok, fail) => execFile(c.cmd, c.argv, { cwd: dir, env: c.env, encoding: 'utf8', maxBuffer: 64 << 20, timeout: 300_000, signal }, (e, out, err) => {
+  return new Promise((ok, fail) => execFile(c.cmd, c.argv, { cwd: dir, env: c.env, encoding: 'buffer', maxBuffer: 64 << 20, timeout: 300_000, signal }, (e, out, err) => {
     if (e && typeof e.code !== 'number') return fail(e.name === 'AbortError' ? e : new Error(`${path.basename(cmd)}: ${String(err || e.message).trim().slice(-1000)}`));
-    ok({ code: e ? (e.code as number) : 0, out: String(out), err: String(err) });
+    ok({ code: e ? (e.code as number) : 0, out, err: err.toString('utf8') });
   }));
 }
 
@@ -53,6 +58,19 @@ async function ffmpeg(child: ChildCmd, dir: string, pre: string[], input: string
   return r.err;
 }
 
+const RATE = 24000;
+/** `input` decoded by ffmpeg (`post` filters it) to the narration's format, 24 kHz mono 16-bit, as a whole WAV file.
+ *  ffmpeg hands the samples back on a pipe and the host writes the file (ProjectFiles), so no name in the project is
+ *  ever opened for writing by ffmpeg: a link planted there would take its output anywhere */
+async function toWav(child: ChildCmd, dir: string, input: string, post: string[], signal?: AbortSignal): Promise<Buffer> {
+  const r = await runChild(child, dir, FFMPEG, ['-hide_banner', '-loglevel', 'error', '-protocol_whitelist', 'file,pipe', '-i', input, ...post, '-ac', '1', '-ar', String(RATE), '-f', 's16le', 'pipe:1'], signal);
+  if (r.code) throw new Error(`ffmpeg: ${r.err.trim().split('\n').pop()}`);
+  const pcm = r.out.subarray(0, r.out.length & ~1), head = Buffer.alloc(44);
+  head.write('RIFF', 0); head.writeUInt32LE(36 + pcm.length, 4); head.write('WAVEfmt ', 8); head.writeUInt32LE(16, 16); head.writeUInt16LE(1, 20); head.writeUInt16LE(1, 22);
+  head.writeUInt32LE(RATE, 24); head.writeUInt32LE(RATE * 2, 28); head.writeUInt16LE(2, 32); head.writeUInt16LE(16, 34); head.write('data', 36); head.writeUInt32LE(pcm.length, 40);
+  return Buffer.concat([head, pcm]);
+}
+
 /** a media file's length in seconds, from what `ffmpeg -i` prints (it exits 1 there: no output is named) */
 export async function mediaDuration(dir: string, file: string, child: ChildCmd, signal?: AbortSignal): Promise<number> {
   const { err } = await runChild(child, dir, FFMPEG, ['-hide_banner', '-protocol_whitelist', 'file,pipe', '-i', file], signal);
@@ -62,13 +80,29 @@ export async function mediaDuration(dir: string, file: string, child: ChildCmd, 
 }
 
 export interface ScriptData { meta: Record<string, any>; pages: Page[]; duration: number | null }
+
+const isObj = (x: unknown): x is Record<string, unknown> => !!x && typeof x === 'object' && !Array.isArray(x);
+const optStr = (x: unknown) => x === undefined || typeof x === 'string';
+const optNum = (x: unknown) => x === undefined || (typeof x === 'number' && Number.isFinite(x));
+/** a page id: it names files in audio/, so it must not name a path */
+const PAGE_ID = /^[\w-]{1,80}$/;
+const isCue = (c: unknown): c is Cue => typeof c === 'string' || (isObj(c) && typeof c.t === 'string' && optStr(c.say) && optNum(c.hold)
+  && (c.solo === undefined || (isObj(c.solo) && optStr(c.solo.instruction) && optNum(c.solo.pitch) && optNum(c.solo.rate))));
+const isPage = (p: unknown): p is Page => isObj(p) && typeof p.id === 'string' && PAGE_ID.test(p.id) && Array.isArray(p.cues) && p.cues.every(isCue) && optStr(p.instruction);
+/** what script-data.mjs printed, if it has the shape of its answer: it ran the agent's code, so anything else is refused */
+function scriptShape(x: unknown): ScriptData | undefined {
+  if (!isObj(x) || !isObj(x.meta) || !Array.isArray(x.pages) || !x.pages.every(isPage)) return undefined;
+  if (!(x.duration === null || (typeof x.duration === 'number' && Number.isFinite(x.duration)))) return undefined;
+  return { meta: x.meta, pages: x.pages, duration: x.duration };
+}
 /** script.js (with `voice`: voice.js too, and the film's length) as data. The engine evaluates them in a child
  *  (script-data.mjs), never this process: they are code the agent wrote */
 export async function scriptData(dir: string, child: ChildCmd, o: { voice?: boolean; signal?: AbortSignal } = {}): Promise<ScriptData> {
   const r = await runChild(child, dir, process.execPath, [path.join(ENGINE_DIR, 'tools', 'script-data.mjs'), ...(o.voice ? ['--voice'] : [])], o.signal);
+  const out = r.out.toString('utf8');
   let data: ScriptData | undefined;
-  try { data = JSON.parse(r.out.trim().split('\n').pop() || ''); } catch { /* said below */ }
-  if (r.code || !data || !Array.isArray(data.pages)) throw new Error(`script.js cannot be read: ${(r.err || r.out).trim().slice(-1000)}`);
+  try { data = scriptShape(JSON.parse(out.trim().split('\n').pop() || '')); } catch { /* said below */ }
+  if (r.code || !data) throw new Error(`script.js cannot be read: ${(r.err || out).trim().slice(-1000)}`);
   return data;
 }
 
@@ -163,8 +197,6 @@ export async function narrate(dir: string, opts: NarrateOptions): Promise<Narrat
   const LEXICON: Record<string, string> = { ...(en ? { 'CLAUDE.md': 'claude dot md', 'AGENTS.md': 'agents dot md', 'README.md': 'readme dot md' } : { 'CLAUDE.md': 'claude 点 md', 'AGENTS.md': 'agents 点 md', 'README.md': 'readme 点 md' }), ...(V.lexicon || {}) };
   const respell = (s: string) => Object.entries(LEXICON).reduce((a, [k, v]) => a.split(k).join(v), s);
   const spokenOf = (c: Cue) => respell((typeof c === 'object' && c.say) || text(c));
-  const audioDir = path.join(dir, 'audio');
-  fs.mkdirSync(audioDir, { recursive: true });
   const pages: Record<string, unknown>[][] = [];
   let made = 0;
   for (const [pi, pg] of SCRIPT.PAGES.entries()) {
@@ -188,16 +220,18 @@ export async function narrate(dir: string, opts: NarrateOptions): Promise<Narrat
       const extra = { pitch: run.solo?.pitch ?? V.pitch, rate: run.solo?.rate ?? V.rate ?? 0 };
       const whole = !run.solo && run.cues.length === pg.cues.length;
       const id = crypto.createHash('md5').update(JSON.stringify([opts.tts.id, utter, V.speaker, extra, instruction ?? ''])).digest('hex').slice(0, 12);
-      const base = path.join(audioDir, whole ? `${pg.id}-${id}` : `${pg.id}-${ri}-${id}`);
+      // relative to the project; the page id was checked (scriptData) to name no path
+      const base = `audio/${whole ? `${pg.id}-${id}` : `${pg.id}-${ri}-${id}`}`;
       const mp3 = base + '.mp3', wj = base + '.json', wav = base + '.wav';
-      if (!fs.existsSync(wj)) {
+      const has = (rel: string) => fs.existsSync(path.join(dir, rel));
+      if (!has(wj)) {
         const { audio, words } = await opts.tts.synth(utter, { voice: V.speaker, rate: extra.rate, pitch: extra.pitch, instruction, signal: opts.signal });
-        fs.writeFileSync(mp3, audio);
-        fs.writeFileSync(wj, JSON.stringify(words));
+        opts.files.write(dir, mp3, audio);
+        opts.files.write(dir, wj, JSON.stringify(words));
         made++; cachedPage = false;
       }
-      if (!fs.existsSync(wav)) await ffmpeg(opts.child, dir, ['-y', '-loglevel', 'error'], mp3, ['-ac', '1', '-ar', '24000', wav], opts.signal);
-      const words = JSON.parse(fs.readFileSync(wj, 'utf8')) as WordTime[];
+      if (!has(wav)) opts.files.write(dir, wav, await toWav(opts.child, dir, mp3, [], opts.signal));
+      const words = JSON.parse(opts.files.read(dir, wj).toString('utf8')) as WordTime[];
       const sp = spans(spoken, words, (m) => warnings.push(`${pg.id}：${m}`));
       const { segs, bad } = await cut(opts.child, dir, wav, sp, opts.signal);
       if (bad.length) throw new Error(`${pg.id}: cutting the take into lines would drop audible sound at ${bad.map(([a, b]) => `${a.toFixed(2)}–${b.toFixed(2)}s`).join(' ')}`);
@@ -207,8 +241,8 @@ export async function narrate(dir: string, opts: NarrateOptions): Promise<Narrat
       for (const [k, c] of run.cues.entries()) {
         const g = segs[k], f = `${base}-${k}.wav`;
         const af = `atrim=start=${g.a.toFixed(3)}:end=${g.b.toFixed(3)},asetpts=N/SR/TB` + (g.fin ? ',afade=t=in:d=0.01' : '') + (g.fout ? ',areverse,afade=t=in:d=0.02,areverse' : '');
-        await ffmpeg(opts.child, dir, ['-y', '-loglevel', 'error'], wav, ['-af', af, f], opts.signal);
-        const v: Record<string, unknown> = { t: text(c), f: 'audio/' + path.basename(f), d: +(g.b - g.a).toFixed(3), o: +g.o.toFixed(3) };
+        opts.files.write(dir, f, await toWav(opts.child, dir, wav, ['-af', af], opts.signal));
+        const v: Record<string, unknown> = { t: text(c), f, d: +(g.b - g.a).toFixed(3), o: +g.o.toFixed(3) };
         const kk = charOnsets(text(c), spoken[k], words, firstWord[k], g.a);
         if (kk) v.k = kk;
         if (g.join) v.join = 1;
@@ -218,7 +252,7 @@ export async function narrate(dir: string, opts: NarrateOptions): Promise<Narrat
     pages.push(out);
     opts.onProgress?.({ page: pg.id, index: pi, total: SCRIPT.PAGES.length, cached: cachedPage });
   }
-  fs.writeFileSync(path.join(dir, 'voice.js'), `/* Generated by Frametell — real narration timing. Do not edit; narrate again after changing cues. */\nSCRIPT.VOICE = ${JSON.stringify({ speaker: V.speaker, provider: opts.tts.id, pages })};\n`);
+  opts.files.write(dir, 'voice.js', `/* Generated by Frametell — real narration timing. Do not edit; narrate again after changing cues. */\nSCRIPT.VOICE = ${JSON.stringify({ speaker: V.speaker, provider: opts.tts.id, pages })};\n`);
   const { duration } = await scriptData(dir, opts.child, { voice: true, signal: opts.signal });
   return { synthesized: made, duration: duration ?? 0, warnings };
 }

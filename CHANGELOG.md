@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - A project gets its git history before any agent's shell runs (and before any commit), so a shell can no longer make `.git` itself first.
-- Nothing the agent made is evaluated or decoded in the studio's own process any more: the narration reads `script.js` and `voice.js` through a new engine tool (`script-data.mjs`), and ffmpeg (narration, frames, posters, the film gate) and the document parsers run in child processes, confined with no network when the network is taken away. ffmpeg only opens local files (`-protocol_whitelist file,pipe`).
+- Nothing the agent made is evaluated or decoded in the studio's own process any more: the narration reads `script.js` and `voice.js` through a new engine tool (`script-data.mjs`), and ffmpeg (narration, frames, posters, the film gate) and the document parsers run in child processes, confined with no network when the network is taken away. ffmpeg only opens local files (`-protocol_whitelist file,pipe`). What a child answers is checked before it is used: a page id must be a plain name, the document parser's files must be plain names beside their documents, the film gate's answer must have its shape. The narration writes its takes and voice.js only into the project, never through a planted link, and a frame cut is one picture of bounded size. The final mix also reads the narration's audio with local files only.
 
 ## [0.5.1] - 2026-10-14
 

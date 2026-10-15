@@ -47,13 +47,34 @@ export type MaterialLang = keyof typeof LABELS;
 export async function prepareMaterials(dir: string, lang: MaterialLang = 'en'): Promise<{ files: PreparedMaterial[] }> {
   if (process.env.FRAMETELL_SANDBOX_NONET !== '1') return parseMaterials(dir, lang);
   if (!fs.existsSync(dir)) return { files: [] };
+  return parseInChild(dir, lang);
+}
+
+const KINDS: readonly string[] = ['text', 'image', 'document'] satisfies MaterialKind[];
+/** a plain file name in that folder, never a path. Not only [\w.-]: people name their documents in their own language
+ *  (报告.docx) and attach() keeps that */
+const plain = (n: unknown): n is string => typeof n === 'string' && n.length >= 1 && n.length <= 200 && n !== '.' && n !== '..' && !/[\\/\u0000-\u001f]/.test(n);
+const isEntry = (f: unknown): f is PreparedMaterial => {
+  if (!f || typeof f !== 'object' || Array.isArray(f)) return false;
+  const x = f as Record<string, unknown>;
+  // the parse of a document is x.md, or x.pdf.md beside a user's own x.md (parseMaterials): nothing else
+  return plain(x.name) && typeof x.kind === 'string' && KINDS.includes(x.kind)
+    && (x.parsedTo === undefined || (plain(x.parsedTo) && (x.parsedTo === `${x.name.replace(/\.[^.]+$/, '')}.md` || x.parsedTo === `${x.name}.md`)))
+    && (x.pages === undefined || (typeof x.pages === 'number' && Number.isFinite(x.pages)))
+    && typeof x.chars === 'number' && Number.isFinite(x.chars) && (x.warning === undefined || typeof x.warning === 'string');
+};
+
+/** parseMaterials in a child (`script`: materials-child.js; another only in a test), confined to `dir` by confinedCmd.
+ *  The child parsed documents from outside: its answer is taken only when every entry has the shape of one */
+export async function parseInChild(dir: string, lang: MaterialLang, script = fileURLToPath(new URL('./materials-child.js', import.meta.url))): Promise<{ files: PreparedMaterial[] }> {
   // loaded here, not at the top: the child imports this module and needs none of the agent
   const { confinedCmd, nodeEnv } = await import('@frametell/agent');
-  const [cmd, argv] = confinedCmd(dir, process.execPath, [fileURLToPath(new URL('./materials-child.js', import.meta.url)), lang]);
+  const [cmd, argv] = confinedCmd(dir, process.execPath, [script, lang]);
   const out = await new Promise<string>((ok, fail) => execFile(cmd, argv, { cwd: dir, env: nodeEnv(), encoding: 'utf8', timeout: 300_000, maxBuffer: 16 << 20 },
     (e, so, se) => (e ? fail(new Error(`the documents could not be read: ${String(se || e.message).trim().slice(-1000)}`)) : ok(String(so)))));
-  const r = JSON.parse(out.trim().split('\n').pop() || '{}') as { files?: PreparedMaterial[] };
-  if (!Array.isArray(r.files)) throw new Error('the documents could not be read');
+  let r: { files?: unknown } | undefined;
+  try { r = JSON.parse(out.trim().split('\n').pop() || '{}'); } catch { /* said below */ }
+  if (!r || !Array.isArray(r.files) || !r.files.every(isEntry)) throw new Error('the documents could not be read: the parser\'s answer has the wrong shape');
   return { files: r.files };
 }
 

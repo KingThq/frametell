@@ -5,7 +5,9 @@ import os from 'node:os';
 import path from 'node:path';
 import JSZip from 'jszip';
 import { execFileSync } from 'node:child_process';
-import { prepareMaterials, htmlToMarkdown } from './materials.js';
+import diagnostics from 'node:diagnostics_channel';
+import type { ChildProcess } from 'node:child_process';
+import { prepareMaterials, htmlToMarkdown, parseInChild } from './materials.js';
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'fs-materials-'));
 /** a "picture": a PNG signature followed by enough bytes to pass the tiny-image filter */
@@ -190,15 +192,52 @@ const bwrap = process.platform === 'linux' && (() => { try { execFileSync('bwrap
 test('with no network, documents are parsed in a confined child, with the same result', { skip: !bwrap && 'bubblewrap only' }, async () => {
   const a = tmp(), b = tmp();
   const was = process.env.FRAMETELL_SANDBOX_NONET;
+  // every child this process starts (Node publishes each one): the proof the parse ran in one, under bubblewrap
+  const started: ChildProcess[] = [];
+  const seen = (m: unknown) => { started.push((m as { process: ChildProcess }).process); };
   try {
     fs.writeFileSync(path.join(a, 'r.docx'), await docx());
     fs.writeFileSync(path.join(b, 'r.docx'), await docx());
     const here = await prepareMaterials(a, 'zh');
+    diagnostics.subscribe('child_process', seen);
     process.env.FRAMETELL_SANDBOX_NONET = '1';
     assert.deepEqual(await prepareMaterials(b, 'zh'), JSON.parse(JSON.stringify(here)));   // the child's answer is JSON: no keys left undefined
     assert.equal(fs.readFileSync(path.join(b, 'r.md'), 'utf8'), fs.readFileSync(path.join(a, 'r.md'), 'utf8'));
+    const parse = started.map((c) => c.spawnargs).filter((x) => x.some((y) => y.endsWith('materials-child.js')));
+    assert.equal(parse.length, 1, 'the documents were parsed in this process, not in a child');
+    assert.match(path.basename(parse[0][0]), /^bwrap$/, `the child ran unconfined: ${parse[0].join(' ')}`);
   } finally {
+    diagnostics.unsubscribe('child_process', seen);
     if (was === undefined) delete process.env.FRAMETELL_SANDBOX_NONET; else process.env.FRAMETELL_SANDBOX_NONET = was;
     for (const d of [a, b]) fs.rmSync(d, { recursive: true, force: true });
   }
+});
+
+test('what the document parser\'s child answers is checked: names that are paths, unknown kinds and wrong shapes are refused', async () => {
+  const dir = tmp(), bin = tmp();
+  try {
+    const forge = (answer: unknown) => { const f = path.join(bin, `c${Math.random().toString(36).slice(2)}.mjs`); fs.writeFileSync(f, `console.log(${JSON.stringify(JSON.stringify(answer))});`); return f; };
+    const good = { name: 'r.docx', kind: 'document', parsedTo: 'r.md', pages: 2, chars: 10, warning: 'w' };
+    // the control: a well-formed answer is taken as it is
+    const files = [good, { ...good, name: '季度 报告.pdf', parsedTo: '季度 报告.pdf.md' }, { name: 'a.png', kind: 'image', chars: 0 }];
+    assert.deepEqual(await parseInChild(dir, 'en', forge({ files })), { files });
+    const bad: [string, unknown][] = [
+      ['parsedTo climbs out', { files: [{ ...good, parsedTo: '../../x.md' }] }],
+      ['parsedTo is absolute', { files: [{ ...good, parsedTo: '/etc/passwd' }] }],
+      ['parsedTo has a slash', { files: [{ ...good, parsedTo: 'a/b.md' }] }],
+      ['parsedTo is ..', { files: [{ ...good, parsedTo: '..' }] }],
+      ['parsedTo is .', { files: [{ ...good, parsedTo: '.' }] }],
+      ['parsedTo is not text', { files: [{ ...good, parsedTo: 5 }] }],
+      ['parsedTo is another file', { files: [{ ...good, parsedTo: 'script.js' }] }],
+      ['a name that is a path', { files: [{ ...good, name: '../r.docx', parsedTo: '../r.md' }] }],
+      ['an unknown kind', { files: [{ ...good, kind: 'program' }] }],
+      ['a name that is not text', { files: [{ ...good, name: {} }] }],
+      ['chars that is not a number', { files: [{ ...good, chars: '1' }] }],
+      ['pages that is not a number', { files: [{ ...good, pages: '1' }] }],
+      ['a warning that is not text', { files: [{ ...good, warning: 1 }] }],
+      ['an entry that is not an object', { files: ['r.docx'] }],
+      ['files not a list', { files: {} }],
+    ];
+    for (const [what, answer] of bad) await assert.rejects(parseInChild(dir, 'en', forge(answer)), /documents could not be read/, what);
+  } finally { for (const d of [dir, bin]) fs.rmSync(d, { recursive: true, force: true }); }
 });
