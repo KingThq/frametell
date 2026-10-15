@@ -27,9 +27,10 @@
   const STYLE = window.STYLE || {};
   Object.assign(C, STYLE.palette);
   // A colour by its palette name, or any CSS colour as it is. A name the palette doesn't have was passed on as CSS and
-  // drew black (warm-story has no yellowF): now a light fill `<name>F` is its colour mixed toward the paper, as the
-  // style's own fills are, and any other unknown name is ink. Either way the page that used it is noted (PV.colorPage,
-  // set by the engine while it builds and draws a page), and the page check reports it for the page to be fixed.
+  // drew black (warm-story has no yellowF). Now a light fill `<name>F` of a colour the palette has is that colour mixed
+  // toward the paper, as the style's own fills are: the engine's own helpers compose these (a chip's `c + 'F'`), so it
+  // is resolved quietly. Any other name the palette lacks is ink, and the page that used it is noted (PV.colorPage, set
+  // by the engine while it builds and draws a page) for the page check to report.
   const unknownColors = new Map();
   const resolved = new Map();
   const mixHex = (a, b, k) => '#' + [1, 3, 5].map((i) => Math.round(parseInt(a.slice(i, i + 2), 16) * k + parseInt(b.slice(i, i + 2), 16) * (1 - k)).toString(16).padStart(2, '0')).join('');
@@ -43,13 +44,12 @@
     if (v === undefined) {
       const css = c === 'none' || (typeof CSS !== 'undefined' && CSS.supports && CSS.supports('color', c));
       const base = c.endsWith('F') && C[c.slice(0, -1)];
-      v = css ? null : base && HEX.test(base) && HEX.test(C.paper) ? mixHex(base, C.paper, 0.22) : C.ink;
+      v = css ? { as: c } : base && HEX.test(base) && HEX.test(C.paper) ? { as: mixHex(base, C.paper, 0.22) } : { as: C.ink, unknown: true };
       resolved.set(c, v);
     }
-    if (v === null) return c;
     const page = PV.colorPage;
-    if (page) { let set = unknownColors.get(page); if (!set) unknownColors.set(page, (set = new Set())); set.add(c); }
-    return v;
+    if (v.unknown && page) { let set = unknownColors.get(page); if (!set) unknownColors.set(page, (set = new Set())); set.add(c); }
+    return v.as;
   }
 
   const SVGNS = 'http://www.w3.org/2000/svg';
