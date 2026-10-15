@@ -278,12 +278,25 @@ export class Project {
     return { withSubs: this.file('out/' + withSubs), noSubs: this.file('out/' + noSubs) };
   }
 
-  /** the film gate (engine/tools/film-gate.mjs) in a child: it decodes the film, which the agent's pages drew */
+  /** the film gate over a finished mp4 (engine/tools/film-gate.mjs) in a confined child: it decodes the whole film
+   * (seconds), which the agent's pages drew, and in this process it held every other request of the host while it did.
+   * Its answer is checked (gateResult) before the director reads it */
   async gate(file: string): Promise<FilmGateResult> {
     const r = await tool(this.dir, 'film-gate.mjs', [file, '--json'], { signal: this.signal });
     let x: unknown;
     try { x = JSON.parse(r.out.split('\n').pop() || ''); } catch { throw new Error(`film gate failed: ${r.err || r.out}`.slice(0, 2000)); }
     return gateResult(x);
+  }
+
+  /** a film's length in seconds: ffmpeg's reading of its header (quick), in a confined child like every other ffmpeg
+   *  over what the agent made, never in this process */
+  async duration(file: string): Promise<number> {
+    const [cmd, argv] = confinedCmd(this.dir, FFMPEG, ['-hide_banner', '-protocol_whitelist', 'file,pipe', '-i', file]);
+    const err = await new Promise<string>((ok) => execFile(cmd, argv, { cwd: this.dir, encoding: 'utf8', timeout: 60_000, maxBuffer: 1 << 20, env: nodeEnv(), signal: this.signal },
+      (_e, _o, stderr) => ok(String(stderr || ''))));
+    const d = /Duration: (\d+):(\d+):([\d.]+)/.exec(err);
+    if (!d) throw new Error(`cannot read ${path.basename(file)}: ${err.trim().split('\n').pop() ?? ''}`.slice(0, 1000));
+    return +d[1] * 3600 + +d[2] * 60 + +d[3];
   }
 
   // ── history: every change the agent makes is a commit, so any step can be undone (git revert) ──

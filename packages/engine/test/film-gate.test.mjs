@@ -38,6 +38,6 @@ test('blank frames at the very start and end are not counted', () => {
 test('the agent\'s sound files are decoded with local files only (render.mjs, mix.mjs)', () => {
   const src = (f) => fs.readFileSync(new URL(`../tools/${f}`, import.meta.url), 'utf8');
   // a "sound" in audio/ that is really a playlist of web addresses must fetch nothing, whatever ffmpeg's defaults
-  assert.match(src('render.mjs'), /'-protocol_whitelist', 'file,pipe', '-i', path\.join\(process\.cwd\(\), c\.audio\)/);
+  assert.match(src('render.mjs'), /'-protocol_whitelist', 'file,pipe', '-i', path\.join\(EP, c\.audio\)/);
   assert.match(src('mix.mjs'), /'-protocol_whitelist', 'file,pipe', '-i', f\b/);
 });
