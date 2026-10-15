@@ -50,4 +50,6 @@ test('search keys are saved trimmed, shown masked, and removed with an empty str
   assert.equal(c.search.tavily, undefined);
   assert.equal(c.search.provider, undefined);
   assert.equal(publicConfig(c).search.provider, '');
+  // a host's settings written before search existed are shown without it
+  assert.equal(publicConfig({ ...withDefaults({}), search: undefined } as never).search.provider, '');
 });

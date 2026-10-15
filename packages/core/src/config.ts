@@ -111,7 +111,7 @@ export function publicConfig(c: Config): PublicSettings {
     models: c.models,
     proxy: maskProxy(c.proxy),
     tts: { volcengine: mask(c.tts.volcengine), elevenlabs: mask(c.tts.elevenlabs) },
-    search: { provider: searchProvider(c.search) ?? '', ...Object.fromEntries(SEARCH_PROVIDERS.map((p) => [p, maskKeys(c.search[p])])) as Record<SearchProviderId, string> },
+    search: { provider: searchProvider(c.search) ?? '', ...Object.fromEntries(SEARCH_PROVIDERS.map((p) => [p, maskKeys(c.search?.[p])])) as Record<SearchProviderId, string> },
     myVoices: c.myVoices ?? [],
     locale: c.locale || 'auto',
     preferences: c.preferences ?? '',
