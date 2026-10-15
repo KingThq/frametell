@@ -8,7 +8,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileTools } from './tools/files.js';
 import { Project } from './project.js';
-import { imagesIn, readIn } from './projectfs.js';
+import { imagesIn, listIn, readIn, writeIn } from './projectfs.js';
 
 function setup() {
   const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ft-files-')));
@@ -170,4 +170,54 @@ test('posters and stills are cut only from a film of the project\'s own, through
     await assert.rejects(project.stills([2], path.join(s.root, 'out', 'own.mp4')));
     assert.equal(fs.readFileSync(path.join(s.api, 'server.js'), 'utf8'), 'api code');
   } finally { s.done(); }
+});
+
+test('a folder of the project is listed only when it really is one, never through a link', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'listin-')), outside = fs.mkdtempSync(path.join(os.tmpdir(), 'listin-out-'));
+  try {
+    fs.mkdirSync(path.join(root, 'out', 'thumbs'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'out', 'thumbs', 'p01.jpg'), 'j');
+    fs.writeFileSync(path.join(outside, 'secret.jpg'), 's');
+    fs.symlinkSync(outside, path.join(root, 'pages'));
+    fs.symlinkSync(outside, path.join(root, 'out', 'snap'));
+    fs.mkdirSync(path.join(root, '.studio'));
+    assert.deepEqual(listIn(root, 'out/thumbs'), ['p01.jpg']);
+    assert.deepEqual(listIn(root, 'pages'), []);
+    assert.deepEqual(listIn(root, 'out/snap'), []);
+    assert.deepEqual(listIn(root, '../'), []);
+    assert.deepEqual(listIn(root, '.studio'), []);
+    assert.deepEqual(listIn(root, 'missing'), []);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); fs.rmSync(outside, { recursive: true, force: true }); }
+});
+
+test('on Linux, a folder swapped for a link while a write makes the folders under it leaves nothing outside', { skip: process.platform !== 'linux' }, () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'writein-race-')), outside = fs.mkdtempSync(path.join(os.tmpdir(), 'writein-out-'));
+  const mkdir = fs.mkdirSync;
+  let swapped = false;
+  try {
+    fs.mkdirSync(path.join(root, 'a'));
+    // the moment the write makes folder `b` under `a`, `a` is swapped for a link to outside
+    (fs as { mkdirSync: typeof fs.mkdirSync }).mkdirSync = ((p: fs.PathLike, o?: fs.MakeDirectoryOptions) => {
+      if (!swapped && path.basename(String(p)) === 'b') {
+        swapped = true;
+        fs.renameSync(path.join(root, 'a'), path.join(root, 'a.real'));
+        fs.symlinkSync(outside, path.join(root, 'a'));
+      }
+      return mkdir(p, o);
+    }) as typeof fs.mkdirSync;
+    try { writeIn(root, 'a/b/new.txt', 'x'); } catch { /* refused is fine too */ }
+  } finally { (fs as { mkdirSync: typeof fs.mkdirSync }).mkdirSync = mkdir; }
+  try {
+    assert.equal(swapped, true, 'the write made folder b');
+    assert.deepEqual(fs.readdirSync(outside), []);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); fs.rmSync(outside, { recursive: true, force: true }); }
+});
+
+test('a write the rules refuse leaves no folder behind', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'writein-place-'));
+  try {
+    fs.mkdirSync(path.join(root, '.git'));
+    assert.throws(() => writeIn(root, '.git/hooks/x/pre-commit', 'x'));
+    assert.equal(fs.existsSync(path.join(root, '.git', 'hooks')), false);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });

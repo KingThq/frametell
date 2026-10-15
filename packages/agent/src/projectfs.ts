@@ -171,6 +171,7 @@ export function editIn(root: string, p: string, change: (src: string) => string,
  */
 export function writeIn(root: string, p: string, data: string | Uint8Array, o: Reach & { shown?: string; before?: (existing: string | undefined) => void } = {}): void {
   const shown = o.shown ?? p;
+  if (process.platform === 'linux' && fs.existsSync('/proc/self/fd')) return writeAtFds(root, p, data, o, shown);
   const rules = { ...o, write: true };
   const abs = lexical(root, p, shown);
   const realRoot = fs.realpathSync(root);
@@ -234,4 +235,81 @@ export function imagesIn(root: string, files: string[] = []): { file: string; da
     try { return [{ file, data: readIn(root, file, { record: true }) }]; }
     catch (e) { console.warn(`[project] picture left out: ${file}: ${(e as Error).message}`); return []; }
   });
+}
+
+const DIR = C.O_RDONLY | (C.O_DIRECTORY ?? 0) | NOFOLLOW;
+
+/** Linux: the folders `parts` under the real root, each opened (never a link) under the one before through
+ *  /proc/self/fd/<fd>/<name>, made first when `make`; returns the last one's fd (the caller closes it) */
+function openDirs(realRoot: string, parts: string[], shown: string, make: boolean): number {
+  let fd = fs.openSync(realRoot, DIR);
+  try {
+    for (const part of parts) {
+      const at = `/proc/self/fd/${fd}/${part}`;
+      if (make) { try { fs.mkdirSync(at); } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e; } }
+      let next: number;
+      try { next = fs.openSync(at, DIR); } catch (e) {
+        const code = (e as NodeJS.ErrnoException).code;
+        if (code === 'ELOOP') throw new Refused('link', shown);
+        if (code === 'ENOTDIR') throw new Refused('not a file', shown);
+        throw e;
+      }
+      fs.closeSync(fd);
+      fd = next;
+    }
+    if (!within(realRoot, fs.readlinkSync(`/proc/self/fd/${fd}`))) throw new Refused('outside', shown);
+    return fd;
+  } catch (e) { fs.closeSync(fd); throw e; }
+}
+
+/** writeIn on Linux: judged by name first (nothing is made for a write the rules refuse), then every folder on the way
+ *  is opened and the next made and opened under it, never by its path again: a folder swapped for a link meanwhile is
+ *  never walked through, and nothing lands outside, not even an empty folder */
+function writeAtFds(root: string, p: string, data: string | Uint8Array, o: Reach & { before?: (existing: string | undefined) => void }, shown: string): void {
+  const rules = { ...o, write: true };
+  const abs = lexical(root, p, shown);
+  const realRoot = fs.realpathSync(root);
+  const parts = path.relative(root, abs).split(path.sep);
+  const name = parts.pop()!;
+  { const why = place(realRoot, path.join(realRoot, ...parts, name), rules); if (why) throw new Refused(why, shown); }
+  const fd = openDirs(realRoot, parts, shown, true);
+  try {
+    const dir = fs.readlinkSync(`/proc/self/fd/${fd}`);
+    { const why = place(realRoot, path.join(dir, name), rules); if (why) throw new Refused(why, shown); }
+    const target = `/proc/self/fd/${fd}/${name}`;
+    const bytes = Buffer.from(typeof data === 'string' ? Buffer.from(data) : data);
+    let st: fs.Stats | undefined;
+    try { st = fs.lstatSync(target); } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e; }
+    if (st) {
+      if (st.isSymbolicLink()) throw new Refused('link', shown);
+      if (st.isFile() && st.nlink > 1) throw new Refused('hard link', shown);
+      const f = check(fs.openSync(target, C.O_RDWR | QUIET | NOFOLLOW), path.join(dir, name), realRoot, shown, rules);
+      try { o.before?.(readFd(f.fd).toString('utf8')); rewrite(f.fd, bytes); } finally { fs.closeSync(f.fd); }
+      return;
+    }
+    o.before?.(undefined);
+    const f = check(fs.openSync(target, C.O_WRONLY | C.O_CREAT | C.O_EXCL | QUIET | NOFOLLOW, 0o666), path.join(dir, name), realRoot, shown, rules);
+    try { rewrite(f.fd, bytes); } finally { fs.closeSync(f.fd); }
+  } finally { fs.closeSync(fd); }
+}
+
+/**
+ * The names in a folder of the project (sorted), read through the folder as opened: [] for one that is missing, a
+ * link, outside the project, or the studio's record. On Linux each level is opened as writeIn walks; elsewhere (local
+ * development) each level must be a real folder and the last one really inside the project.
+ */
+export function listIn(root: string, p: string): string[] {
+  try {
+    const abs = lexical(root, p);
+    const realRoot = fs.realpathSync(root);
+    const parts = path.relative(root, abs).split(path.sep).filter(Boolean);
+    if (parts.length && place(realRoot, path.join(realRoot, ...parts), {})) return [];
+    if (process.platform === 'linux' && fs.existsSync('/proc/self/fd')) {
+      const fd = openDirs(realRoot, parts, p, false);
+      try { return fs.readdirSync(`/proc/self/fd/${fd}`).sort(); } finally { fs.closeSync(fd); }
+    }
+    let dir = realRoot;
+    for (const part of parts) { dir = path.join(dir, part); if (!fs.lstatSync(dir).isDirectory()) return []; }
+    return within(realRoot, fs.realpathSync(dir)) ? fs.readdirSync(dir).sort() : [];
+  } catch { return []; }
 }
