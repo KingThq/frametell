@@ -6,7 +6,7 @@ import path from 'node:path';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { execFile, execFileSync, spawnSync } from 'node:child_process';
-import { confine } from './tools/sandbox.js';
+import { confine, usesBwrap } from './tools/sandbox.js';
 import { Project, childCmd, cutFrame, engineCmd, gateResult, nodeEnv, projectFiles } from './project.js';
 import { openProjectFile } from './projectfs.js';
 import crypto from 'node:crypto';
@@ -105,8 +105,8 @@ test('engine tools run as they always have, and inside the sandbox when the netw
     delete process.env.FRAMETELL_SANDBOX_NONET;
     assert.deepEqual(engineCmd(root, ['tool.mjs', '--x']), [process.execPath, ['tool.mjs', '--x']]);
     process.env.FRAMETELL_SANDBOX_NONET = '1';
-    const [cmd] = engineCmd(root, ['tool.mjs']);
-    assert.ok(cmd === 'bwrap' || cmd === '/usr/bin/sandbox-exec', cmd);
+    const [cmd, argv] = engineCmd(root, ['tool.mjs']);
+    assert.ok(usesBwrap(cmd, argv) || cmd === '/usr/bin/sandbox-exec', cmd);
   } finally {
     if (was === undefined) delete process.env.FRAMETELL_SANDBOX_NONET; else process.env.FRAMETELL_SANDBOX_NONET = was;
     fs.rmSync(root, { recursive: true, force: true });
