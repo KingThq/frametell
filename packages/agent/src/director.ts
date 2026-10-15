@@ -152,7 +152,7 @@ const MAX = { pageLintMs: 90_000, pagesAtOnce: 10, storyboardFix: 2, scriptFix: 
 /** the reviewer looks at one sheet and answers: little thinking, quickly */
 const REVIEWER_THINKING: Thinking = 'low';
 /** what breaks a film whatever it looks like: the whole-film check's 'defects' mode takes only these */
-const DEFECTS: LintKind[] = ['runtime', 'api', 'nondeterministic'];
+const DEFECTS: LintKind[] = ['runtime', 'api', 'nondeterministic', 'palette'];
 /** findings that mean the page's code does not run as written: such a page is not drawn */
 const BROKEN: LintKind[] = ['runtime', 'api'];
 const errorsOf = (issues: LintIssue[]) => issues.filter((i) => i.level === 'error');

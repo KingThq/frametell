@@ -86,6 +86,7 @@
     stage.innerHTML = '';
     pages = [];
     errors.length = 0;
+    PV.unknownColors.clear();
     for (const el of frame.querySelectorAll('.chrome, .subs')) el.remove();
     layout = TIMING.layout(SCRIPT.PAGES, { ...(SCRIPT.META || {}), voice: SCRIPT.VOICE });
     const only = opts.only ? new Set(opts.only) : null;
@@ -101,8 +102,10 @@
       pages.push(obj);
       if (!only || only.has(pg.id)) {
         const fn = visuals[pg.id];
+        PV.colorPage = pg.id;
         try { if (loadErrors[pg.id]) throw loadErrors[pg.id]; if (fn) fn(B, pg); else B.title(pg.title); }
         catch (e) { cam.innerHTML = ''; hud.innerHTML = ''; obj.sh.acts.length = 0; obj.sh.ticks.length = 0; fail(obj, 'build', e); }
+        finally { PV.colorPage = undefined; }
       }
     }
     chrome = (SCRIPT.META || {}).chrome === true ? buildChrome(frame) : null;   // META.chrome: true → series header (META.course · META.no | section)
@@ -134,6 +137,7 @@
       p.cam.style.transform = c.s === 1 && c.x === cx0 && c.y === cy0 ? '' : `translate(${(cx0 - c.x * c.s).toFixed(2)}px, ${(cy0 - c.y * c.s).toFixed(2)}px) scale(${c.s.toFixed(4)})`;
       // while the camera is pushed in, a paper band fades in behind the fixed title so content can slide under it
       p.hud.style.setProperty('--band', clamp((c.s - 1) * 10).toFixed(3));
+      PV.colorPage = p.pg.id;
       try {
         for (const a of p.sh.acts) applyAct(a, lt);
         for (const fn of p.sh.ticks) fn(lt, t);
@@ -141,12 +145,12 @@
       } catch (e) {
         fail(p, 'render', e, t);
         p.broken = true; p.cam.style.visibility = 'hidden'; p.placeholder.style.display = '';
-      }
+      } finally { PV.colorPage = undefined; }
     }
     if (chrome) updateChrome(t);
     updateSubs(t);
     for (const fn of window.FRAME_HOOKS || []) fn(t, layout);   // extras can draw things that live across pages (a host character)
   }
 
-  window.ENGINE = { visual, init, renderAt, get layout() { return layout; }, get pages() { return pages; }, get errors() { return errors; }, source: (id) => visuals[id]?.toString() };
+  window.ENGINE = { visual, init, renderAt, get layout() { return layout; }, get pages() { return pages; }, get errors() { return errors; }, get colors() { return [...PV.unknownColors].map(([page, names]) => ({ page, names: [...names] })); }, source: (id) => visuals[id]?.toString() };
 })();

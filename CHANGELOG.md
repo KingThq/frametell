@@ -20,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - A Renderer may answer the final plan's segment names, the backend that drew them and why not the GPU; they are carried on the done event.
 
+### Fixed
+
+- A colour name the style's palette doesn't have (`yellowF` in a style without it) no longer reaches the page as an invalid CSS colour, which drew black: a light fill `<name>F` falls back to its colour mixed toward the paper, any other name to ink, and the page check reports the name as an error, with the style's names.
+
 ### Security
 
 - A project gets its git history before any agent's shell runs (and before any commit), so a shell can no longer make `.git` itself first.
