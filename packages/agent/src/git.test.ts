@@ -7,22 +7,13 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { GIT_SAFE, gitSync, removeNestedRepos } from './git.js';
 import { Project } from './project.js';
+import { evilRepo } from './testing.js';
 
 const packages = fileURLToPath(new URL('../../', import.meta.url));   // oss/packages
 const cloudApi = path.resolve(packages, '../../apps/api/src');          // the hosted API, when oss sits in the cloud repo
 
 /** a repo of our own, made with plain git (as the agent's shell would), outside the studio's helper */
 const plainGit = (cwd: string, args: string[]) => execFileSync('git', args, { cwd, stdio: 'pipe', env: { ...process.env, GIT_AUTHOR_NAME: 'a', GIT_AUTHOR_EMAIL: 'a@a', GIT_COMMITTER_NAME: 'a', GIT_COMMITTER_EMAIL: 'a@a' } });
-const evilRepo = (dir: string, marker: string) => {
-  fs.mkdirSync(dir, { recursive: true });
-  plainGit(dir, ['init', '-q']);
-  fs.writeFileSync(path.join(dir, '.gitattributes'), '* filter=ev\n');
-  fs.writeFileSync(path.join(dir, 'f.txt'), 'a\n');
-  plainGit(dir, ['add', '-A']); plainGit(dir, ['commit', '-qm', 'x']);
-  plainGit(dir, ['config', 'core.fsmonitor', `touch ${JSON.stringify(marker)}; false`]);
-  plainGit(dir, ['config', 'filter.ev.clean', `touch ${JSON.stringify(marker)}; cat`]);
-  fs.writeFileSync(path.join(dir, 'f.txt'), 'b\n');   // modified, so a status in it runs the filter
-};
 
 /** a git started directly: spawn('git', …), exec('git add …'), 'git', [args] handed to any launcher, or the name kept in a constant */
 const SPAWNS_GIT = [/\b(spawn|spawnSync|exec|execSync|execFile|execFileSync|fork|execa|confine)\s*\([^)]*?['"`]git(\.exe)?['"`\s]/, /['"`]git(\.exe)?['"`]\s*,\s*\[/, /=\s*['"`]git(\.exe)?['"`]\s*[;,)]?\s*$/];
@@ -30,7 +21,7 @@ const SPAWNS_GIT = [/\b(spawn|spawnSync|exec|execSync|execFile|execFileSync|fork
 test('every git the studio runs goes through git.ts (no git spawned any other way in agent, core, engine or the API)', () => {
   const roots = [path.join(packages, 'agent/src'), path.join(packages, 'core/src'), path.join(packages, 'engine/tools'), path.join(packages, 'engine/lib'), cloudApi].filter((d) => fs.existsSync(d));
   const files: string[] = [];
-  const walk = (d: string) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory() && e.name !== 'node_modules') walk(p); else if (/\.(ts|mts|js|mjs|cjs)$/.test(e.name) && !/\.test\./.test(e.name)) files.push(p); } };
+  const walk = (d: string) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory() && e.name !== 'node_modules') walk(p); else if (/\.(ts|mts|js|mjs|cjs)$/.test(e.name) && !/\.test\.|^testing\./.test(e.name)) files.push(p); } };
   roots.forEach(walk);
   assert.ok(files.length > 20, 'the scan found the sources');
   const offenders = files.filter((f) => !f.endsWith(`${path.sep}agent${path.sep}src${path.sep}git.ts`)).flatMap((f) =>

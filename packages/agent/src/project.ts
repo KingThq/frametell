@@ -1,12 +1,12 @@
 // The orchestrator's hands on a project: engine tools (lint, snap, timeline, render, film gate) and git history.
 import fs from 'node:fs';
-import os from 'node:os';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { execFile, spawn } from 'node:child_process';
 import { ENGINE_DIR, linkProject } from '@frametell/engine/tools/project.mjs';
 import { lintStoryboard, type StoryboardIssue } from '@frametell/engine/tools/storyboard-lint.mjs';
-import { measure, type FilmGateResult } from '@frametell/engine/tools/film-gate.mjs';
+import type { FilmGateResult } from '@frametell/engine/tools/film-gate.mjs';
+import type { ChildCmd } from '@frametell/voice';
 import { FFMPEG } from '@frametell/engine/tools/bins.mjs';
 import { confine } from './tools/sandbox.js';
 import { gitAsync, gitSync, stageAll, stageAllSync } from './git.js';
@@ -51,29 +51,32 @@ const run = (cmd: string, args: string[], cwd?: string) => new Promise<void>((ok
 /**
  * One frame cut by ffmpeg from a file of the project that was opened and checked (`from`), installed at `out` in the
  * project. ffmpeg reads the opened descriptor (handed to it as fd 3), never the name, which the agent's shell could
- * swap for a link to another account's film; it writes a private temp file, copied in with writeIn (never through a
- * link planted at `out`).
+ * swap for a link to another account's film. ffmpeg runs confined (confinedCmd: no network when it is taken away) and
+ * only opens local files; the picture comes back on a pipe (the sandbox's /tmp is its own) and is installed with writeIn
+ * (never through a link planted at `out`).
  */
 async function cutFrame(dir: string, from: OpenFile, before: string[], after: string[], out: string) {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'frametell-cut-'));
-  const jpg = path.join(tmp, 'frame.jpg');
-  try {
-    const input = process.platform === 'win32' ? from.path : '/dev/fd/3';   // Windows has no /dev/fd: the checked real path
-    await new Promise<void>((ok, fail) => {
-      const child = spawn(FFMPEG, ['-y', '-loglevel', 'error', ...before, '-i', input, ...after, jpg], { stdio: ['ignore', 'ignore', 'pipe', from.fd], env: nodeEnv(), timeout: 120_000 });
-      let err = '';
-      child.stderr!.on('data', (d: Buffer) => { err += d.toString(); });
-      child.on('error', fail);
-      child.on('close', (code) => (code === 0 ? ok() : fail(new Error((err || `ffmpeg exited ${code}`).slice(0, 1000)))));
-    });
-    writeIn(dir, out, fs.readFileSync(jpg), { record: true });
-  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+  const input = process.platform === 'win32' ? from.path : '/dev/fd/3';   // Windows has no /dev/fd: the checked real path
+  const [cmd, argv] = confinedCmd(dir, FFMPEG, ['-loglevel', 'error', ...before, '-protocol_whitelist', 'file,pipe', '-i', input, ...after, '-f', 'image2pipe', '-c:v', 'mjpeg', 'pipe:1']);
+  const jpg = await new Promise<Buffer>((ok, fail) => {
+    const child = spawn(cmd, argv, { cwd: dir, stdio: ['ignore', 'pipe', 'pipe', from.fd], env: nodeEnv(), timeout: 120_000 });
+    const parts: Buffer[] = [];
+    let err = '';
+    child.stdout!.on('data', (d: Buffer) => parts.push(d));
+    child.stderr!.on('data', (d: Buffer) => { err += d.toString(); });
+    child.on('error', fail);
+    child.on('close', (code) => (code === 0 && parts.length ? ok(Buffer.concat(parts)) : fail(new Error((err || `ffmpeg exited ${code}`).slice(0, 1000)))));
+  });
+  writeIn(dir, out, jpg, { record: true });
 }
 
-/** how an engine tool is run: as Node, and inside the shell's sandbox when the network is taken away (the hosted
- *  sandbox), since the pages it opens in Chrome run code the agent wrote */
-export const engineCmd = (dir: string, args: string[]): [string, string[]] =>
-  process.env.FRAMETELL_SANDBOX_NONET === '1' ? confine(dir, process.execPath, args) : [process.execPath, args];
+/** how a host runs a child that reads what the agent made (an engine tool, ffmpeg, a document parser): inside the
+ *  shell's sandbox when the network is taken away (the hosted sandbox), with no network and only `dir` writable */
+export const confinedCmd = (dir: string, cmd: string, args: string[]): [string, string[]] =>
+  process.env.FRAMETELL_SANDBOX_NONET === '1' ? confine(dir, cmd, args) : [cmd, args];
+export const engineCmd = (dir: string, args: string[]): [string, string[]] => confinedCmd(dir, process.execPath, args);
+/** confinedCmd for a package that cannot import this one (voice's narrate), with the environment a child gets */
+export const childCmd: ChildCmd = (dir, cmd, argv) => { const [c, a] = confinedCmd(dir, cmd, argv); return { cmd: c, argv: a, env: nodeEnv() }; };
 
 /** run an engine tool and collect its output. Never synchronously: lint and snapshots drive Chrome for seconds, and in the
  *  desktop app this process is also the one answering the panel (ten pages checking themselves froze every click).
@@ -251,7 +254,11 @@ export class Project {
     return { withSubs: this.file('out/' + withSubs), noSubs: this.file('out/' + noSubs) };
   }
 
-  gate(file: string): FilmGateResult { return measure(file); }
+  /** the film gate (engine/tools/film-gate.mjs) in a child: it decodes the film, which the agent's pages drew */
+  async gate(file: string): Promise<FilmGateResult> {
+    const r = await tool(this.dir, 'film-gate.mjs', [file, '--json'], { signal: this.signal });
+    try { return JSON.parse(r.out.split('\n').pop() || ''); } catch { throw new Error(`film gate failed: ${r.err || r.out}`.slice(0, 2000)); }
+  }
 
   // ── history: every change the agent makes is a commit, so any step can be undone (git revert) ──
   private git(args: string[]) { return gitSync(this.dir, args, childEnv()); }

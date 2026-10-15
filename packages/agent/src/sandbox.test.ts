@@ -7,7 +7,10 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { execFile, execFileSync, spawnSync } from 'node:child_process';
 import { confine } from './tools/sandbox.js';
-import { engineCmd, nodeEnv } from './project.js';
+import { Project, childCmd, engineCmd, nodeEnv } from './project.js';
+import { plantScript } from './testing.js';
+import { scriptData } from '@frametell/voice';
+import { FFMPEG } from '@frametell/engine/tools/bins.mjs';
 import { fileTools } from './tools/files.js';
 import { ENGINE_DIR, engineModulesDir } from '@frametell/engine/tools/project.mjs';
 
@@ -111,7 +114,7 @@ test('engine tools run as they always have, and inside the sandbox when the netw
 test('every engine tool is launched through engineCmd, so none can bypass the sandbox', () => {
   const src = fs.readFileSync(new URL('../src/project.ts', import.meta.url), 'utf8');
   const code = src.split('\n').filter((l) => l.includes('process.execPath') && !/^\s*(\/\/|\*|\/\*)/.test(l));
-  const outside = code.filter((l) => !l.includes('confine(dir, process.execPath, args)'));   // the one line that defines engineCmd
+  const outside = code.filter((l) => !l.includes('confinedCmd(dir, process.execPath, args)'));   // the one line that defines engineCmd
   assert.deepEqual(outside, [], 'process.execPath may only appear in the engineCmd definition');
 });
 
@@ -174,5 +177,51 @@ test('a project\'s engine link pointed at a folder kept out does not let that fo
   } finally {
     if (was === undefined) delete process.env.FRAMETELL_SANDBOX_HIDE; else process.env.FRAMETELL_SANDBOX_HIDE = was;
     fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test('with no network asked for, script.js read for the narration runs confined: what it writes outside its project never lands', { skip: !sandboxed && 'no sandbox here' }, async () => {
+  const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ft-scriptconf-')));
+  const root = path.join(base, 'project'), marker = path.join(base, 'marker.txt');
+  plantScript(root, marker);
+  const was = { n: process.env.FRAMETELL_SANDBOX_NONET, h: process.env.FRAMETELL_SANDBOX_HIDE };
+  try {
+    process.env.FRAMETELL_SANDBOX_NONET = '1';
+    process.env.FRAMETELL_SANDBOX_HIDE = base;   // the folder around the project, as a host hides every other account's
+    const data = await scriptData(root, childCmd);
+    assert.deepEqual(data.pages.map((p) => p.id), ['p01']);
+    assert.equal(fs.existsSync(marker), false);
+  } finally {
+    for (const [k, v] of [['FRAMETELL_SANDBOX_NONET', was.n], ['FRAMETELL_SANDBOX_HIDE', was.h]] as const) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test('with no network asked for, frames are cut and the film is checked in the sandbox, from the opened file', { skip: (process.platform !== 'linux' || !sandboxed) && 'bubblewrap only' }, async () => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ft-cut-')));
+  const was = process.env.FRAMETELL_SANDBOX_NONET;
+  try {
+    fs.mkdirSync(path.join(root, 'out'));
+    const film = path.join(root, 'out', 'f.mp4');
+    execFileSync(FFMPEG, ['-loglevel', 'error', '-f', 'lavfi', '-i', 'testsrc=size=160x90:rate=12:duration=2', '-pix_fmt', 'yuv420p', film]);
+    process.env.FRAMETELL_SANDBOX_NONET = '1';
+    const p = new Project(root);
+    const [rel] = await p.stills([1], film);
+    assert.deepEqual([...fs.readFileSync(path.join(root, rel)).subarray(0, 2)], [0xff, 0xd8]);
+    const g = await p.gate(film);
+    assert.ok(Math.abs(g.duration - 2) < 0.2, String(g.duration));
+  } finally {
+    if (was === undefined) delete process.env.FRAMETELL_SANDBOX_NONET; else process.env.FRAMETELL_SANDBOX_NONET = was;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('nothing a host runs evaluates project code or decodes project media in its own process', () => {
+  const src = (rel: string) => fs.readFileSync(new URL(`../../${rel}`, import.meta.url), 'utf8');
+  for (const f of ['agent/src/project.ts', 'agent/src/director.ts', 'voice/src/narrate.ts', 'core/src/runner.ts', 'core/src/studio.ts', 'core/src/refs.ts']) {
+    const s = src(f);
+    assert.doesNotMatch(s, /from ['"](node:)?vm['"]/, `${f} imports vm`);
+    assert.doesNotMatch(s, /\b(spawnSync|execFileSync|spawn|execFile)\(\s*FFMPEG\b/, `${f} starts ffmpeg itself`);
+    assert.doesNotMatch(s, /\b(measure|probe)\(/, `${f} measures media in its own process`);
   }
 });

@@ -4,7 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { narrate, type TtsProvider } from '@frametell/voice';
-import { Project, type LintIssue, type LintKind, type PageTiming, type Storyboard, type Renderer } from './project.js';
+import { Project, childCmd, type LintIssue, type LintKind, type PageTiming, type Storyboard, type Renderer } from './project.js';
 import { FLAG, VERDICT, fixPrompt, langNote, voiceNote, pagePrompt, pageSystem, plannerSystem, replyNote, reviewPrompt, reviewerPrompt, reviewerSystem, scriptPrompt, storyboardFixPrompt, storyboardPrompt, verdictAgain, type Brief, type Problem } from './prompts.js';
 import { addUsage, emptyUsage, type AgentRuntime, type AgentSession, type SessionOptions, type Thinking, type TokenUsage, type TurnResult } from './runtime/types.js';
 import type { PageIssue, PageStatus, Stage, StudioEvent } from './events.js';
@@ -361,7 +361,7 @@ export class Director {
       return;
     }
     this.serverMeta();
-    const r = await narrate(this.o.dir, { tts: this.o.tts, voice: this.o.voice, signal: this.o.signal, onProgress: (e) => this.emit({ type: 'narrate', ...e }) });
+    const r = await narrate(this.o.dir, { tts: this.o.tts, voice: this.o.voice, signal: this.o.signal, child: childCmd, onProgress: (e) => this.emit({ type: 'narrate', ...e }) });
     await this.commit(this.say('配音', 'Voice'));
     this.state.stage = 'pages'; this.save();
     this.emit({ type: 'stage', stage: 'narrate', status: 'done', detail: `${r.duration.toFixed(1)}s${r.warnings.length ? '；' + r.warnings.join('；') : ''}` });
@@ -383,7 +383,7 @@ export class Director {
     if (!this.voiceStale()) return;
     this.emit({ type: 'stage', stage: 'narrate', status: 'start' });
     this.serverMeta();
-    const r = await narrate(this.o.dir, { tts: this.o.tts!, voice: this.o.voice, signal: this.o.signal, onProgress: (e) => this.emit({ type: 'narrate', ...e }) });
+    const r = await narrate(this.o.dir, { tts: this.o.tts!, voice: this.o.voice, signal: this.o.signal, child: childCmd, onProgress: (e) => this.emit({ type: 'narrate', ...e }) });
     await this.commit(this.say('换配音', 'New voice'));
     this.state.exported = false; this.save();
     this.emit({ type: 'stage', stage: 'narrate', status: 'done', detail: `${r.duration.toFixed(1)}s${r.warnings.length ? '；' + r.warnings.join('；') : ''}` });
@@ -640,7 +640,7 @@ export class Director {
         if (/stopped answering twice/.test(e.message)) throw new Error(this.say('浏览器两次没有响应，导出停下了。再导出一次通常就好，已经画好的片段会直接用上', 'The browser stopped responding twice, so the export stopped. Exporting again usually works, and the parts already drawn are reused'));
         throw e;
       });
-    const g = this.project.gate(out.withSubs);
+    const g = await this.project.gate(out.withSubs);
     this.emit({ type: 'gate', red: g.red, blank: g.gates.find((x) => x.key === 'blank')?.value ?? [], report: g.report.map((r) => ({ name: r.name, value: r.value, unit: r.unit })) });
     this.state.video = out.withSubs; this.state.exported = true; this.save();
     const saved = this.saveCopies(out);
@@ -709,7 +709,7 @@ export class Director {
     const which = this.say(nums.map((n) => `第 ${n} 页`).join('、'), (nums.length > 1 ? 'pages ' : 'page ') + nums.join(', '));
     this.emit({ type: 'note', text: direct ? this.say(`直接改${which}的画面，其余的保持不变`, `Changing the picture on ${which}; everything else stays as it is`) : this.say(`要重画${which}，其余的保持不变`, `Redrawing ${which}; everything else stays as it is`) });
     this.serverMeta();
-    if (this.o.tts && this.o.voice) await narrate(this.o.dir, { tts: this.o.tts, voice: this.o.voice, signal: this.o.signal });   // cached pages cost nothing
+    if (this.o.tts && this.o.voice) await narrate(this.o.dir, { tts: this.o.tts, voice: this.o.voice, signal: this.o.signal, child: childCmd });   // cached pages cost nothing
     this.state.revision = Object.fromEntries(plan!.pages.map((p) => [p.id, p.note]));
     this.state.exported = false;
     for (const id of ids) this.state.pages[id] = { status: 'queued', rounds: 0, issues: [] };

@@ -20,7 +20,7 @@ function probe(file) {
 
 /** Grey frames at FPS, W wide, as Uint8Array views. */
 function decode(file, h) {
-  const r = spawnSync(FFMPEG, ['-v', 'error', '-i', file, '-vf', `fps=${FPS},scale=${W}:${h},format=gray`, '-f', 'rawvideo', '-'], { maxBuffer: 2 ** 31 });
+  const r = spawnSync(FFMPEG, ['-v', 'error', '-protocol_whitelist', 'file,pipe', '-i', file, '-vf', `fps=${FPS},scale=${W}:${h},format=gray`, '-f', 'rawvideo', '-'], { maxBuffer: 2 ** 31 });
   if (r.status !== 0) throw new Error(String(r.stderr || 'ffmpeg failed'));
   const n = W * h, frames = [];
   for (let o = 0; o + n <= r.stdout.length; o += n) frames.push(new Uint8Array(r.stdout.buffer, r.stdout.byteOffset + o, n));

@@ -4,6 +4,8 @@
 // Local only: there is no OCR, so a scanned PDF without a text layer comes out (nearly) empty, with a warning.
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFile } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import JSZip from 'jszip';
 import mammoth from 'mammoth';
 import { tr } from './i18n.js';
@@ -37,7 +39,25 @@ const LABELS = {
 };
 export type MaterialLang = keyof typeof LABELS;
 
+/**
+ * The documents of a folder parsed to Markdown (parseMaterials). With the network taken away (a hosted sandbox) the
+ * parse runs in a child confined to that folder: a PDF or a Word file comes from outside and its parsers are a large
+ * surface, so they never run in the process that has the network. The child's answer is read as JSON, nothing more.
+ */
 export async function prepareMaterials(dir: string, lang: MaterialLang = 'en'): Promise<{ files: PreparedMaterial[] }> {
+  if (process.env.FRAMETELL_SANDBOX_NONET !== '1') return parseMaterials(dir, lang);
+  if (!fs.existsSync(dir)) return { files: [] };
+  // loaded here, not at the top: the child imports this module and needs none of the agent
+  const { confinedCmd, nodeEnv } = await import('@frametell/agent');
+  const [cmd, argv] = confinedCmd(dir, process.execPath, [fileURLToPath(new URL('./materials-child.js', import.meta.url)), lang]);
+  const out = await new Promise<string>((ok, fail) => execFile(cmd, argv, { cwd: dir, env: nodeEnv(), encoding: 'utf8', timeout: 300_000, maxBuffer: 16 << 20 },
+    (e, so, se) => (e ? fail(new Error(`the documents could not be read: ${String(se || e.message).trim().slice(-1000)}`)) : ok(String(so)))));
+  const r = JSON.parse(out.trim().split('\n').pop() || '{}') as { files?: PreparedMaterial[] };
+  if (!Array.isArray(r.files)) throw new Error('the documents could not be read');
+  return { files: r.files };
+}
+
+export async function parseMaterials(dir: string, lang: MaterialLang = 'en'): Promise<{ files: PreparedMaterial[] }> {
   const L = LABELS[lang] ?? LABELS.en;
   if (!fs.existsSync(dir)) return { files: [] };
   const names = fs.readdirSync(dir).filter((n) => !n.startsWith('.') && fs.statSync(path.join(dir, n)).isFile()).sort();

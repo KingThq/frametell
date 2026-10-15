@@ -3,10 +3,9 @@
 // (SCRIPT.VOICE), including per-character onsets so pages can sync to words (P.cw). Pages are cached by text + voice.
 import fs from 'node:fs';
 import path from 'node:path';
-import vm from 'node:vm';
 import crypto from 'node:crypto';
-import { execFileSync, spawnSync } from 'node:child_process';
-import { FFMPEG, probe } from '@frametell/engine/tools/bins.mjs';
+import { execFile } from 'node:child_process';
+import { FFMPEG } from '@frametell/engine/tools/bins.mjs';
 import { ENGINE_DIR } from '@frametell/engine/tools/project.mjs';
 import type { TtsProvider, WordTime } from './tts.js';
 
@@ -20,6 +19,9 @@ export interface NarrateOptions {
   voice?: Partial<VoiceMeta>;
   onProgress?: (e: { page: string; index: number; total: number; cached: boolean }) => void;
   signal?: AbortSignal;
+  /** how a child is started (Node reading script.js, ffmpeg): a host confines it to the project with no network
+   *  (@frametell/agent's childCmd); directChild runs it as it is */
+  child: ChildCmd;
 }
 export interface NarrateResult { synthesized: number; duration: number; warnings: string[] }
 
@@ -29,14 +31,46 @@ const norm = (s: string) => s.replace(/[\s\p{P}\p{S}]/gu, '');
 // a cue without its own closing mark gets a comma, so the voice pauses but does not end the sentence (English gets ',')
 const withStop = (s: string) => (/[\p{P}]$/u.test(s.trim()) ? s.trim() : s.trim() + (/[A-Za-z0-9]$/.test(s.trim()) ? ',' : '，'));
 
-function loadScript(dir: string) {
-  const ctx = vm.createContext({});
-  vm.runInContext(fs.readFileSync(path.join(ENGINE_DIR, 'runtime/timing.js'), 'utf8'), ctx);
-  vm.runInContext(fs.readFileSync(path.join(dir, 'script.js'), 'utf8'), ctx);
-  return ctx as unknown as { SCRIPT: { META: Record<string, any>; PAGES: Page[] }; TIMING: any };
+/** how a child is started: the command and environment that run `cmd argv` for the project in `dir` */
+export type ChildCmd = (dir: string, cmd: string, argv: string[]) => { cmd: string; argv: string[]; env: Record<string, string | undefined> };
+/** a child run as it is (no sandbox asked for) */
+export const directChild: ChildCmd = (_dir, cmd, argv) => ({ cmd, argv, env: { ...process.env, ...(process.versions.electron ? { ELECTRON_RUN_AS_NODE: '1' } : {}) } });
+
+/** a child to its end; one that could not start, was stopped or ran too long rejects */
+function runChild(child: ChildCmd, dir: string, cmd: string, argv: string[], signal?: AbortSignal): Promise<{ code: number; out: string; err: string }> {
+  const c = child(dir, cmd, argv);
+  return new Promise((ok, fail) => execFile(c.cmd, c.argv, { cwd: dir, env: c.env, encoding: 'utf8', maxBuffer: 64 << 20, timeout: 300_000, signal }, (e, out, err) => {
+    if (e && typeof e.code !== 'number') return fail(e.name === 'AbortError' ? e : new Error(`${path.basename(cmd)}: ${String(err || e.message).trim().slice(-1000)}`));
+    ok({ code: e ? (e.code as number) : 0, out: String(out), err: String(err) });
+  }));
 }
 
-const dur = (f: string) => probe(f).duration;
+/** ffmpeg on a file of the project, local files only: a "sound" that is really a playlist of web addresses fetches
+ *  nothing. `pre` goes before the input, `post` after it; resolves with what it printed */
+async function ffmpeg(child: ChildCmd, dir: string, pre: string[], input: string, post: string[], signal?: AbortSignal): Promise<string> {
+  const r = await runChild(child, dir, FFMPEG, ['-hide_banner', ...pre, '-protocol_whitelist', 'file,pipe', '-i', input, ...post], signal);
+  if (r.code) throw new Error(`ffmpeg: ${r.err.trim().split('\n').pop()}`);
+  return r.err;
+}
+
+/** a media file's length in seconds, from what `ffmpeg -i` prints (it exits 1 there: no output is named) */
+export async function mediaDuration(dir: string, file: string, child: ChildCmd, signal?: AbortSignal): Promise<number> {
+  const { err } = await runChild(child, dir, FFMPEG, ['-hide_banner', '-protocol_whitelist', 'file,pipe', '-i', file], signal);
+  const d = /Duration: (\d+):(\d+):([\d.]+)/.exec(err);
+  if (!d) throw new Error(`cannot read ${file}: ${err.trim().split('\n').pop()}`);
+  return +d[1] * 3600 + +d[2] * 60 + +d[3];
+}
+
+export interface ScriptData { meta: Record<string, any>; pages: Page[]; duration: number | null }
+/** script.js (with `voice`: voice.js too, and the film's length) as data. The engine evaluates them in a child
+ *  (script-data.mjs), never this process: they are code the agent wrote */
+export async function scriptData(dir: string, child: ChildCmd, o: { voice?: boolean; signal?: AbortSignal } = {}): Promise<ScriptData> {
+  const r = await runChild(child, dir, process.execPath, [path.join(ENGINE_DIR, 'tools', 'script-data.mjs'), ...(o.voice ? ['--voice'] : [])], o.signal);
+  let data: ScriptData | undefined;
+  try { data = JSON.parse(r.out.trim().split('\n').pop() || ''); } catch { /* said below */ }
+  if (r.code || !data || !Array.isArray(data.pages)) throw new Error(`script.js cannot be read: ${(r.err || r.out).trim().slice(-1000)}`);
+  return data;
+}
 
 /** Speech span of every cue, from the per-character timestamps. */
 function spans(spoken: string[], words: WordTime[], warn: (m: string) => void) {
@@ -58,14 +92,14 @@ function spans(spoken: string[], words: WordTime[], warn: (m: string) => void) {
 }
 
 /** Cut points: always inside a detected silence; long silences keep MAXPAUSE on each side. */
-function cut(wav: string, sp: { s: number; e: number }[]) {
-  const log = spawnSync(FFMPEG, ['-hide_banner', '-i', wav, '-af', `silencedetect=noise=${SIL_DB}dB:d=0.06`, '-f', 'null', '-']).stderr.toString();
+async function cut(child: ChildCmd, dir: string, wav: string, sp: { s: number; e: number }[], signal?: AbortSignal) {
+  const log = await ffmpeg(child, dir, [], wav, ['-af', `silencedetect=noise=${SIL_DB}dB:d=0.06`, '-f', 'null', '-'], signal);
   const sil: [number, number][] = [];
   let st: number | null = null;
   for (const m of log.matchAll(/silence_(start|end): ([\d.]+)/g)) {
     if (m[1] === 'start') st = +m[2]; else if (st != null) { sil.push([st, +m[2]]); st = null; }
   }
-  const D = dur(wav);
+  const D = await mediaDuration(dir, wav, child, signal);
   if (st != null) sil.push([st, D]);
   const n = sp.length;
   const segs = sp.map(() => ({ a: 0, b: D, o: 0, fin: false, fout: false, join: false }));
@@ -120,7 +154,8 @@ function charOnsets(cueText: string, spokenText: string, words: WordTime[], word
 }
 
 export async function narrate(dir: string, opts: NarrateOptions): Promise<NarrateResult> {
-  const { SCRIPT } = loadScript(dir);
+  const S = await scriptData(dir, opts.child, { signal: opts.signal });
+  const SCRIPT = { META: S.meta, PAGES: S.pages };
   const V: VoiceMeta = { ...(SCRIPT.META.voice || {}), ...(opts.voice || {}) } as VoiceMeta;
   if (!V.speaker) throw new Error('no voice set (META.voice.speaker)');
   const warnings: string[] = [];
@@ -161,30 +196,29 @@ export async function narrate(dir: string, opts: NarrateOptions): Promise<Narrat
         fs.writeFileSync(wj, JSON.stringify(words));
         made++; cachedPage = false;
       }
-      if (!fs.existsSync(wav)) execFileSync(FFMPEG, ['-y', '-loglevel', 'error', '-i', mp3, '-ac', '1', '-ar', '24000', wav]);
+      if (!fs.existsSync(wav)) await ffmpeg(opts.child, dir, ['-y', '-loglevel', 'error'], mp3, ['-ac', '1', '-ar', '24000', wav], opts.signal);
       const words = JSON.parse(fs.readFileSync(wj, 'utf8')) as WordTime[];
       const sp = spans(spoken, words, (m) => warnings.push(`${pg.id}：${m}`));
-      const { segs, bad } = cut(wav, sp);
+      const { segs, bad } = await cut(opts.child, dir, wav, sp, opts.signal);
       if (bad.length) throw new Error(`${pg.id}: cutting the take into lines would drop audible sound at ${bad.map(([a, b]) => `${a.toFixed(2)}–${b.toFixed(2)}s`).join(' ')}`);
       // which word starts each cue (for per-character onsets)
       const firstWord: number[] = [];
       { let acc = 0, wi = 0, pos = 0; for (const s of spoken) { while (wi < words.length && pos < acc) { pos += norm(words[wi].word).length; wi++; } firstWord.push(wi); acc += norm(s).length; } }
-      run.cues.forEach((c, k) => {
+      for (const [k, c] of run.cues.entries()) {
         const g = segs[k], f = `${base}-${k}.wav`;
         const af = `atrim=start=${g.a.toFixed(3)}:end=${g.b.toFixed(3)},asetpts=N/SR/TB` + (g.fin ? ',afade=t=in:d=0.01' : '') + (g.fout ? ',areverse,afade=t=in:d=0.02,areverse' : '');
-        execFileSync(FFMPEG, ['-y', '-loglevel', 'error', '-i', wav, '-af', af, f]);
+        await ffmpeg(opts.child, dir, ['-y', '-loglevel', 'error'], wav, ['-af', af, f], opts.signal);
         const v: Record<string, unknown> = { t: text(c), f: 'audio/' + path.basename(f), d: +(g.b - g.a).toFixed(3), o: +g.o.toFixed(3) };
         const kk = charOnsets(text(c), spoken[k], words, firstWord[k], g.a);
         if (kk) v.k = kk;
         if (g.join) v.join = 1;
         out[run.idx[k]] = v;
-      });
+      }
     }
     pages.push(out);
     opts.onProgress?.({ page: pg.id, index: pi, total: SCRIPT.PAGES.length, cached: cachedPage });
   }
   fs.writeFileSync(path.join(dir, 'voice.js'), `/* Generated by Frametell — real narration timing. Do not edit; narrate again after changing cues. */\nSCRIPT.VOICE = ${JSON.stringify({ speaker: V.speaker, provider: opts.tts.id, pages })};\n`);
-  const { SCRIPT: S2, TIMING } = (() => { const x = loadScript(dir); vm.runInContext(fs.readFileSync(path.join(dir, 'voice.js'), 'utf8'), x as unknown as vm.Context); return x; })();
-  const L = TIMING.layout(S2.PAGES, { ...S2.META, voice: (S2 as any).VOICE });
-  return { synthesized: made, duration: L.duration, warnings };
+  const { duration } = await scriptData(dir, opts.child, { voice: true, signal: opts.signal });
+  return { synthesized: made, duration: duration ?? 0, warnings };
 }

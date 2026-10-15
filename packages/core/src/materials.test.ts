@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import JSZip from 'jszip';
+import { execFileSync } from 'node:child_process';
 import { prepareMaterials, htmlToMarkdown } from './materials.js';
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'fs-materials-'));
@@ -183,4 +184,21 @@ test('idempotent, never touches originals or a user-written x.md, reports failur
 
 test('htmlToMarkdown: nested and ordered lists', () => {
   assert.equal(htmlToMarkdown('<ol><li>one<ul><li>a</li></ul></li><li>two</li></ol><p>after</p>'), '1. one\n  - a\n2. two\n\nafter');
+});
+
+const bwrap = process.platform === 'linux' && (() => { try { execFileSync('bwrap', ['--ro-bind', '/', '/', '--dev', '/dev', '--proc', '/proc', 'true'], { stdio: 'ignore' }); return true; } catch { return false; } })();
+test('with no network, documents are parsed in a confined child, with the same result', { skip: !bwrap && 'bubblewrap only' }, async () => {
+  const a = tmp(), b = tmp();
+  const was = process.env.FRAMETELL_SANDBOX_NONET;
+  try {
+    fs.writeFileSync(path.join(a, 'r.docx'), await docx());
+    fs.writeFileSync(path.join(b, 'r.docx'), await docx());
+    const here = await prepareMaterials(a, 'zh');
+    process.env.FRAMETELL_SANDBOX_NONET = '1';
+    assert.deepEqual(await prepareMaterials(b, 'zh'), JSON.parse(JSON.stringify(here)));   // the child's answer is JSON: no keys left undefined
+    assert.equal(fs.readFileSync(path.join(b, 'r.md'), 'utf8'), fs.readFileSync(path.join(a, 'r.md'), 'utf8'));
+  } finally {
+    if (was === undefined) delete process.env.FRAMETELL_SANDBOX_NONET; else process.env.FRAMETELL_SANDBOX_NONET = was;
+    for (const d of [a, b]) fs.rmSync(d, { recursive: true, force: true });
+  }
 });

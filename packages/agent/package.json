@@ -29,6 +29,10 @@
     "./runtime/codex": {
       "types": "./dist/runtime/codex.d.ts",
       "default": "./dist/runtime/codex.js"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "default": "./dist/testing.js"
     }
   },
   "files": [

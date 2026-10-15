@@ -16,7 +16,7 @@ export const HW_ENCODE = process.platform === 'darwin' ? ['-c:v', 'h264_videotoo
 
 /** Duration (s) and picture size of a media file, read from what `ffmpeg -i` prints (no ffprobe needed). */
 export function probe(file) {
-  const out = spawnSync(FFMPEG, ['-hide_banner', '-i', file], { encoding: 'utf8' }).stderr || '';
+  const out = spawnSync(FFMPEG, ['-hide_banner', '-protocol_whitelist', 'file,pipe', '-i', file], { encoding: 'utf8' }).stderr || '';
   const d = /Duration: (\d+):(\d+):([\d.]+)/.exec(out);
   if (!d) throw new Error(`cannot read ${file}: ${out.trim().split('\n').pop()}`);
   const v = /Stream #[^\n]*Video:[^\n]*?(\d{2,5})x(\d{2,5})/.exec(out);
