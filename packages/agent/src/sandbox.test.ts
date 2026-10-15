@@ -120,6 +120,12 @@ test('every engine tool is launched through engineCmd, so none can bypass the sa
   assert.deepEqual(outside, [], 'process.execPath may only appear in the engineCmd definition');
 });
 
+/** a variable of a child's environment by name. Windows' environment is case-insensitive: process.env there keeps one
+ *  key per name in whatever case it was first set (`Path`, not `PATH`; HTTPS_PROXY and https_proxy are one variable),
+ *  and a child given that key sees it under every case. */
+const envVar = (env: Record<string, string | undefined>, name: string) =>
+  process.platform === 'win32' ? Object.entries(env).find(([k]) => k.toUpperCase() === name.toUpperCase())?.[1] : env[name];
+
 test('the shell and the engine tools see only what they need of the environment, never a secret under any name', async () => {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ft-env-')));
   const planted = { BILLING_DATABASE_URL: 'postgres://u:p@h/db', REDIS_URL: 'rediss://default:pw@r:6379', STRIPE_SECRET_KEY: 'sk_x', NODE_OPTIONS: '--require /tmp/evil.js', FRAMETELL_SANDBOX_HIDE_X: 'kept' };
@@ -133,8 +139,8 @@ test('the shell and the engine tools see only what they need of the environment,
     assert.ok(!out.includes('u:p@h') && !out.includes('default:pw'), 'a password reached the shell');
     assert.match(out, /^PATH=/m); assert.match(out, /^HOME=/m);
     const env = nodeEnv({ SNAP_TILE: '320' });
-    assert.equal(env.BILLING_DATABASE_URL, undefined); assert.equal(env.REDIS_URL, undefined); assert.equal(env.NODE_OPTIONS, undefined);
-    assert.equal(env.SNAP_TILE, '320'); assert.equal(env.PATH, process.env.PATH); assert.equal(env.FRAMETELL_SANDBOX_HIDE_X, 'kept');
+    for (const k of ['BILLING_DATABASE_URL', 'REDIS_URL', 'STRIPE_SECRET_KEY', 'NODE_OPTIONS']) assert.equal(envVar(env, k), undefined, `${k} reached the engine tools`);
+    assert.equal(envVar(env, 'SNAP_TILE'), '320'); assert.equal(envVar(env, 'PATH'), process.env.PATH); assert.equal(envVar(env, 'FRAMETELL_SANDBOX_HIDE_X'), 'kept');
   } finally {
     for (const [k, v] of Object.entries(was)) if (v === undefined) delete process.env[k]; else process.env[k] = v;
     fs.rmSync(root, { recursive: true, force: true });
@@ -148,7 +154,7 @@ test('the user\'s proxy (upper and lower case) reaches the shell and the engine 
   Object.assign(process.env, planted);
   try {
     const env = nodeEnv();
-    for (const [k, v] of Object.entries(planted)) assert.equal(env[k], v, `${k} did not reach the engine tools`);
+    for (const [k, v] of Object.entries(planted)) assert.equal(envVar(env, k), v, `${k} did not reach the engine tools`);
     const bash = fileTools(root).find((t) => t.name === 'bash')!;
     const r = await bash.execute('1', { command: 'env' }, undefined as never);
     const out = (r.content[0] as { text: string }).text;
