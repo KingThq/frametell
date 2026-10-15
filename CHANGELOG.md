@@ -22,7 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- A colour name the style's palette doesn't have (`yellowF` in a style without it) no longer reaches the page as an invalid CSS colour, which drew black: a light fill `<name>F` falls back to its colour mixed toward the paper, any other name to ink, and the page check reports the name as an error, with the style's names.
+- A colour name the style's palette doesn't have (`yellowF` in a style without it) no longer reaches the page as an invalid CSS colour, which drew black: a light fill `<name>F` of a colour the palette has is that colour mixed toward the paper, and any other name is ink and reported by the page check as an error, with the style's names.
 
 ### Security
 
