@@ -73,6 +73,8 @@ await esbuild.build({
   banner: { js: "import { createRequire as __frametellRequire } from 'node:module'; const require = __frametellRequire(import.meta.url);" },
 });
 fs.copyFileSync(path.join(DESKTOP, 'dist/bins.js'), path.join(APP, 'dist/bins.js'));
+// our licence and the third-party notices, at the top of the app
+for (const f of ['LICENSE', 'THIRD_PARTY_NOTICES.md']) fs.copyFileSync(path.join(ROOT, f), path.join(APP, f));
 fs.mkdirSync(path.join(APP, 'src'), { recursive: true });
 fs.copyFileSync(path.join(DESKTOP, 'src/preload.cjs'), path.join(APP, 'src/preload.cjs'));
 

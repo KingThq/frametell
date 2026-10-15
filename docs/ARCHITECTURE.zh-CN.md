@@ -5,7 +5,7 @@
 Frametell 是一个本地运行的开源产品：一条命令启动，在浏览器里打开一个完整的面板。用户上传资料、选时长和风格，导演 Agent 先出分镜给用户确认，再写口播、配音、逐页画面并自检，最后渲染成 1080p 视频，附带 SRT 字幕和发布信息。用户全程不接触代码。
 
 ```bash
-npx frametell          # 启动本地服务并打开 http://localhost:5317
+node apps/cli/dist/cli.js serve    # 启动本地服务并打开面板（安装步骤见 README）
 ```
 
 ## 设计原则

@@ -1,7 +1,7 @@
 {
   "name": "@frametell/ui",
   "version": "0.5.1",
-  "private": false,
+  "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
