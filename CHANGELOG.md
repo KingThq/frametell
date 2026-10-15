@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - A colour name the style's palette doesn't have (`yellowF` in a style without it) no longer reaches the page as an invalid CSS colour, which drew black: a light fill `<name>F` of a colour the palette has is that colour mixed toward the paper, and any other name is ink and reported by the page check as an error, with the style's names.
+- warm-story's objects (`P.tag`, `P.hand`, `P.calendar`, `P.snowball`, …) can be hidden with `hide(t, dur)` like any other element; a page that called it no longer fails to draw.
 
 ### Security
 
