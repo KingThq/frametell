@@ -21,7 +21,7 @@ pnpm build
 node apps/cli/dist/cli.js serve
 ```
 
-To make a film you need a key for a model provider and, for voiceover, a Volcengine TTS or ElevenLabs key. You can add them under Settings in the studio, or set them as environment variables (see the README).
+To make a film you need a key for a model provider and, for voiceover, an ElevenLabs or Volcengine TTS key. You can add them under Settings in the studio, or set them as environment variables (see the README).
 
 Your projects, settings and keys are stored in `~/.frametell`. Nothing in that directory belongs in the repository.
 

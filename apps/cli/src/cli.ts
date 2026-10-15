@@ -36,7 +36,11 @@ async function run(argv: string[]) {
   // Pi only: the Claude Agent SDK and Codex runtimes are parked (code kept in packages/agent; see core/runner.ts)
   const runtime: AgentRuntime = piRuntime(catalog.models, catalog.get(info.provider, info.id)!);
 
-  const tts = process.env.VOLCENGINE_TTS_API_KEY ? volcengineTts(process.env.VOLCENGINE_TTS_API_KEY) : process.env.ELEVENLABS_API_KEY ? elevenLabsTts(process.env.ELEVENLABS_API_KEY) : undefined;
+  // the film's language picks the voice service when both keys are set: Volcengine's voices are Chinese, ElevenLabs' speak English
+  const lang = o.lang === 'en' || o.lang === 'zh' ? o.lang : locale();
+  const volc = process.env.VOLCENGINE_TTS_API_KEY ? volcengineTts(process.env.VOLCENGINE_TTS_API_KEY) : undefined;
+  const eleven = process.env.ELEVENLABS_API_KEY ? elevenLabsTts(process.env.ELEVENLABS_API_KEY) : undefined;
+  const tts = lang === 'en' ? eleven ?? volc : volc ?? eleven;
   const voice = tts ? { speaker: o.voice || (tts.id === 'volcengine' ? 'zh_male_yuanboxiaoshu_uranus_bigtts' : 'JBFqnCBsd6RMkjVDRZzb'), rate: 0, instruction: '像跟朋友分享一个实用的发现，语气轻松、真诚、自然，有轻重缓急' } : undefined;
 
   const style = o.style || 'warm-story';
@@ -61,7 +65,7 @@ async function run(argv: string[]) {
     else if (e.type === 'gate') console.log(`[${sec(t0)}]   ` + tr(`成片门禁：${e.red ? '红灯 ' + JSON.stringify(e.blank) : '通过'}`, `Final check: ${e.red ? 'failed ' + JSON.stringify(e.blank) : 'passed'}`));
     else if (e.type === 'error') console.log(`[${sec(t0)}] ✗ ${e.message}`);
   };
-  const director = new Director({ dir, runtime, style, brief: { durationSec: +(o.duration || 60), topic: o.topic, lang: o.lang === 'en' || o.lang === 'zh' ? o.lang : locale(), replyLang: locale() }, tts, voice, prices: { ...info.cost, currency: info.currency }, concurrency: +(o.concurrency || 10), emit });
+  const director = new Director({ dir, runtime, style, brief: { durationSec: +(o.duration || 60), topic: o.topic, lang, replyLang: locale() }, tts, voice, prices: { ...info.cost, currency: info.currency }, concurrency: +(o.concurrency || 10), emit });
   await director.run();
   const out = await director.render();   // the CLI's run ends with the mp4
   const u = director.usage, c = director.cost();

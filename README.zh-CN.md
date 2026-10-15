@@ -6,6 +6,10 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/sitor-ai/frametell/releases/latest"><img src="https://img.shields.io/badge/%E4%B8%8B%E8%BD%BD-macOS%20(Apple%20%E8%8A%AF%E7%89%87)-1C1917?logo=apple&logoColor=white" alt="下载帧言 macOS 版（Apple 芯片）"></a>
+</p>
+
+<p align="center">
   <a href="README.md">English</a> · <b>简体中文</b>
 </p>
 
@@ -45,13 +49,23 @@
 
 内置风格：`warm-story`（暖调叙事）、`study`（安静书房）、`chalkboard`（黑板）、`whiteboard`（白板）、`tech-dark`（深色科技）。
 
-## 快速开始
+## 开始使用
+
+### 下载应用
+
+**macOS（Apple 芯片）**：从 [最新版本](https://github.com/sitor-ai/frametell/releases/latest) 下载 `.dmg`，打开后把帧言拖进「应用程序」。应用经过 Apple 签名和公证。本机还需要装有 Chrome、Edge 或 Chromium，帧言用它来画页面和渲染。
+
+打开后在「设置」里填上模型服务商的 key（Anthropic、OpenAI、Google、DeepSeek 等），配音再填一个火山引擎 TTS 或 ElevenLabs 的 key。
+
+Windows 和 Intel Mac 暂时还没有安装包，可以先从源码运行。
+
+### 从源码运行
 
 需要 Node.js 22.19 以上、pnpm，以及本机装有 Chrome、Edge 或 Chromium。FFmpeg 已内置。
 
 ```bash
 git clone https://github.com/sitor-ai/frametell.git && cd frametell
-pnpm install && pnpm build
+pnpm install && pnpm build    # 在国内可以先 export ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ 加速
 
 export ANTHROPIC_API_KEY=...         # 或 OPENAI_API_KEY、GEMINI_API_KEY …
 export VOLCENGINE_TTS_API_KEY=...    # 可选，配音用；也可以用 ELEVENLABS_API_KEY
