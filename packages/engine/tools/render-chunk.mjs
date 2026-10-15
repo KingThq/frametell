@@ -1,12 +1,13 @@
 // Renders frames [f0, f1) at FPS to an mp4 chunk. Usage (from a project dir): node engine/tools/render-chunk.mjs <f0> <f1> <fps> <out.mp4>
 //   or: render-chunk.mjs --jobs <list.json> <fps> — several chunks [{ a, b, out }] in one browser, one after another
-// HW=1 (render.mjs --hw): encode on the Mac's media engine (h264_videotoolbox) so every CPU core is left for the browsers.
+// HW=1 (render.mjs --hw): encode on the machine's media engine (the Mac's, or an NVIDIA card's) so every CPU core is left
+// for the browsers. JPEG_QUALITY (render.mjs --jpeg-quality): how frames come out of Chrome; 92 by default.
 // A browser that stops answering exits with STALLED (3) instead of waiting for ever; render.mjs draws that share again.
 import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { openStage, within, finish } from './lib.mjs';
-import { FFMPEG } from './bins.mjs';
+import { FFMPEG, HW_ENCODE } from './bins.mjs';
 const jobsMode = process.argv[2] === '--jobs';
 const fps = +process.argv[4];
 const jobs = jobsMode ? JSON.parse(fs.readFileSync(process.argv[3], 'utf8')) : [{ a: +process.argv[2], b: +process.argv[3], out: process.argv[5] }];
@@ -37,9 +38,9 @@ const cdp = await page.context().newCDPSession(page);
 // the stage's own size: without a clip CDP returns the browser window's visible area (1920×993 on a desktop Chrome)
 const { width, height } = page.viewportSize();
 const clip = { x: 0, y: 0, width, height, scale: 1 };
-const grab = async () => Buffer.from((await cdp.send('Page.captureScreenshot', { format: 'jpeg', quality: 92, optimizeForSpeed: true, clip })).data, 'base64');
+const grab = async () => Buffer.from((await cdp.send('Page.captureScreenshot', { format: 'jpeg', quality: +(process.env.JPEG_QUALITY || 92), optimizeForSpeed: true, clip })).data, 'base64');
 // veryfast: x264 at 'medium' took the CPU the browsers need to draw frames; at CRF 16 the difference does not show
-const enc = process.env.HW === '1' ? ['-c:v', 'h264_videotoolbox', '-q:v', '72', '-realtime', '0'] : ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '16'];
+const enc = process.env.HW === '1' ? [...HW_ENCODE, ...(process.platform === 'darwin' ? ['-realtime', '0'] : [])] : ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '16'];
 let code = 0;
 for (const { a: f0, b: f1, out } of jobs) {
   const ff = spawn(FFMPEG, ['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', String(fps), '-c:v', 'mjpeg', '-i', '-',

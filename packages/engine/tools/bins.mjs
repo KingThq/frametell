@@ -11,6 +11,9 @@ const tryRequire = (id) => { try { return require(id); } catch { return null; } 
 
 export const FFMPEG = process.env.FFMPEG_PATH || tryRequire('ffmpeg-static') || 'ffmpeg';
 
+/** --hw's H.264 encoder: the Mac's media engine, elsewhere an NVIDIA card's (NVENC; a render box with a GPU) */
+export const HW_ENCODE = process.platform === 'darwin' ? ['-c:v', 'h264_videotoolbox', '-q:v', '72'] : ['-c:v', 'h264_nvenc', '-preset', 'p4', '-rc', 'constqp', '-qp', '18'];
+
 /** Duration (s) and picture size of a media file, read from what `ffmpeg -i` prints (no ffprobe needed). */
 export function probe(file) {
   const out = spawnSync(FFMPEG, ['-hide_banner', '-i', file], { encoding: 'utf8' }).stderr || '';

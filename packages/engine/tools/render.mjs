@@ -3,7 +3,9 @@
 //   split across machines: --plan prints the segments as JSON (PLAN {…}) and exits; --segments 0,3,7 draws only those, each
 //   also with its subtitles (seg-….subs.mp4), into the segment cache and exits; a whole run then finds every segment
 //   cached and only joins them, voices the film and joins the subtitled segments
-//   --hw: hardware H.264 (Apple media engine) for chunks and the subtitle pass — frees the CPU for the browsers; slightly larger files [--workers 12] [--from 0] [--to <end>] [--name <file name>] [--skip-video] [--skip-subs]
+//   --hw: hardware H.264 (the Mac's media engine, or NVENC on a machine with an NVIDIA card) for chunks and the subtitle
+//   pass — frees the CPU for the browsers; slightly larger files. --jpeg-quality 85: frames out of Chrome at that JPEG
+//   quality (92 by default; lower is quicker to capture) [--workers 12] [--from 0] [--to <end>] [--name <file name>] [--skip-video] [--skip-subs]
 import { spawn, execFileSync } from 'child_process';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'crypto';
@@ -11,7 +13,7 @@ import fs from 'fs';
 import path from 'path';
 import { loadEpisode, OUT, PORTRAIT, EP } from './lib.mjs';
 import { mixTrack } from './mix.mjs';
-import { FFMPEG, probe } from './bins.mjs';
+import { FFMPEG, HW_ENCODE, probe } from './bins.mjs';
 const dir = path.dirname(fileURLToPath(import.meta.url));
 const arg = (k, d) => { const i = process.argv.indexOf('--' + k); return i > 0 ? process.argv[i + 1] : d; };
 const has = (k) => process.argv.includes('--' + k);
@@ -24,6 +26,8 @@ if (META.voice) {
 // --portrait: 1080×1920 from pages-portrait/, files get a portrait tag; children inherit PORTRAIT=1
 if (PORTRAIT) process.env.PORTRAIT = '1';
 if (has('hw')) process.env.HW = '1';
+const JPEG = +arg('jpeg-quality', 92);
+process.env.JPEG_QUALITY = String(JPEG);
 // --watermark: a small Frametell mark in a corner of every frame, drawn with the page (a free plan's films on a hosted
 // service); children inherit WATERMARK=1, and marked segments are cached apart from unmarked ones
 const WATERMARK = has('watermark');
@@ -64,7 +68,7 @@ const subbed = (g) => g.out.replace(/\.mp4$/, '.subs.mp4');
 /** a segment with the subtitles over it (re-encoded): its part of the subtitle track, trimmed to its frames */
 const subtitle = (g) => run(FFMPEG, ['-y', '-loglevel', 'error', '-i', g.out, '-f', 'concat', '-safe', '0', '-i', path.join(subsDir, 'list.txt'),
   '-filter_complex', `[1:v]fps=${FPS},trim=start=${(g.a / FPS - from).toFixed(4)}:end=${(g.b / FPS - from).toFixed(4)},setpts=PTS-STARTPTS,format=rgba[s];[0:v][s]overlay=0:0:format=auto:shortest=1,format=yuv420p[v]`,
-  '-map', '[v]', ...(has('hw') ? ['-c:v', 'h264_videotoolbox', '-q:v', '72'] : ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '16']), '-r', String(FPS), subbed(g) + '.part.mp4'])
+  '-map', '[v]', ...(has('hw') ? HW_ENCODE : ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '16']), '-r', String(FPS), subbed(g) + '.part.mp4'])
   .then(() => fs.renameSync(subbed(g) + '.part.mp4', subbed(g)));
 let segs = [];
 
@@ -82,7 +86,7 @@ if (!has('skip-video')) {
   const shared = digest(
     ...[...files(path.join(kitDir, 'runtime')), ...files(path.join(kitDir, 'lib')), ...files(path.join(kitDir, 'styles', META.style || 'warm-story'), false)].map((f) => read(f).toString('base64')),
     ...files(path.join(EP, 'extras')).map((f) => read(f).toString('base64')), read(path.join(EP, 'index.html')).toString(),
-    { ...META, publish: undefined, voice: undefined }, L.pages.map((p) => [p.id, p.section, p.title]), FPS, PORTRAIT, has('hw'), ...(WATERMARK ? ['watermark'] : []),
+    { ...META, publish: undefined, voice: undefined }, L.pages.map((p) => [p.id, p.section, p.title]), FPS, PORTRAIT, has('hw'), ...(WATERMARK ? ['watermark'] : []), ...(JPEG !== 92 ? [`jpeg-${JPEG}`] : []),
     // how frames are captured: bumped when that changes, so segments drawn the old way are drawn again (2: the window
     // at the stage's size, where it was short and the bottom rows came out black)
     'capture-2',
@@ -189,7 +193,7 @@ if (!has('skip-subs') && segs.length && segs.every((g) => fs.existsSync(subbed(g
   await run(process.execPath, [path.join(dir, 'subs.mjs'), String(from), String(to)]);
   await run(FFMPEG, ['-y', '-loglevel', 'error', '-i', nosub, '-f', 'concat', '-safe', '0', '-i', path.join(OUT, (PORTRAIT ? 'subs-portrait' : 'subs') + '/list.txt'),
     '-filter_complex', `[1:v]fps=${FPS},format=rgba[s];[0:v][s]overlay=0:0:format=auto:shortest=1,format=yuv420p[v]`,
-    '-map', '[v]', '-map', '0:a?', '-c:a', 'copy', ...(has('hw') ? ['-c:v', 'h264_videotoolbox', '-q:v', '72'] : ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '16']), '-r', String(FPS), '-movflags', '+faststart', withsub]);
+    '-map', '[v]', '-map', '0:a?', '-c:a', 'copy', ...(has('hw') ? HW_ENCODE : ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '16']), '-r', String(FPS), '-movflags', '+faststart', withsub]);
   console.timeEnd('subs');
 }
 const dur = async (f) => probe(f).duration;
