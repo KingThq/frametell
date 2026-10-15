@@ -70,6 +70,56 @@ const subtitle = (g) => run(FFMPEG, ['-y', '-loglevel', 'error', '-i', g.out, '-
   '-filter_complex', `[1:v]fps=${FPS},trim=start=${(g.a / FPS - from).toFixed(4)}:end=${(g.b / FPS - from).toFixed(4)},setpts=PTS-STARTPTS,format=rgba[s];[0:v][s]overlay=0:0:format=auto:shortest=1,format=yuv420p[v]`,
   '-map', '[v]', ...(has('hw') ? HW_ENCODE : ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '16']), '-r', String(FPS), subbed(g) + '.part.mp4'])
   .then(() => fs.renameSync(subbed(g) + '.part.mp4', subbed(g)));
+// The film's sound as one AAC track, cached in out/sound under everything it is made of (each cue's clip and where it
+// starts, the sound effects, the mixing code): an export after a picture-only change, or one whose sound was made while
+// its frames were drawn elsewhere (--audio-only), only muxes it in.
+const voiced = L.pages.flatMap((p) => p.cues).filter((c) => c.audio);
+const hasSfx = L.pages.some((p) => p.sfx && p.sfx.length);
+async function soundtrack() {
+  if (!voiced.length && !hasSfx) return null;
+  const sha = (b) => createHash('sha1').update(b).digest('hex');
+  const bytes = (f) => { try { return fs.readFileSync(f); } catch { return Buffer.alloc(0); } };
+  const key = sha(JSON.stringify(['sound-1', from, to, hasSfx,
+    voiced.map((c) => [c.audio, c.audioAt ?? c.start, sha(bytes(path.join(EP, c.audio)))]),
+    hasSfx ? TIMING.sfxTimes(L).map((x) => [x, sha(bytes(path.join(EP, x.f)))]) : [],
+    sha(bytes(path.join(dir, 'mix.mjs'))),
+  ])).slice(0, 16);
+  const soundDir = path.join(OUT, 'sound'), file = path.join(soundDir, `sound-${key}.m4a`);
+  if (fs.existsSync(file)) return file;
+  fs.mkdirSync(soundDir, { recursive: true });
+  const part = file.replace(/\.m4a$/, '.part.m4a');
+  if (hasSfx) {
+    // narration + sound effects / music beds (page.sfx) → stereo mix
+    const raw = path.join(OUT, 'mix.f32');
+    mixTrack(TIMING, L, from, to, raw, EP);
+    await run(FFMPEG, ['-y', '-loglevel', 'error', '-f', 'f32le', '-ar', '48000', '-ac', '2', '-i', raw, '-af', 'loudnorm=I=-16:TP=-1.5:LRA=14', '-ar', '48000', '-c:a', 'aac', '-b:a', '256k', part]);
+  } else {
+    // narration (voice.js): every cue's clip placed at its start → one loudness-normalized track
+    const SR = 24000, pcm = new Int16Array(Math.ceil((to - from) * SR));
+    for (const c of voiced) {
+      const b = execFileSync(FFMPEG, ['-loglevel', 'error', '-i', path.join(EP, c.audio), '-f', 's16le', '-ac', '1', '-ar', String(SR), '-'], { maxBuffer: 1 << 28 });
+      const clip = new Int16Array(b.buffer, b.byteOffset, b.length >> 1), at = Math.round(((c.audioAt ?? c.start) - from) * SR);
+      for (let i = 0; i < clip.length; i++) { const j = at + i; if (j >= 0 && j < pcm.length) pcm[j] = Math.max(-32768, Math.min(32767, pcm[j] + clip[i])); }
+    }
+    const wav = path.join(OUT, 'voice.wav'), head = Buffer.alloc(44);
+    head.write('RIFF', 0); head.writeUInt32LE(36 + pcm.length * 2, 4); head.write('WAVEfmt ', 8); head.writeUInt32LE(16, 16); head.writeUInt16LE(1, 20); head.writeUInt16LE(1, 22);
+    head.writeUInt32LE(SR, 24); head.writeUInt32LE(SR * 2, 28); head.writeUInt16LE(2, 32); head.writeUInt16LE(16, 34); head.write('data', 36); head.writeUInt32LE(pcm.length * 2, 40);
+    fs.writeFileSync(wav, Buffer.concat([head, Buffer.from(pcm.buffer)]));
+    await run(FFMPEG, ['-y', '-loglevel', 'error', '-i', wav, '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11', '-ar', '48000', '-c:a', 'aac', '-b:a', '192k', part]);
+  }
+  // only the current track is kept
+  for (const f of fs.readdirSync(soundDir)) if (f !== path.basename(part)) fs.rmSync(path.join(soundDir, f), { force: true });
+  fs.renameSync(part, file);
+  return file;
+}
+// --audio-only: make (or find) the film's sound and stop; a host does it while the frames are drawn elsewhere
+if (has('audio-only')) {
+  console.time('audio');
+  await soundtrack();
+  console.timeEnd('audio');
+  process.exit(0);
+}
+
 let segs = [];
 
 if (!has('skip-video')) {
@@ -152,33 +202,15 @@ if (!has('skip-video')) {
   await run(FFMPEG, ['-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', path.join(chunkDir, 'list.txt'), '-c', 'copy', '-movflags', '+faststart', nosub]);
   console.timeEnd('video');
 }
-// narration (voice.js): every cue's clip placed at its start → one loudness-normalized track, muxed into the silent video
-const voiced = L.pages.flatMap((p) => p.cues).filter((c) => c.audio);
-const hasSfx = L.pages.some((p) => p.sfx && p.sfx.length);
-if (hasSfx && fs.existsSync(nosub)) {
-  // narration + sound effects / music beds (page.sfx) → stereo mix
+if (fs.existsSync(nosub)) {
   console.time('audio');
-  const raw = path.join(OUT, 'mix.f32');
-  mixTrack(TIMING, L, from, to, raw, EP);
-  const tmp = nosub.replace(/\.mp4$/, '.tmp.mp4');
-  await run(FFMPEG, ['-y', '-loglevel', 'error', '-i', nosub, '-f', 'f32le', '-ar', '48000', '-ac', '2', '-i', raw, '-map', '0:v', '-map', '1:a', '-c:v', 'copy', '-af', 'loudnorm=I=-16:TP=-1.5:LRA=14', '-ar', '48000', '-c:a', 'aac', '-b:a', '256k', '-movflags', '+faststart', tmp]);
-  fs.renameSync(tmp, nosub);
-  console.timeEnd('audio');
-} else if (voiced.length && fs.existsSync(nosub)) {
-  console.time('audio');
-  const SR = 24000, pcm = new Int16Array(Math.ceil((to - from) * SR));
-  for (const c of voiced) {
-    const b = execFileSync(FFMPEG, ['-loglevel', 'error', '-i', path.join(process.cwd(), c.audio), '-f', 's16le', '-ac', '1', '-ar', String(SR), '-'], { maxBuffer: 1 << 28 });
-    const clip = new Int16Array(b.buffer, b.byteOffset, b.length >> 1), at = Math.round(((c.audioAt ?? c.start) - from) * SR);
-    for (let i = 0; i < clip.length; i++) { const j = at + i; if (j >= 0 && j < pcm.length) pcm[j] = Math.max(-32768, Math.min(32767, pcm[j] + clip[i])); }
+  const sound = await soundtrack();
+  if (sound) {
+    // the track is made already (and loudness-normalized): only muxed in, the video copied as it is
+    const tmp = nosub.replace(/\.mp4$/, '.tmp.mp4');
+    await run(FFMPEG, ['-y', '-loglevel', 'error', '-i', nosub, '-i', sound, '-map', '0:v', '-map', '1:a', '-c', 'copy', '-movflags', '+faststart', tmp]);
+    fs.renameSync(tmp, nosub);
   }
-  const wav = path.join(OUT, 'voice.wav'), head = Buffer.alloc(44);
-  head.write('RIFF', 0); head.writeUInt32LE(36 + pcm.length * 2, 4); head.write('WAVEfmt ', 8); head.writeUInt32LE(16, 16); head.writeUInt16LE(1, 20); head.writeUInt16LE(1, 22);
-  head.writeUInt32LE(SR, 24); head.writeUInt32LE(SR * 2, 28); head.writeUInt16LE(2, 32); head.writeUInt16LE(16, 34); head.write('data', 36); head.writeUInt32LE(pcm.length * 2, 40);
-  fs.writeFileSync(wav, Buffer.concat([head, Buffer.from(pcm.buffer)]));
-  const tmp = nosub.replace(/\.mp4$/, '.tmp.mp4');
-  await run(FFMPEG, ['-y', '-loglevel', 'error', '-i', nosub, '-i', wav, '-map', '0:v', '-map', '1:a', '-c:v', 'copy', '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11', '-ar', '48000', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', tmp]);
-  fs.renameSync(tmp, nosub);
   console.timeEnd('audio');
 }
 if (!has('skip-subs') && segs.length && segs.every((g) => fs.existsSync(subbed(g)))) {

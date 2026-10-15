@@ -5,8 +5,8 @@ import path from 'node:path';
 import { execFile, spawn, spawnSync } from 'node:child_process';
 import { ENGINE_DIR, linkProject } from '@frametell/engine/tools/project.mjs';
 import { lintStoryboard, type StoryboardIssue } from '@frametell/engine/tools/storyboard-lint.mjs';
-import { measure, type FilmGateResult } from '@frametell/engine/tools/film-gate.mjs';
-import { FFMPEG } from '@frametell/engine/tools/bins.mjs';
+import type { FilmGateResult } from '@frametell/engine/tools/film-gate.mjs';
+import { FFMPEG, probe } from '@frametell/engine/tools/bins.mjs';
 
 export interface Cue { i: number; at: number; abs: number; text: string }
 export interface PageTiming { id: string; start: number; end: number; speechEnd: number; cues: Cue[] }
@@ -192,7 +192,15 @@ export class Project {
     return { withSubs: this.file('out/' + withSubs), noSubs: this.file('out/' + noSubs) };
   }
 
-  gate(file: string): FilmGateResult { return measure(file); }
+  /** the film gate over a finished mp4, in a process of its own: it decodes the whole film (seconds), and in this
+   * process it held every other request of the host while it did */
+  async gate(file: string): Promise<FilmGateResult> {
+    const r = await tool(this.dir, 'film-gate.mjs', [file, '--json'], { signal: this.signal });
+    try { return JSON.parse(r.out.split('\n').pop() || ''); } catch { throw new Error(`film gate failed: ${r.err || r.out}`.slice(0, 1000)); }
+  }
+
+  /** a media file's length in seconds (ffmpeg's reading of its header: quick) */
+  duration(file: string) { return probe(file).duration; }
 
   // ── history: every change the agent makes is a commit, so any step can be undone (git revert) ──
   private git(args: string[]) { return spawnSync('git', args, { cwd: this.dir, encoding: 'utf8' }); }

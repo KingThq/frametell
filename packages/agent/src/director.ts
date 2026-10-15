@@ -640,12 +640,12 @@ export class Director {
         if (/stopped answering twice/.test(e.message)) throw new Error(this.say('浏览器两次没有响应，导出停下了。再导出一次通常就好，已经画好的片段会直接用上', 'The browser stopped responding twice, so the export stopped. Exporting again usually works, and the parts already drawn are reused'));
         throw e;
       });
-    const g = this.project.gate(out.withSubs);
-    this.emit({ type: 'gate', red: g.red, blank: g.gates.find((x) => x.key === 'blank')?.value ?? [], report: g.report.map((r) => ({ name: r.name, value: r.value, unit: r.unit })) });
     this.state.video = out.withSubs; this.state.exported = true; this.save();
     const saved = this.saveCopies(out);
     this.emit({ type: 'stage', stage: 'render', status: 'done' });
-    this.emit({ type: 'done', video: out.withSubs, videoNoSubs: out.noSubs, duration: g.duration, saved });
+    this.emit({ type: 'done', video: out.withSubs, videoNoSubs: out.noSubs, duration: this.project.duration(out.withSubs), saved });
+    // the film gate reads the whole mp4 (several seconds): it is reported once the film is handed over, never holding it
+    this.project.gate(out.withSubs).then((g) => this.emit({ type: 'gate', red: g.red, blank: g.gates.find((x) => x.key === 'blank')?.value ?? [], report: g.report.map((r) => ({ name: r.name, value: r.value, unit: r.unit })) }), () => {});
     return out;
   }
 
