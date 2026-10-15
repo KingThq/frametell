@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createCatalog, PROVIDERS, type ProviderSpec } from '@frametell/models';
 import { bundledSample, ELEVENLABS_DEFAULT_VOICES, ElevenLabsError, elevenLabsTts, listElevenLabsVoices, volcengineTts, VoiceNotFound, VOLCENGINE_VOICES } from '@frametell/voice';
-import { Project, STYLES, cleanLook, openProjectFile, type OpenFile, type Renderer, type Timeline } from '@frametell/agent';
+import { BRAND_DIR, Project, STYLES, cleanBrand, cleanLook, openProjectFile, writeIn, type OpenFile, type Renderer, type Timeline } from '@frametell/agent';
 import { linkProject } from '@frametell/engine/tools/project.mjs';
 import { DATA_DIR, configFile, patchConfig, publicConfig, type ConfigStore } from './config.js';
 import { Projects } from './runner.js';
@@ -176,14 +176,16 @@ export class Studio {
   project(id: string): ProjectSummary { return { ...this.store.read(id), ...this.store.runner(id).summary() }; }
 
   /** create a project from materials and start it right away (it pauses at the storyboard for approval), unless
-   * `o.start === false`, which only creates it (a host that runs it elsewhere starts it there) */
-  createProject(input: NewProjectInput, files: MaterialFile[], o: { start?: boolean } = {}): ProjectMeta {
+   * `o.start === false`, which only creates it (a host that runs it elsewhere starts it there). `o.brandFiles`: the
+   * files of `input.brand`, written into assets/brand/ (only those its assets name) */
+  createProject(input: NewProjectInput, files: MaterialFile[], o: { start?: boolean; brandFiles?: MaterialFile[] } = {}): ProjectMeta {
     const cfg = this.config.load(), d = cfg.defaults;
     const model = input.model || d.model;
     const pages = input.pageModel ?? d.pageModel;
     const reviews = input.reviewModel ?? d.reviewModel;
     if (!model) throw new Error(tr('请先在设置里配置模型', 'Set up a model in Settings first'));
     const said = input.notes?.trim();
+    const brand = cleanBrand(input.brand);
     if (!files.length && !said && !input.topic) throw new Error(tr('说一句想讲什么，或者附上资料', 'Say what the video is about, or attach some material'));
     // without materials, the sentence the user wrote is the topic; it also names the project
     const topic = input.topic || (files.length ? undefined : said);
@@ -206,9 +208,13 @@ export class Studio {
       reviewModel: reviews && reviews !== (pages || model) ? reviews : undefined,
       runtime: input.runtime || d.runtime, voice: input.voice === null ? undefined : input.voice ?? d.voice, subtitles: input.subtitles ?? d.subtitles,
       lang: input.lang ?? resolveLocale(cfg.locale), topic, notes: topic ? undefined : input.notes,
-      styleNotes: input.styleNotes?.trim().slice(0, 4000) || undefined, look: cleanLook(input.look),
+      styleNotes: input.styleNotes?.trim().slice(0, 4000) || undefined, look: cleanLook(input.look), brand,
       ...(input.research !== undefined ? { research: input.research } : {}),
     }, files.map((f) => ({ name: f.name, data: Buffer.from(f.data) })));
+    // the brand's files, under the names its brief gives them (plain names, checked there), through the project's own
+    // file rules like everything else written into it
+    const named = new Set(brand?.assets.map((a) => a.file));
+    for (const f of o.brandFiles ?? []) if (named.has(f.name)) writeIn(this.store.dir(meta.id), `${BRAND_DIR}/${f.name}`, f.data);
     if (o.start !== false) void this.store.runner(meta.id).start();
     return meta;
   }
