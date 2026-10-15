@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Hosts that run projects elsewhere can open a Studio that leaves project folders as they are (`linkProjects: false`) and create a project without starting it (`createProject(…, { start: false })`). The engine's runner helpers (`engineCmd`, `nodeEnv`, `childEnv`, `confine`) are exported.
 - A run numbers its events on from the highest number in its log, so a log rebuilt by a host with an event left out never reuses a number.
 - `Studio.halt(id)` stops a film's task without logging a pause, for a host that is going away: the next host to open the film finds it cut short and carries it on.
+- `new Studio({ web: false })`: the research reaches no web at all (no search, no page, no repository clone), for a host whose runs have no network. Links in a request are left in its words for the director, and a film from a topic alone has no research. `offlineWeb` is the web such a host's research sees.
 
 ### Changed
 
@@ -21,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - A project gets its git history before any agent's shell runs (and before any commit), so a shell can no longer make `.git` itself first.
 - Nothing the agent made is evaluated or decoded in the studio's own process any more: the narration reads `script.js` and `voice.js` through a new engine tool (`script-data.mjs`), and ffmpeg (narration, frames, posters, the film gate) and the document parsers run in child processes, confined with no network when the network is taken away. ffmpeg only opens local files (`-protocol_whitelist file,pipe`). What a child answers is checked before it is used: a page id must be a plain name, the document parser's files must be plain names beside their documents, the film gate's answer must have its shape. The narration writes its takes and voice.js only into the project, never through a planted link, and a frame cut is one picture of bounded size. The final mix also reads the narration's audio with local files only.
+- The research never follows a link out of a folder it was given: a link in a cloned repository or one planted in the material is refused or left out of listings and searches, and a repository is cloned with links checked out as plain files, through the studio's git helper (hooks and fsmonitor off), from https only.
 - On Linux, a file the studio writes into a project is reached folder by folder through what it already opened, so a folder swapped for a link at that moment can no longer leave even an empty folder outside the project. A new `listIn` lists a project folder the same way.
 
 ## [0.6.0] - 2026-10-15

@@ -52,7 +52,16 @@ export function researchTools(o: { mounts: Mount[]; web: Web; limits: Limits; si
     const abs = path.resolve(mount.root, rest.join('/'));
     const rel = path.relative(mount.root, abs);
     if (rel.startsWith('..') || path.isAbsolute(rel)) throw new Error(`${p} is outside ${mount.name}`);
+    // a link inside the folder (a cloned repository's, one planted in the material) is never followed out of it
+    if (!inside(mount, abs)) throw new Error(`${p} is outside ${mount.name}`);
     return { abs, mount };
+  };
+  /** where abs really is, links resolved, lies inside the mount's real root (a path that does not exist is not inside) */
+  const inside = (mount: Mount, abs: string) => {
+    let root: string, real: string;
+    try { root = fs.realpathSync(mount.root); real = fs.realpathSync(abs); } catch { return false; }
+    const r = path.relative(root, real);
+    return !r.startsWith('..') && !path.isAbsolute(r);
   };
   const shown = (mount: Mount, abs: string) => [mount.name, path.relative(mount.root, abs)].filter(Boolean).join('/').replace(/\\/g, '/');
   const binary = (abs: string) => {
@@ -66,7 +75,7 @@ export function researchTools(o: { mounts: Mount[]; web: Web; limits: Limits; si
       try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
       entries.sort((a, b) => (a.isDirectory() === b.isDirectory() ? a.name.localeCompare(b.name) : a.isDirectory() ? -1 : 1));
       for (const e of entries) {
-        if (SKIP.has(e.name) || (e.name.startsWith('.') && e.name !== '.github')) continue;
+        if (SKIP.has(e.name) || (e.name.startsWith('.') && e.name !== '.github') || e.isSymbolicLink()) continue;
         const abs = path.join(d, e.name);
         yield { abs, dir: e.isDirectory(), level };
         if (e.isDirectory() && level + 1 < depth) yield* go(abs, level + 1);
@@ -191,6 +200,7 @@ export function researchTools(o: { mounts: Mount[]; web: Web; limits: Limits; si
   const tools: AgentTool<any>[] = [];
   if (o.mounts.length) tools.push(list, read, grep);
   if (o.web.provider) tools.push(search);
-  tools.push(readUrl, finish);
+  if (o.web.reads !== false) tools.push(readUrl);
+  tools.push(finish);
   return { tools, close: () => { closing = true; }, used };
 }

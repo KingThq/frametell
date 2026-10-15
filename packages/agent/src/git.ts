@@ -2,7 +2,7 @@
 // sandbox, as this process's user, in a folder the agent writes; what git reads there must not run anything.
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFile, spawnSync } from 'node:child_process';
+import { execFile, spawn, spawnSync } from 'node:child_process';
 
 /** a hooks folder that can never exist on any platform: a path below a file (this program) is never a folder, so no
  *  one, the agent included, can put a hook there. /dev/null is no folder on Windows, and NUL there is a name the agent
@@ -20,6 +20,24 @@ export const gitSync = (cwd: string | undefined, args: string[], env?: Env) =>
 
 export const gitAsync = (cwd: string, args: string[], env?: Env) =>
   new Promise<{ status: number; stdout: string }>((ok) => execFile('git', [...GIT_SAFE, ...args], { cwd, encoding: 'utf8', maxBuffer: 16 << 20, env, timeout: 120_000 }, (e, stdout) => ok({ status: e ? 1 : 0, stdout: stdout || '' })));
+
+/**
+ * A shallow clone of a public repository for the research (https only, as findSources makes them), with the safe
+ * settings, links checked out as plain files (a link in someone's repository never points the research outside it), no
+ * prompt for a password, and killed after three minutes. Only a host with a network clones: one whose reach has no web
+ * never calls this.
+ */
+export function gitClone(url: string, dest: string, signal?: AbortSignal): Promise<void> {
+  if (!/^https:\/\//.test(url)) return Promise.reject(new Error('only https repositories are cloned'));
+  return new Promise<void>((resolve, reject) => {
+    const child = spawn('git', [...GIT_SAFE, '-c', 'core.symlinks=false', 'clone', '--depth', '1', '--single-branch', '--filter=blob:limit=2m', '--no-tags', '--', url, dest], { signal, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } });
+    let err = '';
+    child.stderr.on('data', (d) => { err = (err + d).slice(-2000); });
+    const timer = setTimeout(() => child.kill('SIGKILL'), 180_000);
+    child.on('error', (e) => { clearTimeout(timer); reject(e); });
+    child.on('close', (code) => { clearTimeout(timer); code === 0 ? resolve() : reject(new Error(err.trim().split('\n').pop() || `git clone exited ${code}`)); });
+  });
+}
 
 /**
  * Removes every `.git` below `root` (a folder, a file with `gitdir:` pointing anywhere, or a link), case-insensitively

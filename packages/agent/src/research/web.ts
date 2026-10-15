@@ -21,6 +21,8 @@ export interface Page { url: string; title?: string; text: string }
 export interface Web {
   /** the engine in use; absent when no search key is set (pages can still be read) */
   readonly provider?: SearchProviderId;
+  /** false when no page can be read at all: a host with no network (see offlineWeb) */
+  readonly reads?: boolean;
   search(query: string, max: number, signal?: AbortSignal): Promise<SearchHit[]>;
   read(url: string, signal?: AbortSignal): Promise<Page>;
 }
@@ -70,6 +72,14 @@ async function call(url: string, init: RequestInit & { timeout: number; signal?:
   return res;
 }
 const json = async (url: string, init: RequestInit & { timeout: number; signal?: AbortSignal }) => (await call(url, init)).json() as Promise<any>;
+
+/** the web for a host whose runs have no network (a sandbox): nothing is searched, no page is read, nothing is sent */
+export const offlineWeb: Web = Object.freeze({
+  provider: undefined,
+  reads: false,
+  async search(): Promise<SearchHit[]> { throw new Error('there is no web here'); },
+  async read(): Promise<Page> { throw new Error('there is no web here'); },
+});
 
 export function createWeb(s: SearchSettings = {}): Web {
   const provider = searchProvider(s);

@@ -6,8 +6,9 @@ import path from 'node:path';
 import type { AgentMessage } from '@earendil-works/pi-agent-core';
 import { findSources } from './research/sources.js';
 import { researchTools, type Handed } from './research/tools.js';
-import { createWeb, htmlText, searchProvider, type Web } from './research/web.js';
+import { createWeb, htmlText, offlineWeb, searchProvider, type Web } from './research/web.js';
 import { runResearch } from './research/research.js';
+import { gitClone } from './git.js';
 import { trimToolResults } from './runtime/pi.js';
 import { Director } from './director.js';
 import type { AgentRuntime, SessionOptions } from './runtime/types.js';
@@ -73,6 +74,41 @@ test('the research tools read only inside the folders they were given', async ()
     const done = await run(tool('finish'), { brief: '# Demo\n' + 'A queue that retries three times. '.repeat(10), sources: [{ title: 'README', ref: 'demo/README.md' }] });
     assert.equal(done.terminate, true);
     assert.equal(handed?.sources[0].ref, 'demo/README.md');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('a link in a folder the research was given is never followed out of it', async () => {
+  const base = tmp(), dir = path.join(base, 'materials'), outside = path.join(base, 'outside');
+  try {
+    fs.mkdirSync(dir); fs.mkdirSync(outside);
+    fs.writeFileSync(path.join(outside, 'secret.txt'), 'the secret retries');
+    fs.writeFileSync(path.join(dir, 'notes.md'), 'retries here\n');
+    fs.symlinkSync(path.join(outside, 'secret.txt'), path.join(dir, 'link.txt'));
+    fs.symlinkSync(outside, path.join(dir, 'away'));
+    const { tools } = researchTools({ mounts: [{ name: 'm', root: dir, about: 'the material' }], web: noWeb, limits: { searches: 1, pages: 1, minutes: 5 }, onFinish: () => {} });
+    const tool = (n: string) => tools.find((x) => x.name === n)!;
+    await assert.rejects(run(tool('read_file'), { path: 'm/link.txt' }), /outside/);
+    await assert.rejects(run(tool('read_file'), { path: 'm/away/secret.txt' }), /outside/);
+    await assert.rejects(run(tool('list_files'), { path: 'm/away' }), /outside/);
+    const listing = await out(tool('list_files'), { path: 'm' });
+    assert.ok(listing.includes('notes.md') && !listing.includes('link.txt') && !listing.includes('away'), listing);
+    const hits = await out(tool('search_files'), { pattern: 'retries' });
+    assert.ok(hits.includes('m/notes.md:1') && !hits.includes('secret'), hits);
+  } finally { fs.rmSync(base, { recursive: true, force: true }); }
+});
+
+test('with no web (a sandbox), the research has no web tool and its web neither searches nor reads', async () => {
+  const dir = tmp();
+  try {
+    const { tools } = researchTools({ mounts: [{ name: 'm', root: dir, about: 'the material' }], web: offlineWeb, limits: { searches: 1, pages: 1, minutes: 5 }, onFinish: () => {} });
+    assert.deepEqual(tools.map((x) => x.name), ['list_files', 'read_file', 'search_files', 'finish']);
+    assert.equal(offlineWeb.provider, undefined);
+    assert.equal(offlineWeb.reads, false);
+    await assert.rejects(offlineWeb.read('https://example.com'), /no web/);
+    await assert.rejects(offlineWeb.search('x', 1), /no web/);
+    // and a clone is only ever of an https repository
+    await assert.rejects(gitClone('file:///etc', path.join(dir, 'c')), /https/);
+    await assert.rejects(gitClone('ext::sh -c touch% /tmp/x', path.join(dir, 'c')), /https/);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 

@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { gitClone } from '../git.js';
 
 export interface Sources {
   /** web pages to read (repository links are in `repos` instead) */
@@ -52,13 +52,6 @@ export async function cloneRepo(repo: Sources['repos'][number], dest: string, si
   if (fs.existsSync(path.join(dest, '.git'))) return dest;
   fs.mkdirSync(path.dirname(dest), { recursive: true });
   fs.rmSync(dest, { recursive: true, force: true });
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn('git', ['clone', '--depth', '1', '--single-branch', '--filter=blob:limit=2m', '--no-tags', `${repo.url}.git`, dest], { signal, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } });
-    let err = '';
-    child.stderr.on('data', (d) => { err = (err + d).slice(-2000); });
-    const timer = setTimeout(() => child.kill('SIGKILL'), 180_000);
-    child.on('error', (e) => { clearTimeout(timer); reject(e); });
-    child.on('close', (code) => { clearTimeout(timer); code === 0 ? resolve() : reject(new Error(err.trim().split('\n').pop() || `git clone exited ${code}`)); });
-  });
+  await gitClone(`${repo.url}.git`, dest, signal);
   return dest;
 }

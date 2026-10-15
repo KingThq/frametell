@@ -7,7 +7,7 @@ import crypto from 'node:crypto';
 import { createProject, linkProject } from '@frametell/engine/tools/project.mjs';
 import { createCatalog } from '@frametell/models';
 import { elevenLabsTts, volcengineTts } from '@frametell/voice';
-import { createWeb, Director, findSources, hasSources, piRuntime, Project, type AgentRuntime, type DirectorOptions, type Renderer, type StudioEvent, type Storyboard, type UserRef } from '@frametell/agent';
+import { createWeb, Director, findSources, hasSources, offlineWeb, piRuntime, Project, type AgentRuntime, type DirectorOptions, type Renderer, type StudioEvent, type Storyboard, type UserRef } from '@frametell/agent';
 import type { Config, ConfigStore } from './config.js';
 import { prepareMaterials } from './materials.js';
 import { applyProxy } from './net.js';
@@ -33,8 +33,8 @@ function writeMeta(dir: string, m: ProjectMeta) { m.updatedAt = new Date().toISO
 /** The projects under one directory and the settings their runs use: one per Studio, so several can share a process. */
 export class Projects {
   private runners = new Map<string, Runner>();
-  /** `local`: a folder or file on this machine named in a request may be read (off on a hosted service) */
-  constructor(readonly root: string, readonly config: ConfigStore, private renderer?: Renderer, private review?: 'full' | 'defects', private onEvent?: (project: string, e: Logged) => void, private local = true) {}
+  /** `reach`: what the research may read beyond the project (see ResearchReach) */
+  constructor(readonly root: string, readonly config: ConfigStore, private renderer?: Renderer, private review?: 'full' | 'defects', private onEvent?: (project: string, e: Logged) => void, private reach: ResearchReach = FULL_REACH) {}
 
   dir(id: string) { return path.join(this.root, id); }
 
@@ -78,7 +78,7 @@ export class Projects {
   runner(id: string): Runner {
     if (!fs.existsSync(studioFile(this.dir(id), 'project.json'))) throw new Error(tr('项目不存在', 'Project not found'));
     let r = this.runners.get(id);
-    if (!r) { r = new Runner(id, this.dir(id), this.config, this.renderer, this.review, this.onEvent, this.local); this.runners.set(id, r); }
+    if (!r) { r = new Runner(id, this.dir(id), this.config, this.renderer, this.review, this.onEvent, this.reach); this.runners.set(id, r); }
     return r;
   }
 }
@@ -89,13 +89,28 @@ type Prices = { input: number; output: number; cacheRead: number; cacheWrite: nu
 const GO_ON = /^(继续|接着|继续制作|接着做|继续做|继续吧|go on|continue|resume|keep going)[\s.!。！~～]*$/i;
 
 /**
+ * What the research may read beyond the project. A host decides it, never a request: a hosted service reads no folder
+ * or file on its own machine (`localFiles: false`), and a host whose runs have no network (a sandbox) reaches no web at
+ * all (`web: false`): no search, no page, no repository clone.
+ */
+export interface ResearchReach {
+  /** folders and files on this machine named in a request */
+  localFiles: boolean;
+  /** the web: searching it, reading pages, cloning repositories */
+  web: boolean;
+}
+export const FULL_REACH: ResearchReach = { localFiles: true, web: true };
+
+/**
  * What research the film gets before its storyboard, if any: links, repositories and (on this machine) folders named in
  * the request are always read; the web is searched when a search engine is set up and either the film has no material
- * or the user asked for it (`meta.research`).
+ * or the user asked for it (`meta.research`). What the host's reach leaves out is not attempted: with no web, links and
+ * repositories stay in the request's words for the director, and nothing is searched.
  */
-export function researchPlan(meta: ProjectMeta, cfg: Config, local: boolean) {
-  const sources = findSources([meta.topic, meta.notes].filter(Boolean).join('\n'), { local });
-  const web = createWeb(cfg.search);
+export function researchPlan(meta: ProjectMeta, cfg: Config, reach: ResearchReach = FULL_REACH) {
+  const found = findSources([meta.topic, meta.notes].filter(Boolean).join('\n'), { local: reach.localFiles });
+  const sources = reach.web ? found : { ...found, urls: [], repos: [] };
+  const web = reach.web ? createWeb(cfg.search) : offlineWeb;
   const search = !!web.provider && (meta.research ?? !meta.materials.length);
   return hasSources(sources) || search ? { sources, web, search } : undefined;
 }
@@ -190,7 +205,7 @@ class Runner {
   }
   private tr(zh: string, en: string) { return this.replyIn() === 'zh' ? zh : en; }
 
-  constructor(readonly id: string, private dir: string, private config: ConfigStore, private renderer?: Renderer, private review?: 'full' | 'defects', private onEvent?: (project: string, e: Logged) => void, private local = true) {
+  constructor(readonly id: string, private dir: string, private config: ConfigStore, private renderer?: Renderer, private review?: 'full' | 'defects', private onEvent?: (project: string, e: Logged) => void, private reach: ResearchReach = FULL_REACH) {
     this.log = studioFile(dir, 'events.jsonl');
     if (fs.existsSync(this.log)) {
       const lines = fs.readFileSync(this.log, 'utf8').trim().split('\n').filter(Boolean);
@@ -325,7 +340,7 @@ class Runner {
       const { files } = await prepareMaterials(path.join(dir, 'materials'), meta.lang ?? 'zh');
       for (const f of files) if (f.kind === 'document' && !f.parsedTo) this.emit({ type: 'error', message: this.tr(`资料 ${f.name} 读不了：${f.warning}`, `Couldn't read ${f.name}: ${f.warning}`) });
       // an export reads nothing new
-      const plan = o.exporting ? undefined : researchPlan(meta, cfg, this.local);
+      const plan = o.exporting ? undefined : researchPlan(meta, cfg, this.reach);
       // an export draws the film the pages already are: it needs no model, so one that is gone (its provider removed, its
       // key deleted) must not hold it; a model that is asked for anyway says why it can't answer
       const { runtime, prices, pages, reviewer, research } = await buildRuntime(meta, cfg, !!plan).catch((e: Error) => {

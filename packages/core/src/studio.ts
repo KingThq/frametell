@@ -60,6 +60,12 @@ export interface StudioOptions {
    * turns it off, so nothing on its servers is ever read
    */
   localFiles?: boolean;
+  /**
+   * the research may reach the web: search it, read pages, clone repositories (default true). A host whose runs have no
+   * network (a sandbox, whose box reaches only its gateway) passes false: links in a request are left to the director,
+   * and nothing is searched
+   */
+  web?: boolean;
 }
 
 export class Studio {
@@ -70,7 +76,7 @@ export class Studio {
   constructor(o: StudioOptions = {}) {
     this.dataDir = o.dataDir ?? DATA_DIR;
     this.config = o.config ?? configFile(this.dataDir);
-    this.store = new Projects(path.join(this.dataDir, 'projects'), this.config, o.renderer, o.review, o.onEvent, o.localFiles ?? true);
+    this.store = new Projects(path.join(this.dataDir, 'projects'), this.config, o.renderer, o.review, o.onEvent, { localFiles: o.localFiles ?? true, web: o.web ?? true });
     applyProxy(this.config.load().proxy);
     // every project reaches the engine through links; point them at this install (it may have moved, or been renamed)
     if (o.linkProjects !== false) try { for (const id of fs.readdirSync(this.store.root)) { try { linkProject(this.store.dir(id)); } catch {} } } catch {}
