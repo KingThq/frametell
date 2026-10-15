@@ -88,3 +88,18 @@ test('the reviewer checks the logo only on a page that shows it', () => {
   assert.ok(r.indexOf("brand's logo") < r.indexOf('## The checker'));
   assert.equal(reviewerPrompt(sb, 'p02', t, 1, [], [{ local: 1 }], undefined, brand), reviewerPrompt(sb, 'p02', t, 1, [], [{ local: 1 }]));
 });
+
+test('the brand\'s main colour, when the host names its palette name, is the one for emphasis: in the director\'s prompt and on every page', () => {
+  const rule = "The brand's main colour is the palette's `teal`: use it for emphasis (highlights, underlines, the key number) rather than other accents.";
+  const b = cleanBrand({ ...brand, emphasis: 'teal' })!;
+  assert.equal(b.emphasis, 'teal');
+  for (const bad of ['', 'te al', '--x', 'red;}', '1red', 'x'.repeat(40), 7]) assert.equal(cleanBrand({ ...brand, emphasis: bad })!.emphasis, undefined);
+  assert.ok(brandSection(b).includes(`- ${rule}`));
+  assert.ok(!brandSection(brand).includes('main colour'));
+  const plain = pagePrompt(sb, 'p03', t, 'en', 'en', false, b);
+  assert.ok(plain.includes(`## The brand\n- ${rule}`));
+  assert.ok(plain.indexOf(rule) < plain.indexOf('Stop once pages/p03.js'));
+  const first = pagePrompt(sb, 'p01', t, 'en', 'en', false, b);
+  assert.ok(first.includes(rule) && first.includes("## The brand's files on this page"));
+  assert.equal(pagePrompt(sb, 'p03', t, 'en', 'en', false, brand), pagePrompt(sb, 'p03', t, 'en', 'en', false));
+});

@@ -27,6 +27,8 @@ export interface BrandBrief {
   tagline?: string;
   /** the logo opens and closes the film (default: yes) */
   bookends?: boolean;
+  /** the palette name that carries the brand's main colour in the film's style (the host maps the colours) */
+  emphasis?: string;
   assets: BrandAsset[];
 }
 
@@ -37,6 +39,8 @@ const LOGOS: BrandAssetKind[] = ['logo', 'logo-dark', 'mark'];
 /** a plain file name of a picture: no folders, nothing hidden */
 const FILE = /^[\w][\w.-]{0,95}\.(svg|png|jpe?g|webp)$/i;
 const MAX_ASSETS = 30;
+/** a palette name: a plain identifier */
+const NAME = /^[A-Za-z][A-Za-z0-9_]{0,31}$/;
 
 const text = (v: unknown, max: number) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : '');
 const block = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
@@ -66,6 +70,7 @@ export function cleanBrand(x: unknown): BrandBrief | undefined {
   if (tone) brief.tone = tone;
   if (tagline) brief.tagline = tagline;
   if (o.bookends === false) brief.bookends = false;
+  if (typeof o.emphasis === 'string' && NAME.test(o.emphasis)) brief.emphasis = o.emphasis;
   return brief;
 }
 
@@ -91,7 +96,7 @@ ${brand.assets.length ? brand.assets.map(line).join('\n') : '(none)'}
 - ${bookends ? 'The first page opens on the brand\'s logo and the last page closes on it; the last page may also carry the tagline.' : 'Show the logo only where the content calls for it.'}
 - Use the other files only where the content calls for them (the product's screenshot where the film shows the product); never put one in because it is there.
 - A beat that places a file names its path in its object (\`${BRAND_DIR}/…\`), so the page agent places that very file.
-- Write the narration and the words on screen in the brand's tone. The rules on facts still hold: the tone never adds a claim, a number or a promise the material doesn't support.`;
+${brand.emphasis ? `${emphasisRule(brand.emphasis)}\n` : ''}- Write the narration and the words on screen in the brand's tone. The rules on facts still hold: the tone never adds a claim, a number or a promise the material doesn't support.`;
 }
 
 /** the brand's files a page places: those its storyboard names, and on the first and last page the logos when the
@@ -118,10 +123,12 @@ const call = (a: BrandAsset) => {
     : `P.img('${pathOf(a)}', x, y, w, ${h}, { fit: 'cover' })`;
 };
 
-/** For the page agent: the brand's files this page places, with the call that places each, and how a logo is treated.
- *  '' when the page places none, so the prompt stays as it was. */
-export function brandPageNote(files: BrandAsset[]) {
-  if (!files.length) return '';
+const emphasisRule = (name: string) => `- The brand's main colour is the palette's \`${name}\`: use it for emphasis (highlights, underlines, the key number) rather than other accents.`;
+
+/** For the page agent: the brand's colour for emphasis, and the brand's files this page places, with the call that
+ *  places each, and how a logo is treated. '' when there is neither, so the prompt stays as it was. */
+export function brandPageNote(files: BrandAsset[], emphasis?: string) {
+  if (!files.length) return emphasis ? `\n\n## The brand\n${emphasisRule(emphasis)}` : '';
   const logos = files.some((a) => LOGOS.includes(a.kind));
   const dark = files.find((a) => a.kind === 'logo-dark');
   return `
@@ -134,7 +141,7 @@ ${logos ? `
 - Leave clear space around a logo, at least half its height, with nothing else in it; nothing passes over it.
 - ${dark ? `On a dark ground use \`${pathOf(dark)}\`; on a light ground the logo.` : 'On a dark ground, set the logo on a light card of its own rather than on the dark.'}
 - A logo with an opaque background sits on a ground that matches it, or on a card, never cut out.` : ''}
-- Place only these files, where the storyboard puts them; reveal them as you would any element.`;
+- Place only these files, where the storyboard puts them; reveal them as you would any element.${emphasis ? `\n${emphasisRule(emphasis)}` : ''}`;
 }
 
 /** For the page's reviewer: one more check when a logo is on the page. '' otherwise. */
