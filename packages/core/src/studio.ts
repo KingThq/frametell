@@ -164,8 +164,8 @@ export class Studio {
   projects(): ProjectSummary[] { return this.store.list(); }
   project(id: string): ProjectSummary { return { ...this.store.read(id), ...this.store.runner(id).summary() }; }
 
-  /** create a project from materials and start it right away (it pauses at the storyboard for approval) */
-  /** `start: false` only creates it (a host that runs it elsewhere starts it there) */
+  /** create a project from materials and start it right away (it pauses at the storyboard for approval), unless
+   * `o.start === false`, which only creates it (a host that runs it elsewhere starts it there) */
   createProject(input: NewProjectInput, files: MaterialFile[], o: { start?: boolean } = {}): ProjectMeta {
     const cfg = this.config.load(), d = cfg.defaults;
     const model = input.model || d.model;

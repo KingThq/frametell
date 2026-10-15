@@ -372,6 +372,22 @@ test('a run numbers on from the highest event logged, not the count of lines (a 
   } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
 });
 
+test('a run log whose last line was cut short still opens, and numbers on from the highest event', () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'frametell-cut-'));
+  try {
+    const id = '2026-10-15-cut000000001', dir = path.join(dataDir, 'projects', id), now = new Date().toISOString();
+    fs.mkdirSync(path.join(dir, '.studio'), { recursive: true });
+    fs.writeFileSync(path.join(dir, '.studio', 'project.json'), JSON.stringify({ id, title: id, style: 'whiteboard', durationSec: 60, model: 'nowhere/none', runtime: 'pi', subtitles: true, materials: [], createdAt: now, updatedAt: now }));
+    fs.writeFileSync(path.join(dir, '.studio', 'state.json'), JSON.stringify({ stage: 'pages' }));
+    // the process died in the middle of writing the last line
+    fs.writeFileSync(path.join(dir, '.studio', 'events.jsonl'), [1, 2, 5].map((seq) => JSON.stringify({ type: 'note', text: 'n', seq, at: seq })).join('\n') + '\n{"type":"note","te');
+    const heard: number[] = [];
+    const studio = new Studio({ dataDir, config: memoryConfig(), onEvent: (_p, e) => heard.push(e.seq) });
+    studio.projects();
+    assert.deepEqual(heard, [6]);
+  } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
+});
+
 test('a host can open a Studio that leaves every project folder as it is, and create a project without starting it', () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'frametell-nolink-'));
   try {
@@ -401,6 +417,7 @@ test('a run gives its project a history before any agent can touch it', async ()
 
 test('a halted run stops at once and logs nothing; the host that opens the film next finds it cut short', async () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'frametell-halt-'));
+  const off: (() => void)[] = [];   // each subscription holds a file watch: let go in the end, even when an assertion fails
   try {
     const id = '2026-10-15-halt00000001', dir = path.join(dataDir, 'projects', id), now = new Date().toISOString();
     fs.mkdirSync(path.join(dir, '.studio'), { recursive: true });
@@ -415,7 +432,7 @@ test('a halted run stops at once and logs nothing; the host that opens the film 
       o.signal?.addEventListener('abort', () => fail(Object.assign(new Error('aborted'), { name: 'AbortError' })));
     }) });
     const seen: { type: string }[] = [];
-    const off = [studio.subscribe(id, 0, (e) => seen.push(e as never))];   // each holds a file watch: let go in the end
+    off.push(studio.subscribe(id, 0, (e) => seen.push(e as never)));
     assert.equal(studio.export(id), true);
     await started;
     const before = seen.length;
@@ -427,6 +444,5 @@ test('a halted run stops at once and logs nothing; the host that opens the film 
     const again: { type: string; stage?: string; status?: string }[] = [];
     off.push(next.subscribe(id, 0, (e) => again.push(e as never)));
     assert.ok(again.some((e) => e.type === 'stage' && e.stage === 'render' && e.status === 'failed'), 'the export is found cut short');
-    for (const f of off) f();
-  } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
+  } finally { for (const f of off) f(); fs.rmSync(dataDir, { recursive: true, force: true }); }
 });

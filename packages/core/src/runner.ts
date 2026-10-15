@@ -175,11 +175,13 @@ class Runner {
       // own store (a sandbox restored elsewhere) may have left out an event it could not keep, and a number a browser has
       // already seen must never be given again
       this.seq = lines.reduce((m, l) => { try { const s = (JSON.parse(l) as Logged).seq; return Number.isInteger(s) && s > m ? s : m; } catch { return m; } }, 0);
-      const last = lines.length ? (JSON.parse(lines[lines.length - 1]) as Logged) : undefined;
+      // a line the process died in the middle of writing does not parse: skip it, and the last that does is the last event
+      const events = lines.flatMap((l) => { try { return [JSON.parse(l) as Logged]; } catch { return []; } });
+      const last = events.at(-1);
       this.status = last?.type === 'approval' ? 'awaiting_approval' : this.stateStage() === 'done' ? 'done' : lines.length ? 'stopped' : 'idle';
       // an export cut short by the app closing: the film is still there to preview, the export can simply run again
       // (the last export began and never ended: any render line may come after its start)
-      const renders = lines.map((l) => JSON.parse(l) as Logged).filter((e) => e.type === 'stage' && e.stage === 'render');
+      const renders = events.filter((e) => e.type === 'stage' && e.stage === 'render');
       const cut = renders.at(-1)?.type === 'stage' && (renders.at(-1) as Extract<Logged, { type: 'stage' }>).status === 'start';
       if (this.status === 'done' && cut && !heldElsewhere(this.dir)) {
         this.emit({ type: 'stage', stage: 'render', status: 'failed', detail: this.tr('导出被打断了，可以重新导出', 'The export was interrupted. You can export again.') });
@@ -189,7 +191,7 @@ class Runner {
       // shows it as paused with a way to continue, instead of a stage that never ends. What tells is whether it was
       // paused since it last started, not the last line: pages that wound down after a pause wrote lines after it, and
       // a film the user had paused was taken for cut short and went on by itself after a restart
-      const mark = lines.map((l) => JSON.parse(l) as Logged).findLast((e) => e.type === 'paused' || e.type === 'resumed');
+      const mark = events.findLast((e) => e.type === 'paused' || e.type === 'resumed');
       if (this.status === 'stopped' && last && mark?.type !== 'paused' && !heldElsewhere(this.dir)) {
         this.emit({ type: 'paused', reason: 'interrupted', stage: this.stateStage() });
         this.interrupted = 'run';
