@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-10-16
+
+### Fixed
+
+- A film no longer ends with a hard cut a second after its last line. The last page holds about 2.5 seconds after the narration ends, then the film fades to its background over its final 0.8 seconds (`META.fadeOut` sets it; 0 for a hard cut). The last page's agent is told the film ends on it, so it lands the close with the last line and then holds still, and the page check looks at that hold.
+
 ## [0.7.1] - 2026-10-16
 
 ### Added
@@ -315,7 +321,8 @@ The first release of Frametell: a local, open-source studio that turns an idea o
 - The npm packages are not published yet; install from source (see the README).
 - The Claude Agent SDK and Codex runtimes are in the code but not offered; every film runs on the built-in agent, which works with any provider.
 
-[Unreleased]: https://github.com/sitor-ai/frametell/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/sitor-ai/frametell/compare/v0.7.2...HEAD
+[0.7.2]: https://github.com/sitor-ai/frametell/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/sitor-ai/frametell/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/sitor-ai/frametell/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/sitor-ai/frametell/compare/v0.5.1...v0.6.0
