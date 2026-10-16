@@ -1,7 +1,7 @@
 {
   "name": "frametell-monorepo",
   "private": true,
-  "description": "Frametell: turn your ideas and material into vivid explainer videos with an AI director agent.",
+  "description": "Frametell: tell stories, frame by frame. Turn your ideas and material into vivid explainer videos with an AI director agent.",
   "license": "AGPL-3.0-only",
   "type": "module",
   "engines": {
