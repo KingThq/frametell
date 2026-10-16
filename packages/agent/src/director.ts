@@ -9,6 +9,7 @@ import { FLAG, VERDICT, fixPrompt, langNote, voiceNote, pagePrompt, pageSystem, 
 import { addUsage, emptyUsage, type AgentRuntime, type AgentSession, type SessionOptions, type Thinking, type TokenUsage, type TurnResult } from './runtime/types.js';
 import type { PageIssue, PageStatus, Stage, StudioEvent } from './events.js';
 import { designedFonts, designedIssues, designedLook, type Look } from './look.js';
+import { SIGN_OFF_HOLD, signsOff } from './brand.js';
 import { ENGINE_DIR } from '@frametell/engine/tools/project.mjs';
 import { openIn } from './projectfs.js';
 import { briefFile, runResearch, type ResearchLimits } from './research/research.js';
@@ -379,7 +380,9 @@ export class Director {
       } catch {}
       return { vendor: [...vendor], webgl: true };
     })() : {};
-    this.setMeta({ style: this.o.style, lang: this.o.brief.lang ?? 'zh', voice: this.o.voice, gap: 0.8, pace: { maxHold: 1.0, gap: 0.8 }, extras: list, look: this.o.look ?? this.designed()?.look, ...gl });
+    // a film that ends on its brand's sign-off holds longer after its last line, so the logo is seen in silence
+    const signOff = (() => { try { return signsOff(this.o.brief.brand, this.project.storyboard().pages); } catch { return false; } })();
+    this.setMeta({ style: this.o.style, lang: this.o.brief.lang ?? 'zh', voice: this.o.voice, gap: 0.8, pace: { maxHold: 1.0, gap: 0.8, ...(signOff ? { tail: SIGN_OFF_HOLD } : {}) }, extras: list, look: this.o.look ?? this.designed()?.look, ...gl });
   }
 
   /** Server-owned META fields, rewritten in place in script.js (the planner must not change them). */
@@ -497,11 +500,14 @@ export class Director {
     this.emit({ type: 'page', id, status: s.status, round: s.rounds, issues: s.issues, ...extra });
   }
 
-  /** moments worth looking at: right after the page turns, each beat in progress, and the settled end */
+  /** moments worth looking at: right after the page turns, each beat in progress, and the settled end (on the film's
+   *  last page, the hold after its last line, before the film fades out) */
   private sheetTimes(sb: Storyboard, t: PageTiming) {
     const beats = sb.pages.find((p) => p.id === t.id)?.beats || [];
     const cueAt = (at: string) => { const m = /^c(\d+)/.exec(at); const c = t.cues[Math.min(+(m?.[1] ?? 0), t.cues.length - 1)]; return c ? t.start + c.at : t.start; };
-    const raw = [t.start + 0.6, ...beats.map((b) => cueAt(b.at) + 1.0), t.end - 0.35].map((x) => Math.min(t.end - 0.2, Math.max(t.start + 0.4, x))).sort((a, b) => a - b);
+    const last = sb.pages[sb.pages.length - 1]?.id === t.id;
+    const settled = last ? Math.max(t.speechEnd, t.end - 1.2) : t.end - 0.35;
+    const raw = [t.start + 0.6, ...beats.map((b) => cueAt(b.at) + 1.0), settled].map((x) => Math.min(last ? settled : t.end - 0.2, Math.max(t.start + 0.4, x))).sort((a, b) => a - b);
     const out: number[] = [];
     for (const x of raw) if (!out.length || x - out[out.length - 1] > 0.6) out.push(x);
     while (out.length > 6) out.splice(Math.floor(out.length / 2), 1);

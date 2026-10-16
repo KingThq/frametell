@@ -92,10 +92,20 @@ const line = (a: BrandAsset) => `- \`${pathOf(a)}\`: ${a.kind}, ${size(a)}, ${a.
 export const BRAND_MOMENT_RULES = `- The logo appears only in brand moments you plan: the closing sign-off, and at most one other. Restraint beats repetition.
 - The film ends on the sign-off. In a short film (up to about 3 minutes) it is normally the one moment. Leave it out only when the content makes it wrong, and then say why when you report the storyboard.
 - Each brand moment is its own beat, and that beat says so in its object: \`brand moment: ${BRAND_DIR}/<file>\`, the kind of moment, and roughly where and when (e.g. \`brand moment: ${BRAND_DIR}/logo.svg, closing sign-off, centred once the scene has cleared, tagline under it\`). The page agent draws exactly that, and only there.
+- The sign-off comes after the narration's last line, in the hold the film keeps for it (about 3 seconds before the film fades out): the story lands with the last line, then the brand signs it in silence. Its beat is the last page's last beat, timed to the last cue, and its object says it follows the last line. The narration never introduces it ("brought to you by…", the brand's name tacked onto the last line): the last line finishes the story.
 - The sign-off is a composed beat of its own: the scene clears or settles first, then the logo enters with the style's own motion (drawn, stamped, faded in), the tagline under it, and holds at least 2 seconds. In a sign-off the logo is the largest thing in the moment, about 18–30% of the frame's width, centred or on a clear axis, on clean ground: no line, horizon, edge or object within its clear space. The tagline is narrower than the logo and clearly smaller.
 - The other moment, if any, is a placement native to the style: in ink and wash a seal-like mark in a corner near the title, on a chalkboard signed in a corner, in an editorial layout a masthead. A small corner mark (about 6–10% of the frame's width, no tagline) is this kind of moment: a supplement to the sign-off, never a substitute for it, and it stays for a whole section (at least about 8 seconds), never a flicker at the very end.
 - Never on top of or crowding a title, a label, a diagram or the subject, never in the middle of a content page, and at most one logo in a frame.
 - The logo file itself is never distorted, recoloured, cropped or framed, whatever the moment.`;
+
+/** how long the film holds after its last line when it ends on a brand's sign-off (META.pace.tail), seconds */
+export const SIGN_OFF_HOLD = 3.6;
+
+/** the film ends on the brand's sign-off: its last page places a logo */
+export function signsOff(brand: BrandBrief | undefined, pages: Parameters<typeof brandFilesOn>[1]) {
+  const last = pages[pages.length - 1];
+  return !!last && brandFilesOn(brand, pages, last.id).some((a) => LOGOS.includes(a.kind));
+}
 
 /** The brand, for the director (storyboard, script, changes): after the style card, so it reads as who the film
  *  speaks for, not as a new style. '' without a brand, so the prompt stays as it was. */
@@ -155,6 +165,7 @@ ${logos ? `
 - The storyboard plans the brand moment: draw exactly the beat that names the logo, where and when it says, and nowhere else on the page.
 - Compose the moment around the logo: nothing else within about one logo-height of it, never over or crowding a title, a label, a diagram or the subject, and only one logo in a frame.
 - It enters with the style's own motion (drawn on, stamped, faded in: \`pop: 0\` and a slow \`dur\`, as in the calls above), never a pop; a sign-off holds at least 2 seconds.
+- A sign-off follows the last line: the scene settles or recedes (fade or dim the rest, never a cut to blank) right after \`P.endT\`, the logo enters about 0.3s later and stays until the film's own fade-out. It never arrives while the narration is still speaking.
 - A sign-off makes the logo the largest thing in the moment, about 18–30% of the frame's width, centred or on a clear axis, on clean ground with no line, horizon, edge or object within its clear space; its tagline is narrower than the logo and clearly smaller. A corner mark is small (about 6–10% of the width) and has no tagline.
 - A logo keeps its own proportions (height = width × its h / w, \`fit: 'contain'\`): never stretch, crop, recolour, filter, blend or rotate it, and never draw it yourself.
 - A logo or an icon is never framed, bordered or shadowed: keep \`border: false, shadow: false, r: 0\` as in the calls above, so it stands on the page as it is.
@@ -169,5 +180,5 @@ export function brandReviewNote(brand: BrandBrief | undefined, files: BrandAsset
   if (!brand?.assets.some((a) => LOGOS.includes(a.kind))) return '';
   const logos = files.filter((a) => LOGOS.includes(a.kind));
   if (!logos.length) return `\nThe storyboard puts no brand logo on this page: fail it if one appears.\n`;
-  return `\nThe storyboard puts the brand's logo on this page (${logos.map((a) => a.file).join(', ')}). Fail the page if the logo is stretched or squashed, cropped, recoloured, framed, covered by anything, overlapping or crowding any other element, in the middle of the content, more than one in a frame, or too small or faint to read. In a sign-off (the logo with its tagline), also fail it if the logo is smaller or narrower than its tagline, touches or sits on a line, horizon or edge, or reads as a watermark rather than the moment's subject.\n`;
+  return `\nThe storyboard puts the brand's logo on this page (${logos.map((a) => a.file).join(', ')}). Fail the page if the logo is stretched or squashed, cropped, recoloured, framed, covered by anything, overlapping or crowding any other element, in the middle of the content, more than one in a frame, or too small or faint to read. In a sign-off (the logo with its tagline), also fail it if the logo is smaller or narrower than its tagline, touches or sits on a line, horizon or edge, reads as a watermark rather than the moment's subject, or arrives before the narration's last line has ended.\n`;
 }

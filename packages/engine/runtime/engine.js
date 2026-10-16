@@ -117,19 +117,22 @@
     // The cross-fade ends D seconds after the page boundary: a new page draws its first stroke a moment after it starts,
     // and ending the fade at the boundary showed empty paper in between. The outgoing page stays a pure function of t.
     const D = SCRIPT.META?.fadeDelay ?? 0.3;
+    const FO = SCRIPT.META?.fadeOut ?? TIMING.FADE_OUT;   // META.fadeOut: the film's closing fade in seconds, 0 for a hard cut
     for (const p of pages) {
       const { start, end, index } = p.pg;
       const last = index === pages.length - 1;
       const inK = index === 0 ? 1 : smooth(start - F + D, start + D, t);
-      const outK = last ? 0 : smooth(end - F + D, end + D, t);
+      // the last page fades to the ground over the film's final moments
+      const outK = last ? (FO > 0 ? smooth(end - FO, end, t) : 0) : smooth(end - F + D, end + D, t);
       const vis = inK * (1 - outK);
       p.vis = vis;
       if (vis <= 0.001) { if (p.root.style.display !== 'none') p.root.style.display = 'none'; continue; }
       p.root.style.display = 'block';
       p.root.style.opacity = vis.toFixed(4);
       if (SCRIPT.META?.pageMotion !== false) {   // META.pageMotion: false → plain cross-fade (films: the pages do their own transitions)
-        p.root.style.transform = `translate(${(-outK * 36 + (1 - inK) * 24).toFixed(2)}px, 0)`;
-        p.root.style.filter = outK > 0.02 ? `blur(${(outK * 5).toFixed(2)}px)` : 'none';
+        const turn = last ? 0 : outK;   // the film's own ending is a plain fade, not a page turn
+        p.root.style.transform = `translate(${(-turn * 36 + (1 - inK) * 24).toFixed(2)}px, 0)`;
+        p.root.style.filter = turn > 0.02 ? `blur(${(turn * 5).toFixed(2)}px)` : 'none';
       }
       const lt = t - start;
       const c = camAt(p.sh.cams, lt);

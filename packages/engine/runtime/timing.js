@@ -6,6 +6,8 @@
   const LEAD = 0.5;      // page appears, then the first sentence starts
   const GAP = 1.5;       // silent hold between pages (speaker's breathing room)
   const FADE = 0.6;      // cross-fade at the end of the gap
+  const END = 2.5;       // the last page holds this long after its last line, so the film ends on a settled picture
+  const FADE_OUT = 0.8;  // the film fades to its ground over its final seconds, never a hard cut
 
   /** Rough spoken length: CJK char = 1 unit, latin words ~ syllables, digits = 1 each. */
   function units(text) {
@@ -46,7 +48,7 @@
 
   // Real voice (voice.js from engine/tools/tts.mjs): cue length = trimmed audio + a natural pause, holds are capped,
   // pages follow each other closely — no long silences.
-  const VOICE = { lead: 0.2, comma: 0.18, stop: 0.4, pageEnd: 0.3, maxHold: 0.5, gap: 0.3, tail: 1.2 };
+  const VOICE = { lead: 0.2, comma: 0.18, stop: 0.4, pageEnd: 0.3, maxHold: 0.5, gap: 0.3, tail: END };
   const voiceOf = (voice, pi, ci, text) => { const v = voice && voice.pages[pi] && voice.pages[pi][ci]; return v && v.t === text ? v : null; };
 
   /** opts.gap overrides GAP (script.js META.gap); opts.voice = SCRIPT.VOICE switches to real audio durations. */
@@ -85,7 +87,7 @@
       const speechEnd = ct;
       const after = pg.after || 0;   // extra seconds after the page's last line before it turns (lets the picture settle and sink in)
       const last = idx === pages.length - 1;
-      const end = speechEnd + after + (last ? (voice ? pg.tail ?? V.tail : 2) : gap);   // pg.tail: longer ending hold on the last page
+      const end = speechEnd + after + (last ? pg.tail ?? V.tail : gap);   // pg.tail / META.pace.tail: a longer ending hold (a brand's sign-off)
       t = end;
       return { ...pg, index: idx, start, speechEnd, end, cues };
     });
@@ -113,5 +115,5 @@
     })));
   }
 
-  root.TIMING = { CPS, BREATH, LEAD, GAP, FADE, VOICE, units, cueDur, subText, wordTime, layout, sfxTimes };
+  root.TIMING = { CPS, BREATH, LEAD, GAP, FADE, END, FADE_OUT, VOICE, units, cueDur, subText, wordTime, layout, sfxTimes };
 })(typeof window !== 'undefined' ? window : globalThis);

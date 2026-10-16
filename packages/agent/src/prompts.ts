@@ -9,7 +9,7 @@ import type { PageTiming, Storyboard, LintIssue } from './project.js';
 import type { AnswerTool } from './runtime/types.js';
 
 import { pagePack } from './pagepack.js';
-import { brandFilesOn, brandPageNote, brandReviewNote, brandSection, type BrandBrief } from './brand.js';
+import { brandFilesOn, brandPageNote, brandReviewNote, brandSection, signsOff, type BrandBrief } from './brand.js';
 
 // found through the package itself, so it still resolves when the code is bundled (the desktop app)
 const DIR = path.join(path.dirname(createRequire(import.meta.url).resolve('@frametell/agent/package.json')), 'prompts');
@@ -154,9 +154,19 @@ ${(p?.beats || []).map((b, i) => `  ${i + 1}. [${b.at}] ${b.object} — ${b.acti
 
 ## This page's narration and timing (real voice)
 The page lasts ${(t.end - t.start).toFixed(2)}s; its narration ends at ${(t.speechEnd - t.start).toFixed(2)}s (P.endT).
-${t.cues.map((c) => `- c${c.i}: at ${c.at}s in the page, "${c.text}"`).join('\n')}${brandPageNote(brandFilesOn(brand, sb.pages, id), brand?.emphasis)}
+${t.cues.map((c) => `- c${c.i}: at ${c.at}s in the page, "${c.text}"`).join('\n')}${sb.pages[sb.pages.length - 1]?.id === id ? endingNote(t, signsOff(brand, sb.pages)) : ''}${brandPageNote(brandFilesOn(brand, sb.pages, id), brand?.emphasis)}
 
 ${revising ? `pages/${id}.js is already written; stop once the change below is made in it and say in one sentence what you changed.` : `Stop once pages/${id}.js is written and say in one sentence what you drew.`}${langNote('page', lang, replyLang)}`;
+}
+
+/** For the film's last page: the film ends on it, so it closes rather than turns */
+function endingNote(t: PageTiming, signOff: boolean) {
+  return `
+
+## The film ends on this page
+Nothing comes after it: after its last line the film holds ${(t.end - t.speechEnd).toFixed(1)}s on this page, then fades out by itself in its final second.
+- Land the close with the last line: the last change arrives as it is spoken, and the main object ends resolved and whole in the frame (the hook's question answered), not mid-move.
+- After \`P.endT\` the picture holds still: no new element, no text, no camera move${signOff ? ', except the brand\'s sign-off, which happens in this hold' : ''}. Never clear, fade or empty the picture yourself, and add no "the end" card or summary caption.`;
 }
 
 const lintLines = (issues: LintIssue[]) => issues.map((i) => `- ${i.local}s: ${i.msg}`).join('\n');
@@ -200,7 +210,7 @@ export function reviewerPrompt(sb: Storyboard, id: string, t: PageTiming, round:
 ${(p?.beats || []).map((b, i) => `  ${i + 1}. [${b.at}] ${b.object} — ${b.action}${b.text ? `, on-screen text "${b.text}"` : ''}`).join('\n')}
 - The page lasts ${(t.end - t.start).toFixed(1)}s. Narration:
 ${t.cues.map((c) => `  - c${c.i} at ${c.at.toFixed(1)}s: "${c.text}"`).join('\n')}
-${change ? `\nThe user asked for this change to the page: ${change}\nFail the page if the pictures don't show it.\n` : ''}${brandReviewNote(brand, brandFilesOn(brand, sb.pages, id))}
+${sb.pages[sb.pages.length - 1]?.id === id ? `\nThis page ends the film: after its last line it holds ${(t.end - t.speechEnd).toFixed(1)}s, then the film fades out by itself (not shown in the sheet). Fail it if the film ends mid-move, on a half-drawn or unresolved picture, or on an emptied frame; a still hold after the last line is right.\n` : ''}${change ? `\nThe user asked for this change to the page: ${change}\nFail the page if the pictures don't show it.\n` : ''}${brandReviewNote(brand, brandFilesOn(brand, sb.pages, id))}
 ## The checker
 ${must.length ? `Must-fix (already sent to the artist):\n${lintLines(must)}` : 'Nothing must be fixed.'}
 ${advice.length ? `Advice (a measurement; fail on it only if the picture shows a problem):\n${lintLines(advice)}` : ''}

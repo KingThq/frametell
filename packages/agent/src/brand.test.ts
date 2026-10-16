@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { BRAND_MOMENT_RULES, brandFilesOn, brandSection, cleanBrand, type BrandBrief } from './brand.js';
+import { BRAND_MOMENT_RULES, brandFilesOn, brandSection, cleanBrand, signsOff, type BrandBrief } from './brand.js';
 import { pagePrompt, pageSystem, plannerSystem, reviewerPrompt, reviewerSystem } from './prompts.js';
 import type { PageTiming, Storyboard } from './project.js';
 
@@ -97,11 +97,29 @@ test('a page is told of the brand files only where its storyboard names them, th
   assert.equal(pagePrompt(sb, 'p03', t, 'en', 'en', false, brand), pagePrompt(sb, 'p03', t, 'en', 'en', false));
 });
 
+test('the film ends on its last page: told so, with the hold after its last line, the sign-off in that hold', () => {
+  assert.equal(signsOff(brand, sb.pages), true);
+  assert.equal(signsOff({ ...brand, showLogo: false }, sb.pages), false, 'no sign-off when the film shows no logo');
+  assert.equal(signsOff(undefined, sb.pages), false);
+  const end = { ...t, id: 'p04', end: 10.6 };
+  const last = pagePrompt(sb, 'p04', end, 'en', 'en', false, brand);
+  assert.ok(last.includes('## The film ends on this page'));
+  assert.ok(last.includes('the film holds 3.6s on this page, then fades out by itself'));
+  assert.ok(last.includes("except the brand's sign-off, which happens in this hold"));
+  assert.ok(last.includes('the logo enters about 0.3s later and stays until the film\'s own fade-out'));
+  assert.ok(last.indexOf('## The film ends') < last.indexOf("## The brand's files"));
+  const plain = pagePrompt(sb, 'p04', end, 'en', 'en', false);
+  assert.ok(plain.includes('## The film ends on this page') && !plain.includes("brand's sign-off"));
+  assert.ok(!pagePrompt(sb, 'p03', t, 'en', 'en', false, brand).includes('The film ends'), 'only the last page');
+  assert.ok(reviewerPrompt(sb, 'p04', end, 1, [], [{ local: 1 }], undefined, brand).includes('This page ends the film: after its last line it holds 3.6s'));
+  assert.ok(BRAND_MOMENT_RULES.includes("The sign-off comes after the narration's last line"));
+});
+
 test('the reviewer checks the logo where the storyboard puts it, and fails one it doesn\'t ask for', () => {
   const r = reviewerPrompt(sb, 'p04', t, 1, [], [{ local: 1 }], undefined, brand);
   assert.ok(r.includes("The storyboard puts the brand's logo on this page (a1.svg, a2.svg). Fail the page if the logo is stretched"));
   assert.ok(r.includes('overlapping or crowding any other element, in the middle of the content'));
-  assert.ok(r.includes('if the logo is smaller or narrower than its tagline, touches or sits on a line, horizon or edge, or reads as a watermark'));
+  assert.ok(r.includes('if the logo is smaller or narrower than its tagline, touches or sits on a line, horizon or edge, reads as a watermark'));
   assert.ok(r.indexOf("brand's logo") < r.indexOf('## The checker'));
   assert.ok(reviewerPrompt(sb, 'p02', t, 1, [], [{ local: 1 }], undefined, brand).includes('The storyboard puts no brand logo on this page: fail it if one appears.'));
   const images = { ...brand, assets: brand.assets.filter((a) => a.kind === 'image') };
