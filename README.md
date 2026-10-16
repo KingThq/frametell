@@ -19,11 +19,9 @@ It's built for knowledge creators who explain history, science, technology, inve
 
 ## See it
 
-<p align="center">
-  <a href="docs/media/showcase.mp4"><img src="docs/media/showcase.jpg" alt="The Frametell desktop app with a finished film, Why is the sky blue and sunsets red, and its five pages" width="100%"></a>
-</p>
+https://github.com/user-attachments/assets/99dd4dc5-2ed4-421d-bf4d-697acd553b59
 
-One run in the desktop app, condensed to a minute: a question, a storyboard to sign off, narration, voice, five pages and the finished film (72 s, made in 12 min 52 s for $1.59). Click to watch (with sound).
+One run in the desktop app, condensed to a minute: a question, a storyboard to sign off, narration, voice, five pages and the finished film (72 s, made in 12 min 52 s for $1.59).
 
 Two films Frametell made end to end in English: storyboard, narration, an ElevenLabs voice, every page and the render. Click a picture to watch (with sound).
 
