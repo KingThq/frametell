@@ -21,7 +21,7 @@ export type FeedItem = In & (
   | { kind: 'tools'; key: string; session: string; calls: ToolCall[]; at: number }
   | { kind: 'user'; key: string; text: string; refs?: UserRef[]; at: number }
   | { kind: 'note'; key: string; text: string; at: number }
-  | { kind: 'paused'; key: string; reason: 'user' | 'interrupted' | 'error'; message?: string; at: number }
+  | { kind: 'paused'; key: string; reason: 'user' | 'interrupted' | 'error' | 'credits'; message?: string; at: number }
   | { kind: 'check'; key: string; round: number; reds: number; yellows: number; messages: string[]; at: number }
   | { kind: 'approval'; key: string; storyboard: Storyboard; at: number }
   | { kind: 'pages'; key: string; at: number }
@@ -68,7 +68,7 @@ export interface RunView {
   exporting?: number;
   error?: string;
   /** set while the run is stopped (paused by the user, interrupted, or failed); cleared when it continues */
-  paused?: { reason: 'user' | 'interrupted' | 'error'; message?: string; at: number };
+  paused?: { reason: 'user' | 'interrupted' | 'error' | 'credits'; message?: string; at: number };
   /** continued after a pause and getting ready, since when; cleared when its first step starts (or it stops again) */
   resuming?: number;
   /** the stage that is running now */

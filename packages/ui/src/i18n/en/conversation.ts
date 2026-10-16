@@ -26,6 +26,7 @@ const en: typeof zh = {
     whereStage: 'the {stage} step',
     whereHere: 'this point',
     user: 'Paused at {where}.',
+    credits: 'You ran out of credits, so the film stopped at {where}.\nTop up, then Continue: it picks up from here.',
     interrupted: 'Stopped at {where} last time: the app was closed or interrupted.',
     error: 'Stopped at {where} on an error: {msg}',
     unknownError: 'unknown error',

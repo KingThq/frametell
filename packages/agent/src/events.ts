@@ -46,8 +46,9 @@ export type StudioEvent =
   | { type: 'user'; text: string; refs?: UserRef[] }
   /** a short line from the director that isn't a model message: how a user note will be handled, what a revision redraws */
   | { type: 'note'; text: string }
-  /** the run stopped: the user paused, the app was closed mid-run, or an error; completed work is kept */
-  | { type: 'paused'; reason: 'user' | 'interrupted' | 'error'; stage?: string; message?: string }
+  /** the run stopped: the user paused, the app was closed mid-run, an error, or (a hosted service) the account ran out
+   *  of credits; completed work is kept */
+  | { type: 'paused'; reason: 'user' | 'interrupted' | 'error' | 'credits'; stage?: string; message?: string }
   /** a paused run was continued; its next step follows once the director is ready */
   | { type: 'resumed' }
   | { type: 'narrate'; page: string; index: number; total: number; cached: boolean }

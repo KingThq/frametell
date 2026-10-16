@@ -27,6 +27,7 @@ export default {
     whereStage: '「{stage}」这一步',
     whereHere: '这里',
     user: '已在{where}暂停。',
+    credits: '积分用完了，片子停在{where}。\n充值后点「继续制作」，会从这里接着做。',
     interrupted: '上次在{where}停下了：应用被关闭或中断。',
     error: '在{where}出错停下了：{msg}',
     unknownError: '未知错误',
