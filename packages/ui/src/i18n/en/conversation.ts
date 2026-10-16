@@ -48,6 +48,12 @@ const en: typeof zh = {
     sec: '{n}s',
     wholeAnswer: 'The model hands its answer over only when it’s finished, so nothing shows until then',
   },
+  kit: {
+    writing: 'Writing this film\'s own components ({n}), for every page to draw with',
+    checking: 'Checking this film\'s components (round {round})',
+    done: '{n} of this film\'s components are ready, the same on every page',
+    failed: 'This film\'s components could not be made; the pages draw everything themselves',
+  },
   chapter: {
     aria: 'Step {n}: {stage}',
     skipped: 'Not needed',

@@ -41,6 +41,9 @@ export type StudioEvent =
   | { type: 'storyboard_check'; round: number; issues: { level: string; page?: string; beat?: number; msg: string }[] }
   /** the storyboard passed its checks and waits for the user (in CLI runs it is approved automatically) */
   | { type: 'approval'; storyboard: Storyboard }
+  /** this film's own components (kit.ts), written before its pages: `components` the ones the pages get, `sheet` the
+   *  check's contact sheet */
+  | { type: 'kit'; status: 'start' | 'checking' | 'done' | 'failed'; components?: string[]; round?: number; sheet?: string; detail?: string }
   | { type: 'page'; id: string; status: PageStatus; round?: number; issues?: PageIssue[]; sheet?: string; thumb?: string; note?: string }
   /** something the user said to the director (approval feedback, a note while it works, a change after the film) */
   | { type: 'user'; text: string; refs?: UserRef[] }

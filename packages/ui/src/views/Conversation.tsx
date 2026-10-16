@@ -194,6 +194,23 @@ function Pages({ run, onSelect, onPlay, selected }: { run: RunView; onSelect: (i
   );
 }
 
+/** this film's own components: being written and checked, ready (with what each draws), or given up */
+function KitLine({ run }: { run: RunView }) {
+  useT();
+  const k = run.kit;
+  if (!k) return null;
+  const plan = ((run.storyboard?.look as { kit?: { name: string; what: string }[] } | undefined)?.kit ?? []);
+  const what = (n: string) => plan.find((x) => x.name === n)?.what ?? n;
+  if (k.status === 'done') return (
+    <div className="text-[12.5px] leading-relaxed text-ink-2">
+      <p className="flex items-center gap-1.5 text-jade"><Check size={13} aria-hidden /> {t('conversation.kit.done', { n: k.components.length })}</p>
+      <ul className="mt-1 space-y-0.5 text-ink-3">{k.components.map((n) => <li key={n} className="truncate">· {what(n)}</li>)}</ul>
+    </div>
+  );
+  if (k.status === 'failed') return <p className="text-[12.5px] leading-relaxed text-ink-3">{t('conversation.kit.failed')}</p>;
+  return <p className="flex items-center gap-1.5 text-[12.5px] text-accent-ink"><Loader2 size={13} className="animate-spin" aria-hidden /> {t(k.status === 'checking' ? 'conversation.kit.checking' : 'conversation.kit.writing', { n: k.components.length, round: k.round ?? 1 })}</p>;
+}
+
 function PausedCard({ item, run, project, latest }: { item: Extract<FeedItem, { kind: 'paused' }>; run: RunView; project: ProjectView; latest: boolean }) {
   useT();
   const where = item.stage ? t('conversation.paused.whereStage', { stage: STAGE_NAME[item.stage] }) : t('conversation.paused.whereHere');
@@ -387,6 +404,7 @@ function Chapter({ b, run, project, onSelectPage, onPlayPage, selected }: { b: E
         {b.items.map((it) => {
           if (it.kind === 'say') return <Said key={it.key} text={it.text} />;
           if (it.kind === 'note') return <p key={it.key} className="text-[13px] leading-relaxed text-ink-2 animate-rise">{it.text}</p>;
+          if (it.kind === 'kit') return <KitLine key={it.key} run={run} />;
           if (it.kind === 'check') return it.reds + it.yellows === 0
             ? <p key={it.key} className="flex items-center gap-1.5 text-[12.5px] text-jade"><Check size={13} aria-hidden /> {t('conversation.chapter.checkPassed')}</p>
             : <p key={it.key} className="text-[12.5px] leading-relaxed text-ink-3">{t('conversation.chapter.checkIssues', { reds: it.reds, yellows: it.yellows })}</p>;

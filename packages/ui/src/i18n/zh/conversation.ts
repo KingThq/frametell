@@ -49,6 +49,12 @@ export default {
     sec: '{n} 秒',
     wholeAnswer: '模型会一次写完再交出来，写好前看不到内容',
   },
+  kit: {
+    writing: '正在写这部片子自己的组件（{n} 个），各页会直接用它们画',
+    checking: '正在检查这部片子的组件（第 {round} 遍）',
+    done: '这部片子的组件写好了 {n} 个，每页都用同一份',
+    failed: '这部片子的组件没写成，各页照常自己画',
+  },
   chapter: {
     aria: '第 {n} 步 {stage}',
     skipped: '这一步不需要',
