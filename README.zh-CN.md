@@ -93,6 +93,6 @@ Bug 和功能建议也可以直接提 [Issue](../../issues)。
 
 ## 许可
 
-帧言以 [GNU Affero 通用公共许可证 v3.0](LICENSE)（AGPL-3.0）开源。你可以自由使用、修改和运行它，包括商用；但如果你把修改后的版本通过网络提供给别人使用，就要以同样的许可证向他们公开修改后的源码。如果需要不带这些义务的商业授权，请通过 [sitor.ai](https://sitor.ai) 联系我们。
+帧言以 [GNU Affero 通用公共许可证 v3.0](LICENSE)（AGPL-3.0）开源。你可以自由使用、修改和运行它，包括商用；但如果你把修改后的版本通过网络提供给别人使用，就要以同样的许可证向他们公开修改后的源码。如果需要不带这些义务的商业授权，请发邮件到 [contact@sitor.ai](mailto:contact@sitor.ai)。
 
-© 2026 [**Sitor**](https://sitor.ai)
+© 2026 [**Sitor AI**](https://sitor.ai)

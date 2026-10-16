@@ -97,7 +97,7 @@ For bugs and feature requests, open an [issue](../../issues).
 
 Frametell is licensed under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0). You may use, modify and
 run it, including commercially. If you offer a modified version to others over a network, you must make your modified
-source available to them under the same license. For a commercial license without these obligations, contact us
-through [sitor.ai](https://sitor.ai).
+source available to them under the same license. For a commercial license without these obligations, email
+[contact@sitor.ai](mailto:contact@sitor.ai).
 
-© 2026 [**Sitor**](https://sitor.ai)
+© 2026 [**Sitor AI**](https://sitor.ai)
