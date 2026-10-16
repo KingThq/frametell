@@ -28,7 +28,8 @@ html, body { margin: 0; width: 1280px; height: 640px; overflow: hidden; backgrou
 .tag { font: 600 40px/1.3 var(--f-cn); letter-spacing: .02em; color: var(--ink); }
 .tag em { display: block; font-style: normal; color: var(--accent-ink); }
 :root[lang="en"] .tag { font: 600 42px/1.08 var(--f-ui); letter-spacing: -.03em; }
-:root[lang="en"] .tag em { font: italic 500 46px/1.12 var(--f-mark); letter-spacing: -.01em; }
+/* one voice for both lines, as in the Chinese banner: the italic serif belongs to the wordmark alone */
+:root[lang="en"] .tag em { font: inherit; letter-spacing: inherit; }
 /* the English banner carries no Chinese: Frametell alone is the wordmark — always written Frametell, never in capitals */
 :root[lang="en"] .lockup .cn { display: none; }
 :root[lang="en"] .lockup .en { font: italic 600 68px/1 var(--f-mark); letter-spacing: -.015em; color: var(--ink); border-left: 0; padding: 0 0 8px; }
