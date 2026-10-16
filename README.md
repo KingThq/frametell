@@ -13,8 +13,6 @@
   <b>English</b> · <a href="README.zh-CN.md">简体中文</a>
 </p>
 
-<p align="center"><i>Tell stories, frame by frame.</i></p>
-
 **Frametell** (帧言, *zhēn yán*) turns your ideas and your material into vivid explainer videos with pages that move. One sentence is enough to start ("explain the uncertainty principle"), or you can hand it notes, documents, PDFs, slides and images. A director agent first drafts a storyboard for you to sign off on. Then it writes the narration, voices it, draws each page and checks its own work. You get a 1080p video, with subtitles and publishing notes.
 
 It's built for knowledge creators who explain history, science, technology, investing, psychology or books, and who'd rather tell the story than learn video editing.
