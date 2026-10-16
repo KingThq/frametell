@@ -13,18 +13,21 @@
 
   /** entrance: rise 14px and fade over dur, ease-out; returns 0..1 */
   const enter = (lt, at, dur = 0.7) => ease.out(clamp((lt - at) / dur));
+  /** draws an object into its own group, fading it in at o.at; it fades out at o.out, or from hide(t, dur) like any
+   *  other element's handle */
   function mount(self, o, draw) {
     const g = s('g', { opacity: 0 }, self.svg);
     const at = o.at ?? 0, dur = o.dur ?? 0.7;
+    let outAt = o.out, outDur = 0.5;
     const parts = draw(g);
     self.tick((lt) => {
       const k = enter(lt, at, dur);
-      const out = o.out != null ? 1 - ease.out(clamp((lt - o.out) / 0.5)) : 1;
+      const out = outAt != null ? 1 - ease.out(clamp((lt - outAt) / outDur)) : 1;
       g.setAttribute('opacity', fmt(k * out));
       g.setAttribute('transform', `translate(0 ${fmt((1 - k) * 14)})`);
       parts?.update?.(lt);
     });
-    return { g, ...(parts || {}) };
+    return { g, ...(parts || {}), hide(t, d = 0.5) { outAt = t; outDur = Math.max(0.01, d); return this; } };
   }
 
   /** ground(y, o): a soft rolling hill line across the frame — o: { color, at, height } */

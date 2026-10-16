@@ -185,6 +185,13 @@ export async function lintPages(page, { L, pages, step = 0.5, minFont = 24, dete
     if (!p) continue;
     issues.unshift({ page: x.page, t: x.t ?? +p.start.toFixed(1), local: x.local ?? 0, kind: 'runtime', level: 'error', msg: `runtime error (${x.phase}): ${x.message}${x.at.length ? ` — at ${x.at.join(', ')}` : ''}`, data: { phase: x.phase, message: x.message } });
   }
+  // a colour named that the style's palette doesn't have: drawn as a stand-in (ink, or a mixed fill), never as meant
+  const colors = await page.evaluate(() => ({ used: ENGINE.colors, palette: Object.keys(PV.C) }));
+  for (const x of colors.used) {
+    const p = pages.find((q) => q.id === x.page);
+    if (!p) continue;
+    for (const name of x.names) issues.unshift({ page: x.page, t: +p.start.toFixed(1), local: 0, kind: 'palette', level: 'error', msg: `unknown colour name "${name}": this style's palette has ${colors.palette.join(', ')}; use one of those names, or a #RRGGBB colour`, data: { name, palette: colors.palette.join(', ') } });
+  }
   // collapse repeats of the same message on a page into one line with a time range
   const seen = new Map();
   for (const i of issues) { const k = i.page + '|' + i.msg; const s = seen.get(k); if (s) s.t1 = i.t; else seen.set(k, { ...i, t1: i.t }); }

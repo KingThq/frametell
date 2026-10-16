@@ -4,8 +4,8 @@ import type { SearchProviderId, StudioEvent, Storyboard } from '@frametell/agent
 import type { CustomProviderConfig, ModelInfo, ProviderSpec } from '@frametell/models';
 
 export type { StudioEvent, Storyboard, ModelInfo, ProviderSpec, CustomProviderConfig, SearchProviderId };
-export type { Timeline, PageTiming, UserRef, Look, PageIssue } from '@frametell/agent';
-import type { Look } from '@frametell/agent';
+export type { Timeline, PageTiming, UserRef, Look, PageIssue, BrandBrief, BrandAsset, BrandAssetKind } from '@frametell/agent';
+import type { BrandBrief, Look } from '@frametell/agent';
 export type RuntimeId = 'pi' | 'claude-agent-sdk' | 'codex';
 /** interface language; 'auto' follows the system */
 export type Locale = 'zh' | 'en';
@@ -58,6 +58,8 @@ export interface ProjectMeta {
   styleNotes?: string;
   /** this film's own colours and fonts over its style's (script.js META.look) */
   look?: Look;
+  /** the brand the film is made for, as it was when the film was made; its files are in assets/brand/ */
+  brand?: BrandBrief;
   materials: string[];
   /** search the web before the storyboard: absent, only when there is no material (links and folders named in the
    *  request are read either way) */
@@ -91,6 +93,9 @@ export interface NewProjectInput {
   look?: Look;
   /** see ProjectMeta.research */
   research?: boolean;
+  /** the brand the film is made for (its colours and typeface go in `look`); its files come with createProject's
+   *  `brandFiles`, or the host puts them in assets/brand/ itself. Only a Studio opened with `brand: true` takes it */
+  brand?: BrandBrief;
 }
 
 /** settings as clients see them: keys are masked hints, never the secrets */

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowUp, AudioLines, Clock, FileText, Film, Layers, Loader2, Paperclip, Pencil, Plus, Quote, TriangleAlert, X } from 'lucide-react';
-import { client, type ProjectView } from '../lib/client';
+import { ArrowUp, AudioLines, Clock, FileText, Film, Layers, Loader2, Paperclip, Pencil, Plus, Quote, Sparkles, TriangleAlert, Upload, X } from 'lucide-react';
+import { client, type LibraryGroup, type ProjectView } from '../lib/client';
 import { refKey, toSend, type Ref } from '../lib/refs';
 import { finished, isWorking, type RunView } from '../lib/run';
 import { Lightbox, type LightItem } from './Lightbox';
@@ -16,7 +16,14 @@ const ACCEPT = '.png,.jpg,.jpeg,.webp,.gif,.md,.markdown,.txt,.pdf,.docx,.pptx,.
 const isImage = (name: string) => /\.(png|jpe?g|webp|gif)$/i.test(name);
 
 /** a chip in the tray, waiting for its upload, or failed */
-type Item = { key: string; ref?: Ref; name?: string; preview?: string; error?: string };
+type Item = { key: string; ref?: Ref; name?: string; preview?: string; error?: string; ground?: Ground };
+
+/** a logo or an icon is shown whole, on a ground of its own that doesn't follow the theme: a dark logo on a dark tile
+ *  (or a light one on white) disappears. The light ground for most, the dark one for a logo made for dark grounds */
+type Ground = 'light' | 'dark';
+const GROUND: Record<Ground, string> = { light: '#F4F1EA', dark: '#1A1714' };
+const groundOf = (kind: string): Ground | undefined => (kind === 'logo-dark' ? 'dark' : kind === 'image' ? undefined : 'light');
+const isSvg = (src: string) => /^data:image\/svg|\.svg(?:[?#]|$)/i.test(src);
 
 // While the film is being made, a message waits above the box instead of going in: a note sent mid-run was read only by
 // the sessions spoken to after it, and while the pages were drawing that was often none, so it was lost. The queue goes
@@ -64,8 +71,8 @@ function QueuedRow({ q, project, onSave, onRemove }: { q: Queued; project: Proje
 }
 
 /** one reference as a chip: a picture when it has one, else its kind; the label tells which */
-export function RefChip({ r, project, onRemove, onOpen, pending, error, name, preview }: {
-  r?: Ref; project: ProjectView; onRemove?: () => void; onOpen?: () => void; pending?: boolean; error?: string; name?: string; preview?: string;
+export function RefChip({ r, project, onRemove, onOpen, pending, error, name, preview, ground }: {
+  r?: Ref; project: ProjectView; onRemove?: () => void; onOpen?: () => void; pending?: boolean; error?: string; name?: string; preview?: string; ground?: Ground;
 }) {
   const { t } = useT();
   const img = preview ?? (r?.thumb ? client.fileUrl(project, r.thumb) : r?.kind === 'frame' ? client.fileUrl(project, r.path) : r?.kind === 'file' && r.image ? client.fileUrl(project, r.path) : undefined);
@@ -73,16 +80,89 @@ export function RefChip({ r, project, onRemove, onOpen, pending, error, name, pr
   const label = r ? (r.kind === 'line' ? `${r.label}` : r.label) : name ?? '';
   const full = error ? t('conversation.composer.chipError', { name: name ?? '', error }) : r?.kind === 'line' ? t('conversation.composer.chipLine', { label: r.label, text: r.text }) : label;
   const Body = onOpen ? 'button' : 'span';
+  const whole = ground ?? (img && isSvg(img) ? 'light' : undefined);
   return (
     <span className={`group/chip inline-flex h-7 max-w-full animate-pop items-center gap-1.5 rounded-lg border pl-1 text-[12px] ${onRemove ? 'pr-0.5' : 'pr-2'} ${error ? 'border-seal/40 bg-seal/[0.06] text-seal' : 'border-line bg-paper-2 text-ink-2'}`} title={full}>
       <Body type={onOpen ? 'button' : undefined} onClick={onOpen} className="inline-flex min-w-0 items-center gap-1.5 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-accent">
         {img && !error
-          ? <span className="relative h-5 w-[30px] shrink-0 overflow-hidden rounded-[4px] bg-ink/10"><img src={img} alt="" className="h-full w-full object-cover" />{pending && <span className="absolute inset-0 flex items-center justify-center bg-black/40"><Loader2 size={11} className="animate-spin text-white" aria-hidden /></span>}</span>
+          ? <span className="relative h-5 w-[30px] shrink-0 overflow-hidden rounded-[4px] bg-ink/10" style={whole ? { background: GROUND[whole] } : undefined}><img src={img} alt="" className={`h-full w-full ${whole ? 'object-contain p-px' : 'object-cover'}`} />{pending && <span className="absolute inset-0 flex items-center justify-center bg-black/40"><Loader2 size={11} className="animate-spin text-white" aria-hidden /></span>}</span>
           : <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[4px] bg-ink/[0.06]">{pending ? <Loader2 size={11} className="animate-spin" aria-hidden /> : <Icon size={11} aria-hidden />}</span>}
         <span className="min-w-0 max-w-[180px] truncate">{label}</span>
       </Body>
       {onRemove && <button type="button" onClick={onRemove} aria-label={t('conversation.composer.remove', { label })} className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-ink-3 transition-colors hover:bg-ink/[0.08] hover:text-ink"><X size={12} aria-hidden /></button>}
     </span>
+  );
+}
+
+/** a brand's file, and the brand it is from */
+type LibraryItem = LibraryGroup['items'][number] & { brand: LibraryGroup['brand'] };
+
+/**
+ * The attach menu, when the host keeps files for the user (a hosted service's brand kits): upload as before, or pick
+ * one of a brand's files, or ask for a whole brand to be applied. Above the composer, like the film's settings.
+ */
+function AttachMenu({ onUpload, onPick, onApply }: { onUpload: () => void; onPick: (x: LibraryItem) => void; onApply: (g: LibraryGroup) => void }) {
+  const { t } = useT();
+  const [open, setOpen] = useState(false);
+  const [groups, setGroups] = useState<LibraryGroup[]>();
+  const [error, setError] = useState<string>();
+  const root = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => { if (!root.current?.contains(e.target as Node)) setOpen(false); };
+    addEventListener('mousedown', away);
+    // read each time it opens: a brand edited in another tab shows up
+    let live = true;
+    setError(undefined);
+    client.library!().then((g) => { if (live) setGroups(g); }).catch((e: Error) => { if (live) setError(e.message); });
+    return () => { live = false; removeEventListener('mousedown', away); };
+  }, [open]);
+  const close = () => { setOpen(false); root.current?.querySelector<HTMLButtonElement>('button')?.focus(); };
+  const row = 'flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12.5px] text-ink-2 transition-colors hover:bg-ink/[0.05] hover:text-ink focus-visible:bg-ink/[0.05] focus-visible:outline-none';
+  const shown = groups?.filter((g) => g.items.length);
+
+  return (
+    <div ref={root} className="min-w-0">
+      <button type="button" className={`fs-icon-btn ${open ? 'bg-ink/[0.07] text-ink' : ''}`} onClick={() => setOpen(!open)} aria-haspopup="menu" aria-expanded={open}
+        aria-label={t('conversation.composer.attach')} title={t('conversation.composer.attachTitle')}><Paperclip size={15} /></button>
+      {open && (
+        <div role="menu" aria-label={t('conversation.composer.attach')} onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); close(); } }}
+          className="absolute bottom-[calc(100%+8px)] left-0 z-30 w-[min(340px,100%)] overflow-hidden rounded-xl border border-line bg-surface p-1.5 shadow-[0_-12px_32px_-8px_rgb(0_0_0/0.35),0_2px_6px_rgb(0_0_0/0.12)] animate-pop [transform-origin:bottom_left]">
+          <button type="button" role="menuitem" autoFocus className={row} onClick={() => { close(); onUpload(); }}>
+            <Upload size={14} className="shrink-0 text-ink-3" aria-hidden /><span className="min-w-0 flex-1 truncate">{t('conversation.composer.library.upload')}</span>
+          </button>
+          <div className="max-h-[min(360px,48vh)] overflow-y-auto">
+            {error
+              ? <p className="px-2.5 py-2 text-[12px] text-seal" role="alert">{t('conversation.composer.library.failed', { error })}</p>
+              : !groups
+                ? <p className="flex items-center gap-1.5 px-2.5 py-2 text-[12px] text-ink-3"><Loader2 size={12} className="animate-spin" aria-hidden />{t('conversation.composer.library.loading')}</p>
+                : !!shown!.length && <>
+                    <p className="mt-1 border-t border-line/70 px-2.5 pb-0.5 pt-2 text-[11px] font-medium uppercase tracking-wide text-ink-3">{t('conversation.composer.library.title')}</p>
+                    {shown!.map((g) => (
+                    <section key={g.brand.id} className="pt-1" aria-label={t('conversation.composer.library.group', { name: g.brand.name })}>
+                      <h4 className="truncate px-2.5 pb-0.5 pt-1 text-[12px] font-semibold text-ink">{g.brand.name}</h4>
+                      <button type="button" role="menuitem" className={row} onClick={() => { close(); onApply(g); }} title={t('conversation.composer.library.applyTitle', { name: g.brand.name })}>
+                        <Sparkles size={14} className="shrink-0 text-accent-ink" aria-hidden /><span className="min-w-0 flex-1 truncate">{t('conversation.composer.library.apply')}</span>
+                      </button>
+                      <ul className="grid grid-cols-5 gap-1 px-1.5 pb-1.5 pt-1">
+                        {g.items.map((x) => (
+                          <li key={x.id}>
+                            <button type="button" role="menuitem" onClick={() => { close(); onPick({ ...x, brand: g.brand }); }} title={x.name} aria-label={t('conversation.composer.add', { label: x.name })}
+                              style={{ background: GROUND[groundOf(x.kind) ?? 'light'] }}
+                              className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-lg border border-line p-1 outline-none transition-colors hover:border-accent/60 focus-visible:ring-2 focus-visible:ring-accent">
+                              <img src={x.thumb} alt="" loading="lazy" decoding="async" className="max-h-full max-w-full object-contain" />
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                    ))}
+                  </>}
+            {groups && !shown!.length && !error && <p className="mt-1 border-t border-line/70 px-2.5 pb-1 pt-2 text-[12px] text-ink-3">{t('conversation.composer.library.empty')}</p>}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -134,10 +214,29 @@ export function Composer({ run, project, viewing, openSettings }: { run: RunView
     focus();
   };
 
+  /** something the host puts into the project (a brand's file, or a whole brand); it waits in the tray like an upload */
+  const fromHost = (item: { brand: string; asset?: string }, name: string, preview?: string, ground?: Ground) => {
+    if (items.length >= MAX_REFS) { setNote(t('conversation.composer.maxRefs', { n: MAX_REFS })); return; }
+    const key = `lib:${item.brand}:${item.asset ?? ''}:${Math.random().toString(36).slice(2, 7)}`;
+    setItems((cur) => [...cur, { key, name, preview, ground }]);
+    client.attachFrom!(project.id, item)
+      .then((r) => setItems((cur) => cur.map((y) => (y.key === key ? { key: refKey(r), ref: r, preview, ground } : y))))
+      .catch((e: Error) => setItems((cur) => cur.map((y) => (y.key === key ? { ...y, error: e.message } : y))));
+    focus();
+  };
+  const fromLibrary = (x: LibraryItem) => fromHost({ brand: x.brand.id, asset: x.id }, x.name, x.thumb, groundOf(x.kind));
+  /** the whole brand: the request in the box, and in the tray the brand itself (its brief and every file, which the
+   *  host puts into the project), shown by its logo, to read over and send */
+  const applyBrand = (g: LibraryGroup) => {
+    setText((cur) => (cur.trim() ? `${cur.trimEnd()}\n\n` : '') + t('conversation.composer.library.applyText', { name: g.brand.name }));
+    const logo = g.items.find((x) => x.kind === 'logo') ?? g.items.find((x) => x.kind === 'mark');
+    fromHost({ brand: g.brand.id }, g.brand.name, logo?.thumb, logo ? groundOf(logo.kind) : undefined);
+  };
+
   const refs = items.filter((x) => x.ref && !x.error).map((x) => x.ref!);
   const pending = items.some((x) => !x.ref && !x.error);
   const canSend = (!!text.trim() || refs.length > 0) && !busy && !pending;
-  const clear = () => { setText(''); for (const x of items) if (x.preview) URL.revokeObjectURL(x.preview); setItems([]); };
+  const clear = () => { setText(''); for (const x of items) if (x.preview?.startsWith('blob:')) URL.revokeObjectURL(x.preview); setItems([]); };
   const send = async () => {
     if (!canSend) return;
     // the film is being made (or a queue is still waiting its turn): this one waits too, after the others
@@ -227,7 +326,7 @@ export function Composer({ run, project, viewing, openSettings }: { run: RunView
         {items.length > 0 && (
           <div className="flex flex-wrap gap-1.5 border-b border-line/70 px-2.5 pb-2 pt-2.5" aria-label={t('conversation.composer.tray')}>
             {items.map((x) => (
-              <RefChip key={x.key} r={x.ref} project={project} name={x.name} preview={x.preview} pending={!x.ref && !x.error} error={x.error}
+              <RefChip key={x.key} r={x.ref} project={project} name={x.name} preview={x.preview} ground={x.ground} pending={!x.ref && !x.error} error={x.error}
                 onOpen={(x.preview || x.ref?.kind === 'frame' || (x.ref?.kind === 'file' && x.ref.image)) ? () => open(x) : undefined}
                 onRemove={() => setItems((cur) => cur.filter((y) => y.key !== x.key))} />
             ))}
@@ -242,7 +341,9 @@ export function Composer({ run, project, viewing, openSettings }: { run: RunView
           onPaste={(e) => { const files = [...e.clipboardData.files]; if (files.length) { e.preventDefault(); upload(files); } }}
           className="block max-h-[160px] min-h-[52px] w-full resize-none bg-transparent px-3.5 pb-1 pt-3 text-[13.5px] leading-relaxed text-ink outline-none placeholder:text-ink-3" />
         <div className="flex items-center gap-1.5 px-2 pb-2">
-          <button type="button" className="fs-icon-btn" onClick={() => picker.current?.click()} aria-label={t('conversation.composer.attach')} title={t('conversation.composer.attachTitle')}><Paperclip size={15} /></button>
+          {client.library && client.attachFrom
+            ? <AttachMenu onUpload={() => picker.current?.click()} onPick={fromLibrary} onApply={applyBrand} />
+            : <button type="button" className="fs-icon-btn" onClick={() => picker.current?.click()} aria-label={t('conversation.composer.attach')} title={t('conversation.composer.attachTitle')}><Paperclip size={15} /></button>}
           <input ref={picker} type="file" multiple accept={ACCEPT} className="sr-only" tabIndex={-1} aria-hidden onChange={(e) => { upload([...(e.target.files || [])]); e.target.value = ''; }} />
           <FilmSettings project={project} narrated={narrated} current={voice} pending={switchTo} openSettings={openSettings}
             onPick={(v) => {

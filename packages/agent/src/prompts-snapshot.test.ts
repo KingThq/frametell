@@ -1,0 +1,43 @@
+// The director's and the reviewer's per-stage messages, as they were before films could carry a brand: a film
+// without one must still get these, byte for byte (its prompts cache, and its behaviour stays as tested). Regenerate
+// the expected text only for a deliberate change to these prompts.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { pagePrompt, reviewerPrompt, scriptPrompt, storyboardPrompt, type Brief } from './prompts.js';
+import type { LintIssue, PageTiming, Storyboard } from './project.js';
+
+const sb: Storyboard = { title: '潮汐', summary: '月亮如何拉动海水', style: 'warm-story', cast: '', lang: 'zh', pages: [
+  { id: 'p01', section: '开场', say: '海水每天涨落两次', beats: [{ at: 'c1', object: '海岸', action: '海水涨上来', text: '涨潮' }] },
+  { id: 'p02', section: '原理', say: '月亮的引力拉着海水', core: true, beats: [{ at: 'c1', object: '月亮', action: '拉出水的鼓包', camera: '推近' }, { at: 'c2:引力', object: '箭头', action: '指向月亮' }] },
+  { id: 'p03', section: '结尾', say: '下次看海，想想月亮', beats: [{ at: 'c1', object: '月亮和海', action: '静静对望' }] },
+] };
+const t: PageTiming = { id: 'p02', start: 10, end: 22.5, speechEnd: 21.2, cues: [{ i: 1, at: 0.4, abs: 10.4, text: '月亮的引力' }, { i: 2, at: 3.1, abs: 13.1, text: '拉着海水' }] };
+const issues: LintIssue[] = [{ page: 'p02', t: 12, t1: 13, local: 2, kind: 'overlap', level: 'error', msg: 'two labels overlap' }, { page: 'p02', t: 15, t1: 16, local: 5, kind: 'sparse', level: 'warn', msg: 'sparse' }];
+const times = [{ local: 1 }, { local: 6 }, { local: 11 }];
+
+const brief: Brief = { durationSec: 90, topic: '潮汐', notes: '轻松一点', lang: 'zh', replyLang: 'en', voice: 'volcengine' };
+
+const SNAPSHOT: Record<string, string> = {
+  "storyboard": "Stage 1: storyboard.\nThe request: make an explainer film of about 1.5 minutes. Topic: 潮汐.\nThere is no material: explain it from your own knowledge. Use only well-established, checkable facts and numbers; when unsure, leave the number out. Every number on screen must also appear in that page's say (the server checks where numbers come from against say).\nFurther notes from the user: 轻松一点\nStyle: warm-story (write \"warm-story\" as the style in storyboard.json).\nMaterial: (none; write from the topic)\nStop and report once storyboard.json is written.\nFilm language: **Chinese**. In storyboard.json write `\"lang\": \"zh\"`; write title, summary, section, say and each beat's object / action / text in Simplified Chinese: on-screen text at most 8 characters per element, and a beat tied to a word names the Chinese word as spoken (`c2:三十年`).\nWrite everything you say to the user in English.",
+  "storyboardMaterials": "Stage 1: storyboard.\nThe request: turn the material into an explainer film of about 1.5 minutes. Topic: 潮汐.\nFurther notes from the user: 轻松一点\nStyle: study (write \"study\" as the style in storyboard.json).\nMaterial: materials/a.md, materials/b.pdf\nStop and report once storyboard.json is written.\nThis film has no voice, and may be watched without subtitles: the picture alone must tell the story, so key words and numbers go on screen as text.\nFilm language: **English**. In storyboard.json write `\"lang\": \"en\"`; write title, summary, section, say and each beat's object / action / text in English: on-screen text at most 5 English words per element, and a beat tied to a word names the English word (`c2:thirty`).\nWrite everything you say to the user in English.",
+  "script": "The user's changes to the storyboard: 第二页换个比喻\nFirst update storyboard.json to match, then write the narration.\nStage 2: write script.js, run node engine/tools/script.mjs to see the estimated length, then stop and report.\nThe narrator takes a tone instruction with each page. Give every page an `instruction`: one Chinese sentence on how that page is said (pace, warmth, where the weight falls). It replaces the film's default tone, so write it as a whole direction, e.g. `instruction: '放慢一点，像在揭晓答案，最后一句加重'`. Follow the film's arc: the hook curious and quick, the intuition relaxed, the key page slower and firmer, the close calm.\nWhen one line turns sharply from the rest of its page (a question to the viewer, a punchline, someone else's words quoted), give that cue its own: `{ t: '你猜结果是多少？', solo: { instruction: '真诚地发问，尾音上扬' } }`. A solo line is voiced as a separate take and loses the flow of its page, so use at most one per page and only where the tone really turns; most pages need none.\nFilm language: **Chinese**. A cue is one short spoken sentence in Simplified Chinese, at most 16 characters, 3–8 per page; write numbers in Arabic digits and units as they are spoken (年, 元).\nWrite everything you say to the user in English.",
+  "scriptApproved": "The user approved the storyboard without changes.\nStage 2: write script.js, run node engine/tools/script.mjs to see the estimated length, then stop and report.\nThis film has no voice: nobody hears the cues. They time the picture, and become the subtitles if the user turns them on, so write each as a short caption that reads well on its own.\nFilm language: **Chinese**. A cue is one short spoken sentence in Simplified Chinese, at most 16 characters, 3–8 per page; write numbers in Arabic digits and units as they are spoken (年, 元).\nWrite everything you say to the user in Simplified Chinese.",
+  "page": "You own page **p02**.\n\nThe film: 潮汐 — 月亮如何拉动海水\nIts structure:\n- p01 开场\n- p02 原理\n- p03 结尾\n\n## This page's storyboard\n- Section: 原理\n- What it says: 月亮的引力拉着海水\n- Key page: yes\n- Beats:\n  1. [c1] 月亮 — 拉出水的鼓包 (camera: 推近)\n  2. [c2:引力] 箭头 — 指向月亮\n\n## This page's narration and timing (real voice)\nThe page lasts 12.50s; its narration ends at 11.20s (P.endT).\n- c1: at 0.4s in the page, \"月亮的引力\"\n- c2: at 3.1s in the page, \"拉着海水\"\n\nStop once pages/p02.js is written and say in one sentence what you drew.\nThis is a Chinese film: all text on screen (titles, labels, units) is in Simplified Chinese, matching the narration.\nWrite everything you say to the user in English.",
+  "pageRevising": "You own page **p01**.\n\nThe film: 潮汐 — 月亮如何拉动海水\nIts structure:\n- p01 开场\n- p02 原理\n- p03 结尾\n\n## This page's storyboard\n- Section: 开场\n- What it says: 海水每天涨落两次\n- Key page: no\n- Beats:\n  1. [c1] 海岸 — 海水涨上来, on-screen text \"涨潮\"\n\n## This page's narration and timing (real voice)\nThe page lasts 12.50s; its narration ends at 11.20s (P.endT).\n- c1: at 0.4s in the page, \"月亮的引力\"\n- c2: at 3.1s in the page, \"拉着海水\"\n\npages/p01.js is already written; stop once the change below is made in it and say in one sentence what you changed.\nThis is an English film: all text on screen (titles, labels, units) is in English, matching the narration. English runs longer than Chinese, so leave enough width for text.\nWrite everything you say to the user in English.",
+  "reviewer": "## The page (p02 of 3, in the film \"潮汐\")\n- Section: 原理\n- What it says: 月亮的引力拉着海水\n- Beats:\n  1. [c1] 月亮 — 拉出水的鼓包\n  2. [c2:引力] 箭头 — 指向月亮\n- The page lasts 12.5s. Narration:\n  - c1 at 0.4s: \"月亮的引力\"\n  - c2 at 3.1s: \"拉着海水\"\n\n## The checker\nMust-fix (already sent to the artist):\n- 2s: two labels overlap\nAdvice (a measurement; fail on it only if the picture shows a problem):\n- 5s: sparse\n\nThe attached sheet shows the page at these moments within it (left to right, top to bottom): 1.0s, 6.0s, 11.0s.\nCall verdict.",
+  "reviewerChange": "Round 2: the artist has changed the page since you last saw it.\n\n## The page (p03 of 3, in the film \"潮汐\")\n- Section: 结尾\n- What it says: 下次看海，想想月亮\n- Beats:\n  1. [c1] 月亮和海 — 静静对望\n- The page lasts 12.5s. Narration:\n  - c1 at 0.4s: \"月亮的引力\"\n  - c2 at 3.1s: \"拉着海水\"\n\nThe user asked for this change to the page: 月亮画大一点\nFail the page if the pictures don't show it.\n\n## The checker\nNothing must be fixed.\n\n\nThe attached sheet shows the page at these moments within it (left to right, top to bottom): 1.0s, 6.0s, 11.0s.\nCall verdict."
+};
+
+test('without a brand, every stage\'s message is what it was', () => {
+  const now: Record<string, string> = {
+    storyboard: storyboardPrompt(brief, 'warm-story', []),
+    storyboardMaterials: storyboardPrompt({ ...brief, voice: undefined, lang: 'en' }, 'study', ['a.md', 'b.pdf']),
+    script: scriptPrompt('第二页换个比喻', brief),
+    scriptApproved: scriptPrompt(undefined, { durationSec: 60 }),
+    page: pagePrompt(sb, 'p02', t, 'zh', 'en', false),
+    pageRevising: pagePrompt(sb, 'p01', { ...t, id: 'p01' }, 'en', undefined, true),
+    reviewer: reviewerPrompt(sb, 'p02', t, 1, issues, times),
+    reviewerChange: reviewerPrompt(sb, 'p03', t, 2, [], times, '月亮画大一点'),
+  };
+  for (const k of Object.keys(SNAPSHOT)) assert.equal(now[k], SNAPSHOT[k], k);
+});

@@ -152,7 +152,7 @@ const MAX = { pageLintMs: 90_000, pagesAtOnce: 10, storyboardFix: 2, scriptFix: 
 /** the reviewer looks at one sheet and answers: little thinking, quickly */
 const REVIEWER_THINKING: Thinking = 'low';
 /** what breaks a film whatever it looks like: the whole-film check's 'defects' mode takes only these */
-const DEFECTS: LintKind[] = ['runtime', 'api', 'nondeterministic'];
+const DEFECTS: LintKind[] = ['runtime', 'api', 'nondeterministic', 'palette'];
 /** findings that mean the page's code does not run as written: such a page is not drawn */
 const BROKEN: LintKind[] = ['runtime', 'api'];
 const errorsOf = (issues: LintIssue[]) => issues.filter((i) => i.level === 'error');
@@ -290,7 +290,7 @@ export class Director {
     // only what the agent can read: md/txt/images. PDF/Word/PPT/EPUB are parsed beforehand into x.md (or x.pdf.md)
     const all = fs.existsSync(this.project.file('materials')) ? fs.readdirSync(this.project.file('materials')).filter((f) => !f.startsWith('.')) : [];
     const materials = all.filter((f) => /\.(md|markdown|txt|png|jpe?g|webp|gif)$/i.test(f));
-    const s = await this.session('planner', plannerSystem(this.o.style, this.o.brief.preferences, this.o.brief.styleNotes), MAX.planTurns, this.state.planner);
+    const s = await this.session('planner', plannerSystem(this.o.style, this.o.brief.preferences, this.o.brief.styleNotes, this.o.brief.brand), MAX.planTurns, this.state.planner);
     let r = await this.send(s, storyboardPrompt(this.o.brief, this.o.style, materials));
     this.state.planner = s.ref; this.save();
     // a turn can end without the file (seen: a gateway answering a one-token "." mid-turn); ask once more, as for pages
@@ -322,7 +322,7 @@ export class Director {
     this.emit({ type: 'stage', stage: 'script', status: 'start' });
     this.state.stage = 'script'; this.save();
     this.serverMeta();
-    const s = await this.session('planner', plannerSystem(this.o.style, this.o.brief.preferences, this.o.brief.styleNotes), MAX.planTurns, this.state.planner);
+    const s = await this.session('planner', plannerSystem(this.o.style, this.o.brief.preferences, this.o.brief.styleNotes, this.o.brief.brand), MAX.planTurns, this.state.planner);
     let r = await this.send(s, scriptPrompt(feedback, this.o.brief) + this.unseen('planner'));
     this.state.planner = s.ref; this.save();
     let check: Awaited<ReturnType<Project['scriptCheck']>>;
@@ -539,7 +539,7 @@ export class Director {
       const unchanged = () => before !== undefined && this.project.read(`pages/${id}.js`) === before;
       let r: TurnResult | undefined, declined: string | undefined;
       if (!was) {
-        r = await this.send(s, pagePrompt(sb, id, t, this.o.brief.lang, this.o.brief.replyLang, !!fix) + (fix ? revisionNote(id, fix, this.project.read(`pages/${id}.js`)) : '') + this.unseen(`page-${id}`), undefined, PAGE_THINKING);
+        r = await this.send(s, pagePrompt(sb, id, t, this.o.brief.lang, this.o.brief.replyLang, !!fix, this.o.brief.brand) + (fix ? revisionNote(id, fix, this.project.read(`pages/${id}.js`)) : '') + this.unseen(`page-${id}`), undefined, PAGE_THINKING);
         if (!this.project.exists(`pages/${id}.js`)) r = await this.send(s, `pages/${id}.js does not exist yet; write it, then stop.`, undefined, PAGE_THINKING);
         if (!this.project.exists(`pages/${id}.js`)) throw new Error(r.error || this.say('没有写出页面文件', 'No page file was written'));
         // the agent found nothing to change (already so, or nothing this page can do): it says why instead of searching
@@ -576,7 +576,7 @@ export class Director {
           this.setPage(id, { ...st, issues: issues.map(fromLint) }, { sheet: c.sheet });
           const change = unchanged() ? fix : undefined;
           reviewer ??= await this.session(`check-${id}`, reviewerSystem(this.o.style, this.o.brief.styleNotes, this.designed()?.card), MAX.reviewerTurns, undefined, undefined, { tools: 'none', answers: [VERDICT] });
-          verdict = await this.verdict(reviewer, reviewerPrompt(sb, id, t, round, issues, times, change), c.sheet);
+          verdict = await this.verdict(reviewer, reviewerPrompt(sb, id, t, round, issues, times, change, this.o.brief.brand), c.sheet);
           const errors = errorsOf(issues), problems = verdict?.pass === false ? verdict.problems : [];
           if (!errors.length && !problems.length) { st.status = 'ok'; st.issues = []; break; }
           if (round === checks) break;
@@ -796,7 +796,7 @@ export class Director {
   private async planRevision(request: string, sb: Storyboard, named: string[]) {
     // a fresh, small session per change: resuming the planner would carry the whole making of the film (slow, and every
     // token of it re-read); the files hold everything this decision needs
-    const s = await this.session('reviser', plannerSystem(this.o.style, this.o.brief.preferences, this.o.brief.styleNotes), MAX.planTurns);
+    const s = await this.session('reviser', plannerSystem(this.o.style, this.o.brief.preferences, this.o.brief.styleNotes, this.o.brief.brand), MAX.planTurns);
     fs.rmSync(this.project.file('.studio/revision.json'), { force: true });   // last change's plan is not this one's
     // hand over what the decision needs up front (the script, and the code of the pages the request names) — reading
     // them file by file costs a model round trip each

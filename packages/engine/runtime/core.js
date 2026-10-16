@@ -26,7 +26,31 @@
   // style pack (styles/<id>/style.js, loaded before the runtime): palette overrides keep the same colour names
   const STYLE = window.STYLE || {};
   Object.assign(C, STYLE.palette);
-  const col = (c) => (c && C[c]) || c;
+  // A colour by its palette name, or any CSS colour as it is. A name the palette doesn't have was passed on as CSS and
+  // drew black (warm-story has no yellowF). Now a light fill `<name>F` of a colour the palette has is that colour mixed
+  // toward the paper, as the style's own fills are: the engine's own helpers compose these (a chip's `c + 'F'`), so it
+  // is resolved quietly. Any other name the palette lacks is ink, and the page that used it is noted (PV.colorPage, set
+  // by the engine while it builds and draws a page) for the page check to report.
+  const unknownColors = new Map();
+  const resolved = new Map();
+  const mixHex = (a, b, k) => '#' + [1, 3, 5].map((i) => Math.round(parseInt(a.slice(i, i + 2), 16) * k + parseInt(b.slice(i, i + 2), 16) * (1 - k)).toString(16).padStart(2, '0')).join('');
+  const HEX = /^#[0-9a-f]{6}$/i;
+  function col(c) {
+    if (!c) return c;
+    const own = C[c];
+    if (own) return own;
+    if (typeof c !== 'string' || !/^[A-Za-z][\w-]*$/.test(c)) return c;
+    let v = resolved.get(c);
+    if (v === undefined) {
+      const css = c === 'none' || (typeof CSS !== 'undefined' && CSS.supports && CSS.supports('color', c));
+      const base = c.endsWith('F') && C[c.slice(0, -1)];
+      v = css ? { as: c } : base && HEX.test(base) && HEX.test(C.paper) ? { as: mixHex(base, C.paper, 0.22) } : { as: C.ink, unknown: true };
+      resolved.set(c, v);
+    }
+    const page = PV.colorPage;
+    if (v.unknown && page) { let set = unknownColors.get(page); if (!set) unknownColors.set(page, (set = new Set())); set.add(c); }
+    return v.as;
+  }
 
   const SVGNS = 'http://www.w3.org/2000/svg';
   function s(tag, attrs, parent) {
@@ -314,7 +338,7 @@
     if (a.g && a.kind !== 'show' && a.kind !== 'text') a.g.style.opacity = o.toFixed(3);
   }
 
-  window.PV = Object.assign(window.PV || {}, { clamp, lerp, smooth, ease, C, col, s, h, gen, rrect, Builder, applyAct, hashStr,
+  window.PV = Object.assign(window.PV || {}, { clamp, lerp, smooth, ease, C, col, unknownColors, s, h, gen, rrect, Builder, applyAct, hashStr,
     rng(seed) { let x = seed >>> 0; return () => { x = (x + 0x6d2b79f5) >>> 0; let r = Math.imul(x ^ (x >>> 15), 1 | x); r ^= r + Math.imul(r ^ (r >>> 7), 61 | r); return ((r ^ (r >>> 14)) >>> 0) / 4294967296; }; },
   });
 })();
