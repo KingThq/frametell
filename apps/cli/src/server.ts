@@ -82,6 +82,7 @@ export function createServer(studio = new Studio(), opts: { token?: string } = {
   });
   app.post('/api/projects/:id/export', (c) => c.json({ ok: studio.export(c.req.param('id')) }));
   app.post('/api/projects/:id/stop', (c) => { studio.stop(c.req.param('id')); return c.json({ ok: true }); });
+  app.patch('/api/projects/:id', async (c) => { studio.moveProject(c.req.param('id'), String((await c.req.json()).group ?? '')); return c.json({ ok: true }); });
   app.delete('/api/projects/:id', (c) => { studio.deleteProject(c.req.param('id')); return c.json({ ok: true }); });
   app.post('/api/projects/:id/say', async (c) => {
     const { text, refs } = (await c.req.json().catch(() => ({}))) as { text?: string; refs?: unknown };

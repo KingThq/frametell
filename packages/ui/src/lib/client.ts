@@ -27,6 +27,8 @@ export interface StudioClient {
   stop(id: string): Promise<void>;
   /** delete a project and its files; refused while it is being made */
   deleteProject(id: string): Promise<void>;
+  /** file a project under a group on the home page ('' : none); absent where a host keeps no groups */
+  moveProject?(id: string, group: string): Promise<void>;
   /** talk to the director: storyboard feedback, a note mid-run, or a change to the finished film */
   say(id: string, text: string, refs?: UserRef[]): Promise<boolean>;
   /** save a file the user attached to a message into the project; returns the reference to send with it */
@@ -105,6 +107,7 @@ export const httpClient: StudioClient = {
   approve: async (id, feedback) => (await call<{ ok: boolean }>('POST', `/api/projects/${id}/approve`, { feedback })).ok,
   stop: async (id) => { await call('POST', `/api/projects/${id}/stop`); },
   deleteProject: async (id) => { await call('DELETE', `/api/projects/${id}`); },
+  moveProject: async (id, group) => { await call('PATCH', `/api/projects/${id}`, { group }); },
   timeline: (id) => call<Timeline | null>('GET', `/api/projects/${id}/timeline`),
   export: async (id) => (await call<{ ok: boolean }>('POST', `/api/projects/${id}/export`)).ok,
   frames: async (id, times) => (await call<{ paths: string[] }>('GET', `/api/projects/${id}/frames?t=${times.map((t) => t.toFixed(1)).join(',')}`)).paths,

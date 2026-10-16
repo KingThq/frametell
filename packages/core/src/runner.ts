@@ -66,6 +66,14 @@ export class Projects {
     return meta;
   }
 
+  /** file a project under a group (empty: under none). Its updatedAt stays: filing a film is not working on it */
+  setGroup(id: string, group: string) {
+    if (!/^[\w-]+$/.test(id)) throw new Error(tr('项目不存在', 'Project not found'));
+    const dir = this.dir(id), m = this.read(id), g = group.replace(/\s+/g, ' ').trim().slice(0, 40);
+    if (g) m.group = g; else delete m.group;
+    fs.writeFileSync(studioFile(dir, 'project.json'), JSON.stringify(m, null, 2));
+  }
+
   /** delete a project and everything in it; refused while it is being made, here or in another process */
   remove(id: string) {
     if (!/^[\w-]+$/.test(id)) throw new Error(tr('项目不存在', 'Project not found'));

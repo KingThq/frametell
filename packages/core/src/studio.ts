@@ -276,6 +276,8 @@ export class Studio {
   halt(id: string): Promise<void> { return this.store.runner(id).halt(); }
   /** delete a project and its files; refused while it is being made */
   deleteProject(id: string) { this.store.remove(id); this.timelines.delete(id); }
+  /** file a project under a group on the home page; '' takes it out of any */
+  moveProject(id: string, group: string) { this.store.setGroup(id, String(group ?? '')); }
   /** talk to the director: storyboard feedback, a note mid-run, or a change to the finished film */
   say(id: string, text: string, refs?: unknown) { return this.store.runner(id).say(text, cleanRefs(refs)); }
   /** save a file the user attached to a message; returns the reference to send with it */
