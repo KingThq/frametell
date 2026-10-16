@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-10-16
+
+### Added
+
+- Videos on the home page can be put in groups: a tab for each group (with All and Ungrouped), and a menu on every row to move a video to a group, make a new group, take it out of one, or delete it. "Select" picks several videos to move or delete at once. A project's group is kept in its `project.json` (`group`), set with `Studio.moveProject(id, group)` or `PATCH /api/projects/:id`.
+
+### Changed
+
+- The home page asks for one model. The director and the pages get a model each under "Advanced", which opens by itself when they were saved apart.
+
+### Fixed
+
+- A page that its own check passed with a note shows as drawn, not as something to look at.
+- On Windows, a project without its `.gitignore` no longer stages the engine links in its first commit (which hit the git timeout and left the folder locked).
+- The environment tests read a child's variables case-insensitively on Windows.
+
 ## [0.7.0] - 2026-10-16
 
 ### Added
@@ -294,7 +310,8 @@ The first release of Frametell: a local, open-source studio that turns an idea o
 - The npm packages are not published yet; install from source (see the README).
 - The Claude Agent SDK and Codex runtimes are in the code but not offered; every film runs on the built-in agent, which works with any provider.
 
-[Unreleased]: https://github.com/sitor-ai/frametell/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/sitor-ai/frametell/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/sitor-ai/frametell/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/sitor-ai/frametell/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/sitor-ai/frametell/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/sitor-ai/frametell/compare/v0.5.0...v0.5.1
