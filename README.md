@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/brand/readme/banner-en-dark.png">
-    <img alt="帧言 Frametell: turn your ideas and material into vivid explainer videos" src="docs/brand/readme/banner-en-light.png" width="100%">
+    <img alt="Frametell: tell stories, frame by frame. Turn your ideas and material into vivid explainer videos" src="docs/brand/readme/banner-en-light.png" width="100%">
   </picture>
 </p>
 
