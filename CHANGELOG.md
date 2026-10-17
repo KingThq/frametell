@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - While a film is being made, the workbench's players no longer reload the whole film each time a page starts, finishes or goes round its check again. They reloaded dozens of times during a film, the page you were playing was cut off and stuck near its start, and the browser could slow to a crawl. A player now picks up a new version only when a page has been drawn.
 
+- The preview no longer shakes at the start of a page when a line's audio gets stuck. A line whose file came without a length or byte ranges (a hosted film's files sometimes do while it is being made) could be told to play and never finish seeking; the picture kept to that line all the same and was pulled back to its start every few frames. A line now leads the picture only while it is playing. A stuck line holds the picture, is fetched again after 1.5 s, and is skipped after 4 s, so the film plays on.
+
 ## [0.7.2] - 2026-10-16
 
 ### Fixed
