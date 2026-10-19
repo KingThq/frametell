@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.3] - 2026-10-19
+
 ### Added
 
 - A film can be presented as a slide deck. "Present" beside the export button opens the preview in deck mode (`index.html?deck`, or `window.DECK_MODE`, `runtime/deck.js`): each spoken line is one step, and a click, → or Space plays the picture up to just before the next line and holds it there, so the animations of a line come in one click at a time. ← goes back a step, ↑ ↓ jump a page, Home and End go to either end, F is full screen. It is silent and without subtitles: the presenter speaks. P opens a presenter window with the line to say, the next one and a clock; the two windows follow each other. The step is kept in the address (`#12`), and a phone can swipe or tap. On a hosted service the popover also gives the deck's link to share: the preview's own signed address, which opens without signing in and follows the film as it changes.
@@ -30,6 +32,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - While a film is being made, the workbench's players no longer reload the whole film each time a page starts, finishes or goes round its check again. They reloaded dozens of times during a film, the page you were playing was cut off and stuck near its start, and the browser could slow to a crawl. A player now picks up a new version only when a page has been drawn.
 
 - The preview no longer shakes at the start of a page when a line's audio gets stuck. A line whose file came without a length or byte ranges (a hosted film's files sometimes do while it is being made) could be told to play and never finish seeking; the picture kept to that line all the same and was pulled back to its start every few frames. A line now leads the picture only while it is playing. A stuck line holds the picture, is fetched again after 1.5 s, and is skipped after 4 s, so the film plays on.
+
+- A change that adds a page to the storyboard (a new end card, say) no longer fails that page on every Continue. Its revision note read the page's file, which does not exist yet; a page a change adds is now drawn from nothing.
+
+- Narration no longer fails with a zero-length "audible sound" cut when a take's trailing silence stops a few milliseconds before the end of its file.
+
+- A new film's placeholder opening is in the film's language. Until the director writes the script, an English film showed a Chinese first page and lines in the film strip; the template's opening (section, greeting, title line, first question) is now filled in English for an English film (`createProject(dir, { lang })`, passed from the film's `lang` by Studio and the CLI) and stays Chinese for a Chinese one.
+
+- The `warm-story` style is labelled "Warm illustration" in the English interface (it said "Warm storybook") and its short Chinese name, as the agent and hosted services name it.
 
 ## [0.7.2] - 2026-10-16
 
@@ -345,7 +355,8 @@ The first release of Frametell: a local, open-source studio that turns an idea o
 - The npm packages are not published yet; install from source (see the README).
 - The Claude Agent SDK and Codex runtimes are in the code but not offered; every film runs on the built-in agent, which works with any provider.
 
-[Unreleased]: https://github.com/sitor-ai/frametell/compare/v0.7.2...HEAD
+[Unreleased]: https://github.com/sitor-ai/frametell/compare/v0.7.3...HEAD
+[0.7.3]: https://github.com/sitor-ai/frametell/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/sitor-ai/frametell/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/sitor-ai/frametell/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/sitor-ai/frametell/compare/v0.6.0...v0.7.0
