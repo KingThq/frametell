@@ -53,7 +53,7 @@ const en: typeof zh = {
     exportMp4: 'Export mp4',
     deck: 'Present',
     deckTitle: 'Present the film as a slide deck, one line per click',
-    deckIntro: 'Step through it like slides: click or press → for the next line, ← to go back, P for the presenter view (notes and a clock), S for the narration.',
+    deckIntro: 'Step through it like slides: click or press → for the next line, ← to go back, P for the presenter view (notes and a clock). No sound or subtitles: you do the talking.',
     deckPreview: 'Present in a new window',
     deckLink: 'Online deck link',
     deckLinkHint: 'Anyone with the link can open it, no sign-in needed. After you change the film, press Update: the link stays the same.',

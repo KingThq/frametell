@@ -1,9 +1,9 @@
 /* The film as a slide deck (?deck, or window.DECK_MODE): each spoken line is one step. A click, → or Space plays the
  * picture from where the last step stopped to just before the next line begins, and holds there; the animations of a
  * line are drawn at its start, so a step is exactly one "build" of the slide. ← goes back a step (straight to its held
- * picture, not played backwards); ↑ ↓ jump a page; Home / End; F full screen; S narration on / off (off by default:
- * the presenter speaks); P a presenter window (the line to say, the next one, a clock) that follows and drives this one.
- * The step is kept in the address (#12), so a reload stays on it. Subtitles are off. */
+ * picture, not played backwards); ↑ ↓ jump a page; Home / End; F full screen; P a presenter window (the line to say,
+ * the next one, a clock) that follows and drives this one. The step is kept in the address (#12), so a reload stays on
+ * it. Silent and without subtitles: the presenter speaks. */
 (function () {
   const q = new URLSearchParams(location.search);
   const presenter = q.has('presenter');
@@ -34,21 +34,6 @@
     const N = steps.length;
     const from = (i) => (i <= 0 ? 0 : steps[i - 1].hold);
 
-    // ── narration (S): the lines of a step played as it is played, never while jumping ──
-    let sound = false;
-    const clips = L.pages.flatMap((p) => p.cues).filter((c) => c.audio).map((c) => ({ at: c.audioAt ?? c.start, d: c.dur ?? c.end - c.start, src: c.audio, el: null }));
-    const hush = () => { for (const c of clips) if (c.el && !c.el.paused) c.el.pause(); };
-    const voice = (t) => {
-      if (!sound) return;
-      for (const c of clips) {
-        const off = t - c.at;
-        if (off < 0 || off >= c.d) continue;
-        if (!c.el) { c.el = new Audio(c.src); c.el.preload = 'auto'; }
-        if (c.el.paused && !c.el.ended && c.el.readyState >= 2 && off < c.d - 0.2) { c.el.currentTime = off; c.el.play().catch(() => {}); }
-        else if (c.el.paused && c.el.readyState < 2) c.el.load();
-      }
-    };
-
     // ── the shared state: which step, and whether it is being played ──
     let i = 0, t = 0, playing = false, wall = 0, t0 = 0;
     const chan = 'BroadcastChannel' in window ? new BroadcastChannel(`deck:${location.pathname}`) : null;
@@ -62,7 +47,6 @@ body { background: #111; }
 #dk-bar.idle { opacity: 0; }
 #dk-bar button { background: none; border: 0; color: #fff; font: inherit; font-size: 18px; cursor: pointer; min-width: 36px; height: 34px; border-radius: 8px; padding: 0 8px; }
 #dk-bar button:hover { background: rgba(255,255,255,0.15); }
-#dk-bar button.off { opacity: 0.45; }
 #dk-n { font-variant-numeric: tabular-nums; min-width: 72px; text-align: center; }
 #dk-gap { flex: 1; }
 #dk-line { position: fixed; left: 0; bottom: 0; height: 3px; background: #FF9A3C; z-index: 100; transition: width .25s; }
@@ -85,7 +69,6 @@ body.dk-quiet, body.dk-quiet #viewport { cursor: none; }
     bar.id = 'dk-bar';
     bar.innerHTML = `<button id="dk-prev" title="${say('上一步（←）', 'Back (←)')}">‹</button><span id="dk-n"></span><button id="dk-next" title="${say('下一步（→ / 空格）', 'Next (→ / Space)')}">›</button>`
       + `<span id="dk-gap"></span>`
-      + (clips.length ? `<button id="dk-sound" class="off" title="${say('旁白（S）', 'Narration (S)')}">♪</button>` : '')
       + (presenter ? '' : `<button id="dk-presenter" title="${say('演讲者视图（P）', 'Presenter view (P)')}">▤</button>`)
       + `<button id="dk-fs" title="${say('全屏（F）', 'Full screen (F)')}">⛶</button>`;
     document.body.appendChild(bar);
@@ -130,7 +113,6 @@ body.dk-quiet, body.dk-quiet #viewport { cursor: none; }
       if (!playing) return;
       const to = steps[i].hold;
       t = Math.min(to, wall + (now - t0) / 1000);
-      voice(t);
       if (t >= to) playing = false;
       show();
       if (playing) requestAnimationFrame(loop);
@@ -143,7 +125,7 @@ body.dk-quiet, body.dk-quiet #viewport { cursor: none; }
     };
     /** show step k's held picture at once */
     const land = (k) => {
-      playing = false; hush();
+      playing = false;
       i = Math.max(0, Math.min(N - 1, k)); t = steps[i].hold;
       mark(); tell(); show();
     };
@@ -151,10 +133,9 @@ body.dk-quiet, body.dk-quiet #viewport { cursor: none; }
     function next() { hideHint(); if (playing) land(i); else if (i < N - 1) play(i + 1); }
     function back() { hideHint(); if (i > 0) land(i - 1); else land(0); }
     /** the next page's first step, played (its page turn too); the previous page's last, held */
-    const nextPage = () => { hideHint(); const k = steps.findIndex((s) => s.page > steps[i].page); if (k > 0) { hush(); play(k); } };
+    const nextPage = () => { hideHint(); const k = steps.findIndex((s) => s.page > steps[i].page); if (k > 0) play(k); };
     const prevPage = () => { hideHint(); const p = steps[i].page; land(p > 0 ? steps.findLastIndex((s) => s.page === p - 1) : 0); };
     const fullscreen = () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()).catch(() => {});
-    const toggleSound = () => { sound = !sound; $('dk-sound')?.classList.toggle('off', !sound); if (!sound) hush(); else if (playing) voice(t); };
     const openPresenter = () => {
       const u = new URL(location.href); u.searchParams.set('presenter', ''); u.hash = String(i + 1);
       window.open(u.href, `deck-presenter`, 'width=1280,height=760');
@@ -166,7 +147,7 @@ body.dk-quiet, body.dk-quiet #viewport { cursor: none; }
       if (m?.type === 'at' && typeof m.i === 'number' && m.i !== i) {
         // one step on is played, as it is here; anything else lands
         if (m.i === i + 1 && !playing) { i = m.i; t = from(i); wall = t; t0 = performance.now(); playing = true; mark(); requestAnimationFrame(loop); }
-        else { playing = false; hush(); i = Math.max(0, Math.min(N - 1, m.i)); t = steps[i].hold; mark(); show(); }
+        else { playing = false; i = Math.max(0, Math.min(N - 1, m.i)); t = steps[i].hold; mark(); show(); }
       } else if (m?.type === 'hello') tell();
     });
 
@@ -183,7 +164,6 @@ body.dk-quiet, body.dk-quiet #viewport { cursor: none; }
     $('dk-prev').addEventListener('click', (e) => { e.stopPropagation(); back(); });
     $('dk-next').addEventListener('click', (e) => { e.stopPropagation(); next(); });
     $('dk-fs').addEventListener('click', (e) => { e.stopPropagation(); fullscreen(); });
-    $('dk-sound')?.addEventListener('click', (e) => { e.stopPropagation(); toggleSound(); });
     $('dk-presenter')?.addEventListener('click', (e) => { e.stopPropagation(); openPresenter(); });
     // a click on the picture's left fifth goes back (a phone's tap), anywhere else on
     document.getElementById('viewport').addEventListener('click', (e) => { if (e.clientX < innerWidth * 0.2) back(); else next(); });
@@ -204,7 +184,6 @@ body.dk-quiet, body.dk-quiet #viewport { cursor: none; }
       else if (k === 'Home') { e.preventDefault(); land(0); }
       else if (k === 'End') { e.preventDefault(); land(N - 1); }
       else if (k === 'f' || k === 'F') fullscreen();
-      else if (k === 's' || k === 'S') toggleSound();
       else if ((k === 'p' || k === 'P') && !presenter) openPresenter();
     });
     // the controls and the pointer hide after 2 s without movement
