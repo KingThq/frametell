@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - An exported film opens on a cover instead of a blank stage. Its first frame is a page at rest (the moment its thumbnail is cut), so a chat app or a file browser that shows a video by its first frame shows a picture; one frame of it is not seen when the film plays. It is the first page unless another is chosen: "Cover" beside the workbench's export button lists the film's pages to pick from (`Studio.setCover(id, page)`, saved as `cover.json` in the project, a `cover` event). Choosing another cover marks an mp4 already made out of date, and the next export draws only the film's first segment again.
 
+- The cover can be an image of your own. "Upload image", first in the cover picker, takes a JPEG, PNG or WebP of up to 10 MB; the exported film's first frame shows it filling the frame (cropped to the film's shape) instead of a page. It is kept in the project as `cover-<hash>.<ext>` and named in `cover.json` (`{ "image": … }`), checked by its bytes, never followed through a link (`Studio.setCoverImage(id, data)`, `PUT /api/projects/:id/cover/image`, a `cover` event with `image`). Choosing a page again removes it.
+
 ### Fixed
 
 - A film a hosted service stops because the account ran out of credits now says so (`paused` with `reason: 'credits'`, from `Studio.stop(id, 'credits')`), with a button to top up beside Continue and the out-of-credits notice at the top of the workbench until the balance is topped up. It used to read as if the user had paused it.
