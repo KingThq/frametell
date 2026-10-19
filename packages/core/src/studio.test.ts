@@ -177,6 +177,22 @@ test('a new film keeps its style notes and look, the look checked', async () => 
   } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
 });
 
+test('a new film\'s placeholder opening speaks the film\'s language until the director writes the script', () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'frametell-lang-'));
+  try {
+    const studio = new Studio({ dataDir, config: memoryConfig({ defaults: { model: 'anthropic/x' } as Config['defaults'] }), linkProjects: false });
+    const script = (lang: 'zh' | 'en') => {
+      const p = studio.createProject({ topic: 'tides', title: 'Tides', lang }, [], { start: false });
+      const g: { SCRIPT?: { PAGES: { section: string; cues: (string | { t: string })[] }[] } } = {};
+      new Function('globalThis', fs.readFileSync(path.join(studio.projectsDir, p.id, 'script.js'), 'utf8'))(g);
+      const [page] = g.SCRIPT!.PAGES;
+      return [page.section, ...page.cues.map((c) => typeof c === 'string' ? c : c.t)];
+    };
+    assert.deepEqual(script('en'), ['Opening', 'Hi, in this one we talk about:', 'Tides.', 'Let’s start with a question.']);
+    assert.deepEqual(script('zh'), ['开场', '大家好，这一篇我们来聊：', 'Tides。', '先从一个问题说起。']);
+  } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
+});
+
 test('a new film keeps its brand, checked, and its files in assets/brand/: only those the brief names, under plain names', () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'frametell-brand-'));
   try {

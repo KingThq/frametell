@@ -62,7 +62,7 @@ export class Projects {
   create(input: Omit<ProjectMeta, 'id' | 'createdAt' | 'updatedAt' | 'materials'>, files: { name: string; data: Buffer }[]): ProjectMeta {
     const id = `${new Date().toISOString().slice(0, 10)}-${crypto.randomBytes(6).toString('hex')}`;
     const dir = this.dir(id);
-    createProject(dir, { title: input.title, style: input.style });
+    createProject(dir, { title: input.title, style: input.style, lang: input.lang });
     fs.mkdirSync(path.join(dir, 'materials'), { recursive: true });
     fs.mkdirSync(path.join(dir, '.studio'), { recursive: true });
     const materials: string[] = [];
