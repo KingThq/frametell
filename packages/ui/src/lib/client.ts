@@ -80,7 +80,18 @@ export interface Hosted {
      * what the film cost the service in US dollars, given only to its admins, to trace costs */
     spent?(project: string): Promise<{ spent: number; goAhead?: number; cost?: number } | null>;
   };
+  /** the film as a slide deck at a public address the service keeps (a line a click: the engine's ?deck); absent, the
+   * deck opens in the preview only. `read`: the film's deck, or null when it has none; `publish` puts the film as it is
+   * now there (the same address each time); `remove` takes it down (a later publish gets a new address) */
+  deck?: {
+    read(project: string): Promise<DeckLink | null>;
+    publish(project: string): Promise<DeckLink>;
+    remove(project: string): Promise<void>;
+  };
 }
+
+/** a published deck: its address and when the film was last put there */
+export interface DeckLink { url: string; at: string }
 
 /** what a hosted service refused for want of credits: a failed call carries `credits` (what it needed, what was there) */
 export function shortOf(e: unknown): { needed: number; available: number } | undefined {

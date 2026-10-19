@@ -51,6 +51,18 @@ const en: typeof zh = {
     title: 'Export the film as mp4, with and without subtitles',
     exportLatest: 'Export latest',
     exportMp4: 'Export mp4',
+    deck: 'Present',
+    deckTitle: 'Present the film as a slide deck, one line per click',
+    deckIntro: 'Step through it like slides: click or press → for the next line, ← to go back, P for the presenter view (notes and a clock), S for the narration.',
+    deckPreview: 'Present in a new window',
+    deckLink: 'Online deck link',
+    deckLinkHint: 'Anyone with the link can open it, no sign-in needed. After you change the film, press Update: the link stays the same.',
+    deckPublish: 'Create link',
+    deckUpdate: 'Update to latest',
+    deckRemove: 'Take down',
+    deckOpen: 'Open',
+    deckAt: 'Updated {time}',
+    deckWorking: 'Uploading…',
   },
 };
 
