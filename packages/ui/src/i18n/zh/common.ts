@@ -27,7 +27,7 @@ export default {
   },
   requestFailed: '请求失败（{status}）',
   styles: {
-    'warm-story': '暖调叙事插画', study: '安静书房', whiteboard: '白板手绘', chalkboard: '黑板', 'tech-dark': '科技深色',
+    'warm-story': '暖调插画', study: '安静书房', whiteboard: '白板手绘', chalkboard: '黑板', 'tech-dark': '科技深色',
   },
   /** 内置风格的一句话说明；不在这里的风格用服务端给的说明 */
   styleSummaries: {

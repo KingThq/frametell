@@ -28,7 +28,7 @@ const en: typeof zh = {
   },
   requestFailed: 'Request failed ({status})',
   styles: {
-    'warm-story': 'Warm storybook', study: 'Quiet study', whiteboard: 'Whiteboard', chalkboard: 'Chalkboard', 'tech-dark': 'Tech dark',
+    'warm-story': 'Warm illustration', study: 'Quiet study', whiteboard: 'Whiteboard', chalkboard: 'Chalkboard', 'tech-dark': 'Tech dark',
   },
   styleSummaries: {
     'warm-story': 'Warm flat illustration with one metaphor carried through the whole film. Good for investing, everyday life and psychology.',
