@@ -10,7 +10,7 @@ import { KIT_CHECK_FILE, KIT_FILE, KIT_KEPT, keepComponents, kitIssues, kitPlan,
 import { addUsage, emptyUsage, type AgentRuntime, type AgentSession, type SessionOptions, type Thinking, type TokenUsage, type TurnResult } from './runtime/types.js';
 import type { PageIssue, PageStatus, Stage, StudioEvent } from './events.js';
 import { designedFonts, designedIssues, designedLook, type Look } from './look.js';
-import { SIGN_OFF_HOLD, signsOff } from './brand.js';
+import { SIGN_OFF_HOLD, cornerMark, signsOff } from './brand.js';
 import { ENGINE_DIR } from '@frametell/engine/tools/project.mjs';
 import { freeze, openIn } from './projectfs.js';
 import { briefFile, runResearch, type ResearchLimits } from './research/research.js';
@@ -396,7 +396,7 @@ export class Director {
     })() : {};
     // a film that ends on its brand's sign-off holds longer after its last line, so the logo is seen in silence
     const signOff = (() => { try { return signsOff(this.o.brief.brand, this.project.storyboard().pages); } catch { return false; } })();
-    this.setMeta({ style: this.o.style, lang: this.o.brief.lang ?? 'zh', voice: this.o.voice, gap: 0.8, pace: { maxHold: 1.0, gap: 0.8, ...(signOff ? { tail: SIGN_OFF_HOLD } : {}) }, extras: list, look: this.o.look ?? this.designed()?.look, ...gl });
+    this.setMeta({ style: this.o.style, lang: this.o.brief.lang ?? 'zh', voice: this.o.voice, gap: 0.8, pace: { maxHold: 1.0, gap: 0.8, ...(signOff ? { tail: SIGN_OFF_HOLD } : {}) }, extras: list, look: this.o.look ?? this.designed()?.look, mark: cornerMark(this.o.brief.brand, signOff) ?? false, ...gl });
   }
 
   // ── this film's own components (kit.ts) ─────────────────────────────────────────────────────
