@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The film's components are written quickly: the pages wait on them. Their session thinks at low effort, and is told to keep each component about the size of what one page would draw for it, without exploring the project first. On a 6-page film the first draft at medium effort took 44k tokens and 7½ minutes for one kettle.
 
+- The film's components are written side by side: each by a session of its own (`kit-<name>`), in a file of its own (`extras/kit/<name>.js`, with its lines for the check page in `extras/kit/<name>.check.js`), all at once. The server puts them together into `extras/film-kit.js` and the check page, checks them once, and sends each component's problems back to its own session, those sessions fixing at the same time; an error no component can be pinned on goes to all of them. The pages wait for the slowest component instead of all of them in turn.
+
 ## [0.7.3] - 2026-10-19
 
 ### Added

@@ -10,7 +10,7 @@ import type { AnswerTool } from './runtime/types.js';
 
 import { pagePack } from './pagepack.js';
 import { designedFonts } from './look.js';
-import { KIT_CHECK_FILE, KIT_FILE, KIT_MAX, type KitItem } from './kit.js';
+import { KIT_MAX, kitPart, kitPartCheck, type KitItem } from './kit.js';
 import { brandFilesOn, brandPageNote, cornerMark, brandReviewNote, brandSection, signsOff, type BrandBrief } from './brand.js';
 
 // found through the package itself, so it still resolves when the code is bundled (the desktop app)
@@ -240,29 +240,32 @@ export function kitSystem(style: string, extras: string[] = [], styleNotes?: str
   return [read('PAGE.md'), '---\n# This film\'s style\n\n' + grammar(style), filmCardSection(card), styleNotesSection(styleNotes), '---\n' + read('API.md'), '---\n' + pagePack(style, extras), '---\n' + read('LIB.md')].filter(Boolean).join('\n\n');
 }
 
-/** what the kit session is asked: the components the storyboard lists, where each appears, and how to write them */
-export function kitPrompt(sb: Storyboard, items: KitItem[], lang: Lang | undefined = sb.lang, replyLang?: Lang) {
-  const beatsOf = (it: KitItem) => sb.pages.filter((p) => it.pages.includes(p.id)).flatMap((p) => (p.beats || []).filter((b) => mentions(b, it)).map((b) => `    - ${p.id}: ${b.object} — ${b.action}`)).slice(0, 8);
-  return `Before any page of this film is drawn, write **this film's own components**: the things it draws on many pages, written once, in its look, so every page calls the same one.
+/** what one kit session is asked: its component (`it`), among the others the storyboard lists (written at the same
+ *  time by other sessions), and where on the check page it is drawn (`cell`) */
+export function kitPrompt(sb: Storyboard, items: KitItem[], it: KitItem, cell: { i: number; x: number; y: number; w: number; h: number }, lang: Lang | undefined = sb.lang, replyLang?: Lang) {
+  const beatsOf = (x: KitItem) => sb.pages.filter((p) => x.pages.includes(p.id)).flatMap((p) => (p.beats || []).filter((b) => mentions(b, x)).map((b) => `    - ${p.id}: ${b.object} — ${b.action}`)).slice(0, 8);
+  const others = items.filter((x) => x !== it);
+  const file = kitPart(it.name), check = kitPartCheck(it.name);
+  return `Before any page of this film is drawn, write **one of this film's own components**: \`P.${it.name}\`, a thing it draws on several pages, written once, in its look, so every page calls the same one.
 
 The film: ${sb.title} — ${sb.summary} (${sb.pages.length} pages)
 
-## The components the storyboard lists
-${items.map((it) => `- \`P.${it.name}\` — ${it.what} (on ${it.pages.join(', ')})${beatsOf(it).length ? `\n  What the pages do with it:\n${beatsOf(it).join('\n')}` : ''}`).join('\n')}
-
-## Write ${KIT_FILE}
+## Your component
+- \`P.${it.name}\` — ${it.what} (on ${it.pages.join(', ')})${beatsOf(it).length ? `\n  What the pages do with it:\n${beatsOf(it).join('\n')}` : ''}
+${others.length ? `\nThe film's other components, each written now by another artist: ${others.map((x) => `\`P.${x.name}\` (${x.what})`).join('; ')}. Where yours shows the same thing as one of them (a part of it, a close-up of it), draw it as described there: the same colours and parts.\n` : ''}
+## Write ${file}
 - One IIFE: \`(function () { const { col, clamp, lerp, ease, Builder } = PV; const B = Builder.prototype; … })();\`
-- Each component as \`B.name = function (args) { … }\`, drawn with the drawing API (\`this.path\`, \`this.text\`, \`this.circle\`, … as \`P.\` in a page), in the film's look: its colours by name, its line, its type.
+- Your component as \`B.${it.name} = function (args) { … }\`, drawn with the drawing API (\`this.path\`, \`this.text\`, \`this.circle\`, … as \`P.\` in a page), in the film's look: its colours by name, its line, its type.
 - Drawn the way this style draws (its grammar above). Where one of the style's own components already gives the look (a frame, a hatch, a figure), build on it with \`this.name(…)\`: it is loaded before yours.
-- **Directly above each one**, its doc comment, which is all the pages will see of it: \`/** name(args): what it draws and when to use it. o: { at, dur, … } */\`. Say every option a page may pass: what it can highlight, label or move.
+- **Directly above it**, its doc comment, which is all the pages will see of it: \`/** ${it.name}(args): what it draws and when to use it. o: { at, dur, … } */\`. Say every option a page may pass: what it can highlight, label or move.
 - **A pure function of time.** It draws through the API's timed calls (\`at\`, \`dur\`) and \`this.tick((lt) => …)\` only: the same moment gives the same picture. No \`Math.random()\` (use \`PV.rng(seed)\`), no state kept between frames.
 - Take \`o.at\` for when it starts and give the pages handles to what they need to move or light later (return an object, or the group).
 - Coordinates on the 1920×1080 stage; keep it out of the subtitle band (y > 900) unless a page places it there.
-- Only the listed components, named as listed. Nothing else in the file.
-- **Short and plain**: each component about the size of what one page would draw for it (aim for 40–80 lines), drawn the way a page draws, not modelled. Fix what must match across pages (shape, proportions, colours, parts) and the states the pages need; leave the rest to the pages. The pages are waiting for this file: write it in one go, without exploring the project first (the style's components are listed above, already loaded).
+- Only \`B.${it.name}\` (helpers inside the IIFE are fine). Nothing else in the file.
+- **Short and plain**: about the size of what one page would draw for it (aim for 40–80 lines), drawn the way a page draws, not modelled. Fix what must match across pages (shape, proportions, colours, parts) and the states the pages need; leave the rest to the pages. The pages are waiting for this file: write it in one go, without exploring the project first (the style's components are listed above, already loaded).
 
-## Write ${KIT_CHECK_FILE}
-One page that calls every component once, in the order listed: \`ENGINE.visual('kit', (P) => { … })\`. Component *i* starts at \`P.c(i)\` (the page has one cue per component, about 2.6 seconds each) and gets its own area of the frame, laid out in a grid so none overlaps another; use the options the pages will use. It is only for checking the components: a reviewer looks at it in pictures.
+## Write ${check}
+The lines that draw your component once on the check page, which shows every component of the film side by side: plain statements using \`P\` (no \`ENGINE.visual\` around them), e.g. \`P.${it.name}(…, { at: P.c(${cell.i}) });\`. It starts at \`P.c(${cell.i})\` (about 2.6 seconds before the next component's turn) and stays inside x ${cell.x}–${cell.x + cell.w}, y ${cell.y}–${cell.y + cell.h}; use the options the pages will use. A reviewer looks at it in pictures.
 
 Stop once both files are written and say in one sentence what you made.${langNote('page', lang, replyLang)}`;
 }
@@ -283,11 +286,11 @@ Fail a component when it does not read as what it should be, breaks the film's s
 }
 
 /** what the kit session is asked to fix after its check */
-export function kitFixPrompt(round: number, problems: { name?: string; what: string; fix: string }[], crash?: string) {
+export function kitFixPrompt(name: string, round: number, problems: { name?: string; what: string; fix: string }[], crash?: string) {
   return `Check round ${round}: the components need changes.
 ${crash ? `\nThe check page throws when it runs, so nothing could be looked at:\n${crash}\n` : ''}${problems.map((p) => `- ${p.name ? `${p.name}: ` : ''}${p.what} → ${p.fix}`).join('\n')}
 
-Fix them with edit in ${KIT_FILE} (and ${KIT_CHECK_FILE} if the check page itself is wrong). **Put all the edits in one reply**, each with finish: true: the round ends once they apply, and the components are checked again.`;
+${problems.some((p) => p.name === name) ? '' : 'They may not be yours: the check runs every component together. Change your files only for what is yours; if nothing is, say so and stop.\n'}Fix them with edit in ${kitPart(name)} (and ${kitPartCheck(name)} if your lines on the check page are wrong). **Put all the edits in one reply**, each with finish: true: the round ends once they apply, and the components are checked again.`;
 }
 
 /** the page reviewer: the film's own components, so a page that drew one of them again is caught */

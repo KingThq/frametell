@@ -22,6 +22,21 @@ export const KIT_CHECK_FILE = 'extras/kit-check.js';
 export const KIT_STAGE = '.studio/kit';
 /** the kit as it was checked, put back if a page changes it */
 export const KIT_KEPT = '.studio/film-kit.js';
+/** each component is written by a session of its own, all at once, in a file of its own: the components (KIT_FILE) and
+ *  the check page (KIT_CHECK_FILE) are put together from them */
+export const kitPart = (name: string) => `extras/kit/${name}.js`;
+/** the lines that draw component `name` on the check page */
+export const kitPartCheck = (name: string) => `extras/kit/${name}.check.js`;
+
+/** where component i of n is drawn on the check page: a grid over the stage above the subtitle band */
+export function kitCell(i: number, n: number): { i: number; x: number; y: number; w: number; h: number } {
+  const cols = Math.ceil(Math.sqrt(n)), rows = Math.ceil(n / cols);
+  const w = Math.floor((1920 - 120) / cols), h = Math.floor((900 - 80) / rows);
+  return { i, x: 60 + (i % cols) * w, y: 60 + Math.floor(i / cols) * h, w, h };
+}
+
+/** the check page, from each component's own lines (each in a block of its own, so their names never clash) */
+export const kitCheckPage = (parts: string[]) => `ENGINE.visual('kit', (P) => {\n${parts.map((p) => `  {\n${p.trim().split('\n').map((l) => '    ' + l).join('\n')}\n  }`).join('\n')}\n});\n`;
 
 const NAME = /^[a-z][A-Za-z0-9]{1,23}$/;
 

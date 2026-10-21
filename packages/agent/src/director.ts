@@ -6,7 +6,7 @@ import path from 'node:path';
 import { narrate, type TtsProvider } from '@frametell/voice';
 import { Project, childCmd, projectFiles, type LintIssue, type LintKind, type PageTiming, type Storyboard, type Renderer } from './project.js';
 import { FLAG, VERDICT, fixPrompt, kitFixPrompt, kitPrompt, kitReviewNote, kitReviewerPrompt, kitSystem, langNote, voiceNote, pagePrompt, pageSystem, plannerSystem, replyNote, reviewPrompt, reviewerPrompt, reviewerSystem, scriptPrompt, storyboardFixPrompt, storyboardPrompt, verdictAgain, type Brief, type Problem } from './prompts.js';
-import { KIT_CHECK_FILE, KIT_FILE, KIT_KEPT, keepComponents, kitIssues, kitPlan, kitStage, kitTimes, kitWanted, type KitItem } from './kit.js';
+import { KIT_CHECK_FILE, KIT_FILE, KIT_KEPT, kitCell, kitCheckPage, kitIssues, kitPart, kitPartCheck, kitPlan, kitStage, kitTimes, kitWanted, type KitItem } from './kit.js';
 import { addUsage, emptyUsage, type AgentRuntime, type AgentSession, type SessionOptions, type Thinking, type TokenUsage, type TurnResult } from './runtime/types.js';
 import type { PageIssue, PageStatus, Stage, StudioEvent } from './events.js';
 import { designedFonts, designedIssues, designedLook, type Look } from './look.js';
@@ -248,7 +248,7 @@ export class Director {
     // same pages again on every Continue
     if (name.startsWith('page-') && this.redraw.has(name.slice(5))) return { runtime: this.o.runtime, prices: this.o.prices };
     if (name.startsWith('check-')) return this.o.reviewer ?? this.o.pages ?? { runtime: this.o.runtime, prices: this.o.prices };
-    return this.o.pages && (name.startsWith('page-') || name === 'review' || name === 'kit') ? this.o.pages : { runtime: this.o.runtime, prices: this.o.prices };
+    return this.o.pages && (name.startsWith('page-') || name === 'review' || name.startsWith('kit-')) ? this.o.pages : { runtime: this.o.runtime, prices: this.o.prices };
   }
   private async session(name: string, system: string, maxTurns: number, resume?: string, signal = this.o.signal, tools: Pick<SessionOptions, 'tools' | 'answers'> = {}): Promise<AgentSession> {
     const { runtime, prices } = this.model(name);
@@ -452,18 +452,38 @@ export class Director {
     const items = kitPlan(sb.look);
     if (!kitWanted(sb.pages.length, items)) { this.state.kit = { status: 'none', components: [] }; this.save(); return; }
     this.emit({ type: 'kit', status: 'start', components: items.map((x) => x.name) });
-    let s: AgentSession | undefined, reviewer: AgentSession | undefined;
+    // one session per component, all at once: the pages wait on the slowest one, not on the sum (one session writing a
+    // 6-page film's two components took 10 minutes)
+    const sessions = new Map<string, AgentSession>();
+    let reviewer: AgentSession | undefined;
     let passed: string[] = [], sheet: string | undefined;
+    const written = (x: KitItem) => this.project.exists(kitPart(x.name)) && this.project.exists(kitPartCheck(x.name));
+    const files = () => items.map((x) => (written(x) ? this.project.read(kitPart(x.name)) + this.project.read(kitPartCheck(x.name)) : '')).join('\0');
+    // the kit and its check page, from the components that were written
+    const assemble = (ready: KitItem[]) => {
+      this.project.write(KIT_FILE, ready.map((x) => this.project.read(kitPart(x.name)).trim()).join('\n\n') + '\n');
+      this.project.write(KIT_CHECK_FILE, kitCheckPage(ready.map((x) => this.project.read(kitPartCheck(x.name)))));
+    };
     try {
-      s = await this.session('kit', kitSystem(this.o.style, styleExtras(this.o.style), this.o.brief.styleNotes, designed?.card), MAX.kitTurns);
-      let r = await this.send(s, kitPrompt(sb, items, this.o.brief.lang, this.o.brief.replyLang), undefined, KIT_THINKING);
-      if (!this.project.exists(KIT_FILE) || !this.project.exists(KIT_CHECK_FILE)) r = await this.send(s, `Write both ${KIT_FILE} and ${KIT_CHECK_FILE}, then stop.`, undefined, KIT_THINKING);
-      if (!this.project.exists(KIT_FILE) || !this.project.exists(KIT_CHECK_FILE)) throw new Error(r.error || 'the components were not written');
+      const system = kitSystem(this.o.style, styleExtras(this.o.style), this.o.brief.styleNotes, designed?.card);
+      await Promise.all(items.map(async (it, i) => {
+        try {
+          const s = await this.session(`kit-${it.name}`, system, MAX.kitTurns);
+          sessions.set(it.name, s);
+          const r = await this.send(s, kitPrompt(sb, items, it, kitCell(i, items.length), this.o.brief.lang, this.o.brief.replyLang), undefined, KIT_THINKING);
+          if (!written(it)) await this.send(s, `Write both ${kitPart(it.name)} and ${kitPartCheck(it.name)}, then stop.`, undefined, KIT_THINKING);
+          if (!written(it)) this.emit({ type: 'kit', status: 'failed', detail: `${it.name}: ${r.error || 'not written'}`.slice(0, 400) });
+        } catch (e) { if (stopped(e)) throw e; this.emit({ type: 'kit', status: 'failed', detail: `${it.name}: ${(e as Error).message}`.slice(0, 400) }); }
+      }));
+      // a component that was never written is left out; the check page is laid out for those that were
+      let ready = items.filter(written);
+      if (!ready.length) throw new Error('the components were not written');
       for (let round = 1; round <= MAX.kitChecks; round++) {
+        assemble(ready);
         this.emit({ type: 'kit', status: 'checking', round });
-        const { page, times, check: c } = await this.checkKit(items, this.o.look ?? designed?.look, round);
+        const { page, times, check: c } = await this.checkKit(ready, this.o.look ?? designed?.look, round);
         // which component a moment shows: the one whose cue it falls in
-        const at = (t: number) => items[Math.max(0, page.cues.filter((q) => q.abs <= t + page.start + 0.01).length - 1)]?.name;
+        const at = (t: number) => ready[Math.max(0, page.cues.filter((q) => q.abs <= t + page.start + 0.01).length - 1)]?.name;
         let problems: { name?: string; what: string; fix: string }[] = [], crash: string | undefined;
         // a kit that throws, or calls what the engine does not have, draws nothing at all: every component fails
         const broken = c.issues.filter((i) => BROKEN.includes(i.kind));
@@ -473,19 +493,26 @@ export class Director {
           // the sheet is kept with the film's, so the panel can show it
           try { fs.mkdirSync(this.project.file('out/snap'), { recursive: true }); fs.copyFileSync(c.sheet, this.project.file(`out/snap/kit-r${round}.jpg`)); sheet = this.project.file(`out/snap/kit-r${round}.jpg`); } catch {}
           reviewer ??= await this.session('check-kit', reviewerSystem(this.o.style, this.o.brief.styleNotes, designed?.card), MAX.reviewerTurns, undefined, undefined, { tools: 'none', answers: [VERDICT] });
-          const v = await this.verdict(reviewer, kitReviewerPrompt(items, times, round), c.sheet);
+          const v = await this.verdict(reviewer, kitReviewerPrompt(ready, times, round), c.sheet);
           const lint = errorsOf(c.issues).map((i) => ({ name: at(i.local), what: i.msg, fix: 'fix it in the component' }));
-          const seen = (v?.pass === false ? v.problems : []).map((p) => ({ name: items.find((x) => p.what.includes(x.name))?.name ?? at(p.at), what: p.what, fix: p.fix }));
+          const seen = (v?.pass === false ? v.problems : []).map((p) => ({ name: ready.find((x) => p.what.includes(x.name))?.name ?? at(p.at), what: p.what, fix: p.fix }));
           problems = [...lint, ...seen];
           // a problem that names no component (or the whole sheet) holds them all back
           const failing = new Set(problems.map((p) => p.name));
-          passed = failing.has(undefined) ? [] : items.map((x) => x.name).filter((n) => !failing.has(n));
+          passed = failing.has(undefined) ? [] : ready.map((x) => x.name).filter((n) => !failing.has(n));
           if (!problems.length) break;
         }
         if (round === MAX.kitChecks) break;
-        const before = this.project.read(KIT_FILE) + this.project.read(KIT_CHECK_FILE);
-        r = await this.send(s, kitFixPrompt(round, problems, crash), sheet ? [sheet] : undefined, KIT_THINKING);
-        if (this.project.read(KIT_FILE) + this.project.read(KIT_CHECK_FILE) === before || r.stopReason === 'max_turns') break;
+        // each component's session fixes its own problems, all at once; a crash, or a problem that names none, goes to all
+        const before = files();
+        const mine = (n: string) => problems.filter((p) => p.name === n || p.name === undefined);
+        await Promise.all(ready.map(async (x) => {
+          const s = sessions.get(x.name);
+          if (!s || (!crash && !mine(x.name).length)) return;
+          await this.send(s, kitFixPrompt(x.name, round, mine(x.name), crash), sheet ? [sheet] : undefined, KIT_THINKING);
+        }));
+        if (files() === before) break;
+        ready = items.filter(written);
       }
     } catch (e) {
       if (stopped(e)) throw e;
@@ -493,10 +520,11 @@ export class Director {
       this.emit({ type: 'kit', status: 'failed', detail: (e as Error).message.slice(0, 400) });
     } finally {
       await reviewer?.close();
-      await s?.close();
+      await Promise.all([...sessions.values()].map((s) => s.close()));
     }
     if (passed.length) {
-      const kept = keepComponents(this.project.read(KIT_FILE), passed);
+      // the components that passed, each its own IIFE as its session wrote it
+      const kept = passed.map((n) => this.project.read(kitPart(n)).trim()).join('\n\n') + '\n';
       this.project.write(KIT_FILE, kept);
       fs.mkdirSync(this.project.file('.studio'), { recursive: true });
       fs.writeFileSync(this.project.file(KIT_KEPT), kept);
