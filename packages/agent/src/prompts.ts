@@ -12,6 +12,7 @@ import { pagePack } from './pagepack.js';
 import { designedFonts } from './look.js';
 import { KIT_MAX, kitPart, kitPartCheck, type KitItem } from './kit.js';
 import { brandFilesOn, brandPageNote, cornerMark, brandReviewNote, brandSection, signsOff, type BrandBrief } from './brand.js';
+import { assetPageNote, assetReviewNote, assetsSection, type UserAsset } from './assets.js';
 
 // found through the package itself, so it still resolves when the code is bundled (the desktop app)
 const DIR = path.join(path.dirname(createRequire(import.meta.url).resolve('@frametell/agent/package.json')), 'prompts');
@@ -53,9 +54,10 @@ export function filmCardSection(card?: string) {
   return c ? `---\n# This film's style card\n\nThe director designed this film's look, and wrote it here. It is this film's style: hold every page to it, as you would a style's own card. The palette and the typeface it names are already set for the film (\`ink\`, \`paper\` and the other colour names, the hand and latin faces): use them by name, don't restate them as hex. This film's own request, and anything the user says while it is made, come first.\n\n<style-card>\n${c}\n</style-card>` : '';
 }
 
-/** `brand`: the brand the film is made for, after the style card and its notes */
-export function plannerSystem(style: string, preferences?: string, styleNotes?: string, brand?: BrandBrief) {
-  return [read('PLANNER.md'), '---\n# This film\'s style (the page agent draws to it, so the storyboard must be drawable in it)\n\n' + grammar(style), styleNotesSection(styleNotes), brandSection(brand), '---\n' + read('LIB.md'), preferencesSection(preferences)].filter(Boolean).join('\n\n');
+/** `brand`: the brand the film is made for, after the style card and its notes. `assets`: the user's own pictures for
+ *  the film, as its list is now */
+export function plannerSystem(style: string, preferences?: string, styleNotes?: string, brand?: BrandBrief, assets?: UserAsset[]) {
+  return [read('PLANNER.md'), '---\n# This film\'s style (the page agent draws to it, so the storyboard must be drawable in it)\n\n' + grammar(style), styleNotesSection(styleNotes), brandSection(brand), assetsSection(assets), '---\n' + read('LIB.md'), preferencesSection(preferences)].filter(Boolean).join('\n\n');
 }
 /** the page agent's system prompt: process, the style's grammar, the drawing API, the style's components with a worked
  *  example page, and the wider component library (the stable part of every page session, so it caches well) */
@@ -144,8 +146,9 @@ export function scriptPrompt(feedback?: string, brief?: Brief) {
   return [feedback ? `The user's changes to the storyboard: ${feedback}\nFirst update storyboard.json to match, then write the narration.` : 'The user approved the storyboard without changes.', 'Stage 2: write script.js, run node engine/tools/script.mjs to see the estimated length, then stop and report.' + withVoice('script', brief) + langNote('script', brief?.lang, brief?.replyLang)].join('\n');
 }
 
-/** `brand`: the brand the film is made for; the files of it this page places are listed, with how to place them */
-export function pagePrompt(sb: Storyboard, id: string, t: PageTiming, lang: Lang | undefined = sb.lang, replyLang?: Lang, revising = false, brand?: BrandBrief) {
+/** `brand`: the brand the film is made for; the files of it this page places are listed, with how to place them.
+ *  `assets`: the user's pictures this page places (assetsOn), each with its call */
+export function pagePrompt(sb: Storyboard, id: string, t: PageTiming, lang: Lang | undefined = sb.lang, replyLang?: Lang, revising = false, brand?: BrandBrief, assets: UserAsset[] = []) {
   const p = sb.pages.find((x) => x.id === id);
   const outline = sb.pages.map((x) => `- ${x.id} ${x.section}`).join('\n');
   return `You own page **${id}**.
@@ -163,7 +166,7 @@ ${(p?.beats || []).map((b, i) => `  ${i + 1}. [${b.at}] ${b.object} — ${b.acti
 
 ## This page's narration and timing (real voice)
 The page lasts ${(t.end - t.start).toFixed(2)}s; its narration ends at ${(t.speechEnd - t.start).toFixed(2)}s (P.endT).
-${t.cues.map((c) => `- c${c.i}: at ${c.at}s in the page, "${c.text}"`).join('\n')}${sb.pages[sb.pages.length - 1]?.id === id ? endingNote(t, signsOff(brand, sb.pages)) : ''}${brandPageNote(brandFilesOn(brand, sb.pages, id), brand?.emphasis, cornerMark(brand) ? brand?.corner : undefined)}
+${t.cues.map((c) => `- c${c.i}: at ${c.at}s in the page, "${c.text}"`).join('\n')}${sb.pages[sb.pages.length - 1]?.id === id ? endingNote(t, signsOff(brand, sb.pages)) : ''}${brandPageNote(brandFilesOn(brand, sb.pages, id), brand?.emphasis, cornerMark(brand) ? brand?.corner : undefined)}${assetPageNote(assets)}
 
 ${revising ? `pages/${id}.js is already written; stop once the change below is made in it and say in one sentence what you changed.` : `Stop once pages/${id}.js is written and say in one sentence what you drew.`}${langNote('page', lang, replyLang)}`;
 }
@@ -209,7 +212,8 @@ export const FLAG: AnswerTool = {
 };
 
 /** what the reviewer is shown each round: the page's storyboard and timing, the checker's findings, the sheet */
-export function reviewerPrompt(sb: Storyboard, id: string, t: PageTiming, round: number, issues: LintIssue[], times: { local: number }[], change?: string, brand?: BrandBrief) {
+/** `assets`: the user's pictures this page places (assetsOn) */
+export function reviewerPrompt(sb: Storyboard, id: string, t: PageTiming, round: number, issues: LintIssue[], times: { local: number }[], change?: string, brand?: BrandBrief, assets: UserAsset[] = []) {
   const p = sb.pages.find((x) => x.id === id);
   const must = issues.filter((i) => i.level === 'error'), advice = issues.filter((i) => i.level === 'warn');
   return `${round > 1 ? `Round ${round}: the artist has changed the page since you last saw it.\n\n` : ''}## The page (${id} of ${sb.pages.length}, in the film "${sb.title}")
@@ -219,7 +223,7 @@ export function reviewerPrompt(sb: Storyboard, id: string, t: PageTiming, round:
 ${(p?.beats || []).map((b, i) => `  ${i + 1}. [${b.at}] ${b.object} — ${b.action}${b.text ? `, on-screen text "${b.text}"` : ''}`).join('\n')}
 - The page lasts ${(t.end - t.start).toFixed(1)}s. Narration:
 ${t.cues.map((c) => `  - c${c.i} at ${c.at.toFixed(1)}s: "${c.text}"`).join('\n')}
-${sb.pages[sb.pages.length - 1]?.id === id ? `\nThis page ends the film: after its last line it holds ${(t.end - t.speechEnd).toFixed(1)}s, then the film fades out by itself (not shown in the sheet). Fail it if the film ends mid-move, on a half-drawn or unresolved picture, or on an emptied frame; a still hold after the last line is right.\n` : ''}${change ? `\nThe user asked for this change to the page: ${change}\nFail the page if the pictures don't show it.\n` : ''}${brandReviewNote(brand, brandFilesOn(brand, sb.pages, id))}
+${sb.pages[sb.pages.length - 1]?.id === id ? `\nThis page ends the film: after its last line it holds ${(t.end - t.speechEnd).toFixed(1)}s, then the film fades out by itself (not shown in the sheet). Fail it if the film ends mid-move, on a half-drawn or unresolved picture, or on an emptied frame; a still hold after the last line is right.\n` : ''}${change ? `\nThe user asked for this change to the page: ${change}\nFail the page if the pictures don't show it.\n` : ''}${brandReviewNote(brand, brandFilesOn(brand, sb.pages, id))}${assetReviewNote(assets)}
 ## The checker
 ${must.length ? `Must-fix (already sent to the artist):\n${lintLines(must)}` : 'Nothing must be fixed.'}
 ${advice.length ? `Advice (a measurement; fail on it only if the picture shows a problem):\n${lintLines(advice)}` : ''}

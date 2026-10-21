@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowUp, AudioLines, Clock, FileText, Film, Layers, Loader2, Paperclip, Pencil, Plus, Quote, Sparkles, TriangleAlert, Upload, X } from 'lucide-react';
+import { ArrowUp, AudioLines, Clock, FileText, Film, ImagePlus, Layers, Loader2, Paperclip, Pencil, Plus, Quote, Sparkles, TriangleAlert, Upload, X } from 'lucide-react';
 import { client, type LibraryGroup, type ProjectView } from '../lib/client';
 import { refKey, toSend, type Ref } from '../lib/refs';
+import { openAssets } from '../lib/assets';
 import { finished, isWorking, type RunView } from '../lib/run';
 import { Lightbox, type LightItem } from './Lightbox';
 import { FilmSettings } from '../components/FilmSettings';
@@ -88,6 +89,7 @@ export function RefChip({ r, project, onRemove, onOpen, pending, error, name, pr
           ? <span className="relative h-5 w-[30px] shrink-0 overflow-hidden rounded-[4px] bg-ink/10" style={whole ? { background: GROUND[whole] } : undefined}><img src={img} alt="" className={`h-full w-full ${whole ? 'object-contain p-px' : 'object-cover'}`} />{pending && <span className="absolute inset-0 flex items-center justify-center bg-black/40"><Loader2 size={11} className="animate-spin text-white" aria-hidden /></span>}</span>
           : <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[4px] bg-ink/[0.06]">{pending ? <Loader2 size={11} className="animate-spin" aria-hidden /> : <Icon size={11} aria-hidden />}</span>}
         <span className="min-w-0 max-w-[180px] truncate">{label}</span>
+        {r?.kind === 'file' && r.asset && <span className="shrink-0 rounded-[4px] bg-accent-soft px-1 py-px text-[10px] font-medium leading-tight text-accent-ink">{t('assets.badge')}</span>}
       </Body>
       {onRemove && <button type="button" onClick={onRemove} aria-label={t('conversation.composer.remove', { label })} className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-ink-3 transition-colors hover:bg-ink/[0.08] hover:text-ink"><X size={12} aria-hidden /></button>}
     </span>
@@ -130,6 +132,9 @@ function AttachMenu({ onUpload, onPick, onApply }: { onUpload: () => void; onPic
           className="absolute bottom-[calc(100%+8px)] left-0 z-30 w-[min(340px,100%)] overflow-hidden rounded-xl border border-line bg-surface p-1.5 shadow-[0_-12px_32px_-8px_rgb(0_0_0/0.35),0_2px_6px_rgb(0_0_0/0.12)] animate-pop [transform-origin:bottom_left]">
           <button type="button" role="menuitem" autoFocus className={row} onClick={() => { close(); onUpload(); }}>
             <Upload size={14} className="shrink-0 text-ink-3" aria-hidden /><span className="min-w-0 flex-1 truncate">{t('conversation.composer.library.upload')}</span>
+          </button>
+          <button type="button" role="menuitem" className={row} onClick={() => { setOpen(false); openAssets(); }} title={t('assets.composerEntryTitle')}>
+            <ImagePlus size={14} className="shrink-0 text-accent-ink" aria-hidden /><span className="min-w-0 flex-1 truncate">{t('assets.composerEntry')}</span>
           </button>
           <div className="max-h-[min(360px,48vh)] overflow-y-auto">
             {error
@@ -344,6 +349,7 @@ export function Composer({ run, project, viewing, openSettings }: { run: RunView
           {client.library && client.attachFrom
             ? <AttachMenu onUpload={() => picker.current?.click()} onPick={fromLibrary} onApply={applyBrand} />
             : <button type="button" className="fs-icon-btn" onClick={() => picker.current?.click()} aria-label={t('conversation.composer.attach')} title={t('conversation.composer.attachTitle')}><Paperclip size={15} /></button>}
+          <button type="button" className="fs-icon-btn" onClick={openAssets} aria-label={t('assets.composerEntry')} title={t('assets.composerEntryTitle')}><ImagePlus size={15} /></button>
           <input ref={picker} type="file" multiple accept={ACCEPT} className="sr-only" tabIndex={-1} aria-hidden onChange={(e) => { upload([...(e.target.files || [])]); e.target.value = ''; }} />
           <FilmSettings project={project} narrated={narrated} current={voice} pending={switchTo} openSettings={openSettings}
             onPick={(v) => {
