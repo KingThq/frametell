@@ -259,6 +259,7 @@ ${items.map((it) => `- \`P.${it.name}\` — ${it.what} (on ${it.pages.join(', ')
 - Take \`o.at\` for when it starts and give the pages handles to what they need to move or light later (return an object, or the group).
 - Coordinates on the 1920×1080 stage; keep it out of the subtitle band (y > 900) unless a page places it there.
 - Only the listed components, named as listed. Nothing else in the file.
+- **Short and plain**: each component about the size of what one page would draw for it (aim for 40–80 lines), drawn the way a page draws, not modelled. Fix what must match across pages (shape, proportions, colours, parts) and the states the pages need; leave the rest to the pages. The pages are waiting for this file: write it in one go, without exploring the project first (the style's components are listed above, already loaded).
 
 ## Write ${KIT_CHECK_FILE}
 One page that calls every component once, in the order listed: \`ENGINE.visual('kit', (P) => { … })\`. Component *i* starts at \`P.c(i)\` (the page has one cue per component, about 2.6 seconds each) and gets its own area of the frame, laid out in a grid so none overlaps another; use the options the pages will use. It is only for checking the components: a reviewer looks at it in pictures.

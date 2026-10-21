@@ -151,6 +151,9 @@ This page is new: the film is finished and the user's change adds it. What it sh
 // and a -medium one 37–74 s, with no worse a page (one was cleaner, with no lint issues); a check round dropped from
 // 26–153 s to about 6 s. The storyboard and the narration keep the model's own level.
 const PAGE_THINKING: Thinking = 'medium';
+/** the film's components: a few small drawings every page is waiting on (at medium, one kettle took 44k tokens and
+ *  7½ minutes of thought); the kit's check and reviewer catch what a quicker draft gets wrong */
+const KIT_THINKING: Thinking = 'low';
 /** a revised page whose code is as it was: the change never landed */
 const NOT_MADE = { zh: '这次没有改上：页面和改之前一样', en: 'The change was not made: the page is as it was' };
 /** a model service's trouble behind a failure, in words the user can act on (none: the trouble is the page's own) */
@@ -453,8 +456,8 @@ export class Director {
     let passed: string[] = [], sheet: string | undefined;
     try {
       s = await this.session('kit', kitSystem(this.o.style, styleExtras(this.o.style), this.o.brief.styleNotes, designed?.card), MAX.kitTurns);
-      let r = await this.send(s, kitPrompt(sb, items, this.o.brief.lang, this.o.brief.replyLang), undefined, PAGE_THINKING);
-      if (!this.project.exists(KIT_FILE) || !this.project.exists(KIT_CHECK_FILE)) r = await this.send(s, `Write both ${KIT_FILE} and ${KIT_CHECK_FILE}, then stop.`, undefined, PAGE_THINKING);
+      let r = await this.send(s, kitPrompt(sb, items, this.o.brief.lang, this.o.brief.replyLang), undefined, KIT_THINKING);
+      if (!this.project.exists(KIT_FILE) || !this.project.exists(KIT_CHECK_FILE)) r = await this.send(s, `Write both ${KIT_FILE} and ${KIT_CHECK_FILE}, then stop.`, undefined, KIT_THINKING);
       if (!this.project.exists(KIT_FILE) || !this.project.exists(KIT_CHECK_FILE)) throw new Error(r.error || 'the components were not written');
       for (let round = 1; round <= MAX.kitChecks; round++) {
         this.emit({ type: 'kit', status: 'checking', round });
@@ -481,7 +484,7 @@ export class Director {
         }
         if (round === MAX.kitChecks) break;
         const before = this.project.read(KIT_FILE) + this.project.read(KIT_CHECK_FILE);
-        r = await this.send(s, kitFixPrompt(round, problems, crash), sheet ? [sheet] : undefined, PAGE_THINKING);
+        r = await this.send(s, kitFixPrompt(round, problems, crash), sheet ? [sheet] : undefined, KIT_THINKING);
         if (this.project.read(KIT_FILE) + this.project.read(KIT_CHECK_FILE) === before || r.stopReason === 'max_turns') break;
       }
     } catch (e) {
