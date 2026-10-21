@@ -10,7 +10,7 @@ import type { AnswerTool } from './runtime/types.js';
 
 import { pagePack } from './pagepack.js';
 import { designedFonts } from './look.js';
-import { KIT_CHECK_FILE, KIT_FILE, KIT_MAX, KIT_MIN_PAGES, type KitItem } from './kit.js';
+import { KIT_CHECK_FILE, KIT_FILE, KIT_MAX, type KitItem } from './kit.js';
 import { brandFilesOn, brandPageNote, cornerMark, brandReviewNote, brandSection, signsOff, type BrandBrief } from './brand.js';
 
 // found through the package itself, so it still resolves when the code is bundled (the desktop app)
@@ -124,16 +124,17 @@ export function storyboardPrompt(brief: Brief, style: string, materials: string[
     brief.notes ? `Further notes from the user: ${brief.notes}` : '',
     materials.includes('research.md') ? 'materials/research.md is a research brief prepared for this film from what the request points at (and the web): use its facts, the code and quotes it gives for the screen, and heed its Careful section. It is your main source for facts; the user\'s own words and material come first where they differ.' : '',
     `Style: ${style} (write "${style}" as the style in storyboard.json).`,
-    designedFonts(style) ? kitPlanNote : '',
+    kitPlanNote(!!designedFonts(style)),
     `Material: ${materials.map((m) => 'materials/' + m).join(', ') || '(none; write from the topic)'}`,
     'Stop and report once storyboard.json is written.' + withVoice('storyboard', brief) + langNote('storyboard', brief.lang, brief.replyLang),
   ].filter(Boolean).join('\n');
 }
 
-/** a designed style's storyboard: the things that recur, listed so they are drawn once as this film's components */
-const kitPlanNote = `When the film has ${KIT_MIN_PAGES} pages or more, also list in \`look.kit\` the things it draws again and again: an object, a map, a diagram, a character's stand-in, a recurring mark, anything that appears on 3 pages or more. Each is written once, in this film's look, as a component every page calls, so it looks the same wherever it appears and no page draws it from nothing. At most ${KIT_MAX}, the ones that recur most:
-\`"kit": [{ "name": "chinaMap", "what": "China's outline in three terrain steps, one region can be lit", "pages": ["p03", "p04", "p05", "p12"] }]\`
-\`name\` is the component's name in camelCase (it becomes \`P.chinaMap(…)\`), \`what\` says what it draws and what it must be able to show, \`pages\` lists the pages it appears on. Leave out what appears on fewer than 3 pages, and plain text, arrows and charts (the engine draws those). A shorter film has no \`kit\`.`;
+/** every storyboard: the things that recur, listed so they are drawn once as this film's components (the pages are drawn
+ *  side by side, each by its own session: without one, the same kettle came out red on one page and blue on the next) */
+const kitPlanNote = (designed: boolean) => `Also list in \`look.kit\`${designed ? '' : ' (for this style that is all `look` holds: `"look": { "kit": [...] }`)'} the things the film draws on more than one page: its subject (the kettle, the engine, the cell), a map, a diagram, a character or its stand-in, a recurring mark. The pages are drawn at the same time, each by an artist who never sees the others, so anything not listed comes out differently on every page: another colour, another shape. Each thing listed is written once, in the film's look, as a component every page calls, so it is the same wherever it appears. At most ${KIT_MAX}, the ones that matter most:
+\`"kit": [{ "name": "kettle", "what": "the electric kettle: red body, steel lid, black handle and switch; the switch can be up or down, the lid can steam", "pages": ["p01", "p02", "p05"] }]\`
+\`name\` is the component's name in camelCase (it becomes \`P.kettle(…)\`), \`what\` fixes how it looks (colours, parts) and what it must be able to show (states, parts lit, cut open), \`pages\` lists the pages it appears on. Leave out what appears on one page only, plain text, arrows and charts (the engine draws those)${designed ? '' : ', and what your style\'s own components already draw'}. A film whose pages share nothing has no \`kit\`.`;
 
 export function storyboardFixPrompt(issues: { level: string; page?: string; beat?: number; msg: string }[], brief?: Brief) {
   return ['The server checked storyboard.json; fix the issues below (red must be fixed, yellow at your judgement):', ...issues.map((i) => `- [${i.level === 'red' ? 'red' : 'yellow'}] ${i.page ?? 'whole film'}${i.beat != null ? ` beat ${i.beat + 1}` : ''}: ${i.msg}`), 'Stop once fixed and say in one sentence what you changed. ' + replyNote(brief?.replyLang, brief?.lang)].join('\n');
@@ -234,8 +235,9 @@ export const verdictAgain = 'Answer by calling verdict, with nothing else.';
 
 /** the kit session's system prompt: the film's look, the drawing API and the component library, and how a kit is
  *  written (the rules a style pack's kit.js follows) */
-export function kitSystem(style: string, styleNotes?: string, card?: string) {
-  return [read('PAGE.md'), '---\n# This film\'s style\n\n' + grammar(style), filmCardSection(card), styleNotesSection(styleNotes), '---\n' + read('API.md'), '---\n' + read('LIB.md')].filter(Boolean).join('\n\n');
+/** `extras`: the style's own components, which the film's may build on (they load first) */
+export function kitSystem(style: string, extras: string[] = [], styleNotes?: string, card?: string) {
+  return [read('PAGE.md'), '---\n# This film\'s style\n\n' + grammar(style), filmCardSection(card), styleNotesSection(styleNotes), '---\n' + read('API.md'), '---\n' + pagePack(style, extras), '---\n' + read('LIB.md')].filter(Boolean).join('\n\n');
 }
 
 /** what the kit session is asked: the components the storyboard lists, where each appears, and how to write them */
@@ -251,6 +253,7 @@ ${items.map((it) => `- \`P.${it.name}\` — ${it.what} (on ${it.pages.join(', ')
 ## Write ${KIT_FILE}
 - One IIFE: \`(function () { const { col, clamp, lerp, ease, Builder } = PV; const B = Builder.prototype; … })();\`
 - Each component as \`B.name = function (args) { … }\`, drawn with the drawing API (\`this.path\`, \`this.text\`, \`this.circle\`, … as \`P.\` in a page), in the film's look: its colours by name, its line, its type.
+- Drawn the way this style draws (its grammar above). Where one of the style's own components already gives the look (a frame, a hatch, a figure), build on it with \`this.name(…)\`: it is loaded before yours.
 - **Directly above each one**, its doc comment, which is all the pages will see of it: \`/** name(args): what it draws and when to use it. o: { at, dur, … } */\`. Say every option a page may pass: what it can highlight, label or move.
 - **A pure function of time.** It draws through the API's timed calls (\`at\`, \`dur\`) and \`this.tick((lt) => …)\` only: the same moment gives the same picture. No \`Math.random()\` (use \`PV.rng(seed)\`), no state kept between frames.
 - Take \`o.at\` for when it starts and give the pages handles to what they need to move or light later (return an object, or the group).

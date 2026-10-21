@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Every film now gets its own components when something recurs, in any style and at any length, not only designed-style films of 8 pages or more. The pages are drawn side by side, each by an agent that never sees the others, so a thing drawn on several pages came out differently on each (an electric kettle red on one page and blue on the next). The storyboard now lists in `look.kit` anything the film draws on 2 pages or more, with how it looks; it is written once as `extras/film-kit.js` before the pages, in the style's grammar and on top of the style's own components (loaded first, on the kit's check sheet too), and every page calls it.
+
 ## [0.7.3] - 2026-10-19
 
 ### Added

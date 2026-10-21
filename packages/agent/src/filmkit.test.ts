@@ -128,8 +128,15 @@ test('a component the check fails is kept out; the others are given to the pages
   assert.match(f.checked[2], /\/\/ changed\n\/\/ changed/);
 });
 
-test('no kit for a short film, a style with its own look, or a storyboard that lists none', async () => {
-  for (const o of [{ pages: 7 }, { designed: false }, { kit: [] }]) {
+test('a short film in a style with its own look gets its kit too: the pages are drawn apart, the kettle must match', async () => {
+  const f = film({ pages: 3, designed: false, kit: [{ name: 'kettle', what: 'a red electric kettle', pages: ['p01', 'p02', 'p03'] }] });
+  await f.d.kit();
+  assert.equal(f.d.state.kit?.status, 'done');
+  assert.doesNotMatch(f.systems.kit, /This film's style card/);
+});
+
+test('no kit for a one-page film or a storyboard that lists none', async () => {
+  for (const o of [{ pages: 1, kit: [{ name: 'globe', what: 'g', pages: ['p01'] }] }, { kit: [] }]) {
     const f = film(o);
     await f.d.kit();
     assert.deepEqual(f.d.state.kit, { status: 'none', components: [] }, JSON.stringify(o));

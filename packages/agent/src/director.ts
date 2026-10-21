@@ -362,15 +362,15 @@ export class Director {
     this.emit({ type: 'stage', stage: 'script', status: 'done', detail: check.out.split('\n').pop() });
   }
 
-  /** a designed style's film (its style has no look of its own): what its storyboard still lacks of the look */
+  /** what the storyboard's `look` still lacks: the film's components (any style), and for a designed style's film (its
+   *  style has no look of its own) the look itself */
   private lookIssues(): { level: 'red'; msg: string }[] {
     const fonts = designedFonts(this.o.style);
-    if (!fonts) return [];
     let look: unknown;
     try { look = this.project.storyboard().look; } catch { return []; }   // an unreadable storyboard is reported already
     let ids: string[] = [];
     try { ids = this.project.storyboard().pages.map((p) => p.id); } catch {}
-    return [...designedIssues(look, fonts), ...kitIssues(look, ids)].map((msg) => ({ level: 'red' as const, msg }));
+    return [...(fonts ? designedIssues(look, fonts) : []), ...kitIssues(look, ids)].map((msg) => ({ level: 'red' as const, msg }));
   }
 
   /** a designed style's film: the look the director wrote in storyboard.json (its card and what it comes to) */
@@ -391,17 +391,21 @@ export class Director {
     // a style component copied into extras/ by use-extra is the same file: load it once, from the engine
     const base = new Set(styleExtras(this.o.style).map((e) => path.basename(e)));
     const list = [...extras].filter((e) => !(e.startsWith('extras/') && base.has(path.basename(e))));
-    const gl = styleWebgl(this.o.style) ? (() => {
-      const vendor = new Set<string>(['three']);
-      try {   // keep vendors the page agents added
-        const m = /vendor:\s*(\[[^\]\n]*\])/.exec(this.project.read('script.js'));
-        if (m) for (const v of JSON.parse(m[1].replace(/'/g, '"'))) vendor.add(v);
-      } catch {}
-      return { vendor: [...vendor], webgl: true };
-    })() : {};
+    const gl = this.webgl();
     // a film that ends on its brand's sign-off holds longer after its last line, so the logo is seen in silence
     const signOff = (() => { try { return signsOff(this.o.brief.brand, this.project.storyboard().pages); } catch { return false; } })();
     this.setMeta({ style: this.o.style, lang: this.o.brief.lang ?? 'zh', voice: this.o.voice, gap: 0.8, pace: { maxHold: 1.0, gap: 0.8, ...(signOff ? { tail: SIGN_OFF_HOLD } : {}) }, extras: list, look: this.o.look ?? this.designed()?.look, mark: cornerMark(this.o.brief.brand, signOff) ?? false, ...gl });
+  }
+
+  /** a style drawn in three.js: the vendors its films load (three, and any the page agents added) */
+  private webgl(): { vendor?: string[]; webgl?: boolean } {
+    if (!styleWebgl(this.o.style)) return {};
+    const vendor = new Set<string>(['three']);
+    try {   // keep vendors the page agents added
+      const m = /vendor:\s*(\[[^\]\n]*\])/.exec(this.project.read('script.js'));
+      if (m) for (const v of JSON.parse(m[1].replace(/'/g, '"'))) vendor.add(v);
+    } catch {}
+    return { vendor: [...vendor], webgl: true };
   }
 
   // ── this film's own components (kit.ts) ─────────────────────────────────────────────────────
@@ -427,14 +431,14 @@ export class Director {
   /** the kit's check: its own project (.studio/kit), the check page's timing, and the engine's check of it (lint with
    *  determinism, and a contact sheet of each component once drawn) */
   private async checkKit(items: KitItem[], look: unknown, round: number) {
-    const stage = new Project(kitStage(this.o.dir, { style: this.o.style, lang: this.o.brief.lang ?? 'zh', look, items, kit: this.project.read(KIT_FILE), check: this.project.read(KIT_CHECK_FILE) }), undefined, this.o.signal);
+    const stage = new Project(kitStage(this.o.dir, { style: this.o.style, lang: this.o.brief.lang ?? 'zh', look, items, kit: this.project.read(KIT_FILE), check: this.project.read(KIT_CHECK_FILE), extras: styleExtras(this.o.style), gl: this.webgl() }), undefined, this.o.signal);
     const page = (await stage.timeline()).pages[0];
     const times = kitTimes(page.cues, page.end);
     return { page, times, check: await stage.check('kit', `kit-r${round}`, times, { determinism: true, lintMs: MAX.pageLintMs }) };
   }
 
   /**
-   * A designed style's film of many pages: the things its storyboard lists in `look.kit` written once as components
+   * The things a film's storyboard lists in `look.kit` (what it draws on more than one page), written once as components
    * (extras/film-kit.js), checked on a sheet of their own (a project of its own in .studio/kit, so the film's pages and
    * timing are untouched), and kept to the ones that pass. It never holds the film up: a kit that cannot be had leaves
    * the pages to draw everything themselves, as before.
@@ -443,18 +447,18 @@ export class Director {
     const sb = this.project.storyboard();
     const designed = this.designed();
     const items = kitPlan(sb.look);
-    if (!kitWanted(!!designed, sb.pages.length, items)) { this.state.kit = { status: 'none', components: [] }; this.save(); return; }
+    if (!kitWanted(sb.pages.length, items)) { this.state.kit = { status: 'none', components: [] }; this.save(); return; }
     this.emit({ type: 'kit', status: 'start', components: items.map((x) => x.name) });
     let s: AgentSession | undefined, reviewer: AgentSession | undefined;
     let passed: string[] = [], sheet: string | undefined;
     try {
-      s = await this.session('kit', kitSystem(this.o.style, this.o.brief.styleNotes, designed?.card), MAX.kitTurns);
+      s = await this.session('kit', kitSystem(this.o.style, styleExtras(this.o.style), this.o.brief.styleNotes, designed?.card), MAX.kitTurns);
       let r = await this.send(s, kitPrompt(sb, items, this.o.brief.lang, this.o.brief.replyLang), undefined, PAGE_THINKING);
       if (!this.project.exists(KIT_FILE) || !this.project.exists(KIT_CHECK_FILE)) r = await this.send(s, `Write both ${KIT_FILE} and ${KIT_CHECK_FILE}, then stop.`, undefined, PAGE_THINKING);
       if (!this.project.exists(KIT_FILE) || !this.project.exists(KIT_CHECK_FILE)) throw new Error(r.error || 'the components were not written');
       for (let round = 1; round <= MAX.kitChecks; round++) {
         this.emit({ type: 'kit', status: 'checking', round });
-        const { page, times, check: c } = await this.checkKit(items, designed?.look, round);
+        const { page, times, check: c } = await this.checkKit(items, this.o.look ?? designed?.look, round);
         // which component a moment shows: the one whose cue it falls in
         const at = (t: number) => items[Math.max(0, page.cues.filter((q) => q.abs <= t + page.start + 0.01).length - 1)]?.name;
         let problems: { name?: string; what: string; fix: string }[] = [], crash: string | undefined;
