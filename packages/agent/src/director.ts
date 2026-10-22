@@ -182,6 +182,44 @@ const fromReview = (p: Problem): PageIssue => ({ from: 'review', at: p.at, msg: 
 /** what the page agent said with its flag tool, if it used it */
 const flagOf = (r: TurnResult) => r.answers.find((a) => a.name === FLAG.name)?.args.reason as string | undefined;
 
+/** where the planner writes a change's plan */
+const PLAN_FILE = '.studio/revision.json';
+/** a change's plan: the pages to redraw (ids of the storyboard), each with what to change on it */
+export type RevisionPlan = { id: string; note?: string }[];
+/**
+ * The page a plan's id names. The planner may write an id its own way ("P03", "p3", "3", 3) for the storyboard's "p03",
+ * so the id is matched exactly, then by the page number it carries (the storyboard's own numbering, else its position).
+ */
+export function planPageId(raw: unknown, ids: string[]): string | undefined {
+  if (typeof raw !== 'string' && typeof raw !== 'number') return undefined;
+  const s = String(raw).trim();
+  const exact = ids.find((id) => id === s) ?? ids.find((id) => id.toLowerCase() === s.toLowerCase());
+  if (exact) return exact;
+  const m = /^(?:p|page)?[\s_-]*0*(\d+)$/i.exec(s);
+  if (!m) return undefined;
+  const n = +m[1];
+  return ids.find((id) => +(/^p0*(\d+)$/i.exec(id)?.[1] ?? NaN) === n) ?? (n >= 1 && n <= ids.length ? ids[n - 1] : undefined);
+}
+/** the plan in the planner's file (undefined: no file), or what is wrong with it, in words for the planner to fix it */
+export function readRevisionPlan(text: string | undefined, ids: string[]): { plan: RevisionPlan } | { problem: string } {
+  if (text === undefined) return { problem: `${PLAN_FILE} was not written` };
+  let v: unknown;
+  try { v = JSON.parse(text); } catch (e) { return { problem: `${PLAN_FILE} is not valid JSON (${(e as Error).message})` }; }
+  const pages = (v as { pages?: unknown } | null)?.pages;
+  if (!Array.isArray(pages)) return { problem: `${PLAN_FILE} has no "pages" list` };
+  const plan: RevisionPlan = [];
+  for (const p of pages) {
+    const raw = (p as { id?: unknown } | null)?.id;
+    const id = planPageId(raw, ids);
+    if (!id) return { problem: `${PLAN_FILE} names a page that is not in storyboard.json (${JSON.stringify(raw ?? p)}); the pages are ${ids.join(', ')}` };
+    const note = typeof (p as { note?: unknown }).note === 'string' && (p as { note: string }).note.trim() ? (p as { note: string }).note : undefined;
+    const same = plan.find((x) => x.id === id);
+    if (same) same.note = [same.note, note].filter(Boolean).join('\n') || undefined;
+    else plan.push({ id, note });
+  }
+  return { plan };
+}
+
 export class Director {
   readonly project: Project;
   private state: State;
@@ -906,24 +944,46 @@ export class Director {
     // the user's own words, in either language
     const words = /口播|文案|台词|配音|字幕|旁白|这句|句子|念|时长|节奏|\b(narrat\w*|script|voice\w*|subtitles?|captions?|wording|sentences?|timing|pac(e|ing))\b/i;
     const direct = named.length > 0 && named.length <= 2 && !words.test(request.replace(/<references>[\s\S]*?<\/references>/, ''));
-    let plan: { pages: { id: string; note: string }[] } | undefined = direct ? { pages: named.map((id) => ({ id, note: request })) } : undefined;
+    const storyboard = this.project.read('storyboard.json');
+    let plan: RevisionPlan | undefined = direct ? named.map((id) => ({ id, note: request })) : undefined;
     if (!plan) {
       this.emit({ type: 'note', text: this.say('收到，我先看看要改哪几页', 'Got it. Let me see which pages this touches') });
-      await this.planRevision(request, sb, named);
-      try { plan = JSON.parse(this.project.read('.studio/revision.json')); } catch { this.fail('pages', this.say('导演没有写出修改计划', 'The director did not write a plan for the change')); }
+      const got = await this.planRevision(request, named);
+      if ('why' in got) this.fail('pages', got.why);
+      plan = got.plan;
     }
     const tPlan = Date.now();
     // a change to the narration can leave a page's code as it is (its timing follows the script): only a change to the
     // picture must show in the page's code
     this.wordsChanged = this.project.read('script.js') !== script;
-    const ids = plan!.pages.map((p) => p.id).filter((id) => sb.pages.some((p) => p.id === id));
-    if (!ids.length) this.fail('pages', this.say('修改计划里没有可以改的页', 'The plan for the change names no page to change'));
-    const nums = ids.map((id) => sb.pages.findIndex((p) => p.id === id) + 1);
+    // the storyboard as the planner left it: a page it added is in the plan too
+    const pagesNow = this.project.storyboard().pages;
+    const num = (id: string) => pagesNow.findIndex((p) => p.id === id) + 1;
+    const ids = plan.map((p) => p.id);
+    if (!ids.length) {
+      // nothing on screen changes: the planner has told the user why (a question answered, thanks, or a whole-film
+      // setting such as the style or the voice's speed, which a change can't make). A change to the words alone (the
+      // narration, how a word is read) is voiced again and checked; anything else leaves the film as it was
+      const touched = this.wordsChanged || this.project.read('storyboard.json') !== storyboard;
+      if (!touched) {
+        this.state.change = undefined;
+        return this.ready();
+      }
+      this.emit({ type: 'note', text: this.say('只改了文字，画面不用重画', 'Only the words change; no page is redrawn') });
+      this.serverMeta();
+      if (this.o.tts && this.o.voice) await narrate(this.o.dir, { tts: this.o.tts, voice: this.o.voice, signal: this.o.signal, child: childCmd, files: projectFiles });
+      this.state.exported = false; this.save();
+      await this.review();
+      this.state.change = undefined; this.save();
+      return;
+    }
+    const nums = ids.map(num);
     const which = this.say(nums.map((n) => `第 ${n} 页`).join('、'), (nums.length > 1 ? 'pages ' : 'page ') + nums.join(', '));
     this.emit({ type: 'note', text: direct ? this.say(`直接改${which}的画面，其余的保持不变`, `Changing the picture on ${which}; everything else stays as it is`) : this.say(`要重画${which}，其余的保持不变`, `Redrawing ${which}; everything else stays as it is`) });
     this.serverMeta();
     if (this.o.tts && this.o.voice) await narrate(this.o.dir, { tts: this.o.tts, voice: this.o.voice, signal: this.o.signal, child: childCmd, files: projectFiles });   // cached pages cost nothing
-    this.state.revision = Object.fromEntries(plan!.pages.map((p) => [p.id, p.note]));
+    // a page whose plan says no more than its id is changed as the user asked
+    this.state.revision = Object.fromEntries(plan.map((p) => [p.id, p.note ?? request]));
     this.state.exported = false;
     for (const id of ids) this.state.pages[id] = { status: 'queued', rounds: 0, issues: [] };
     this.state.stage = 'pages'; this.save();
@@ -932,7 +992,6 @@ export class Director {
     this.state.revision = undefined; this.save();
     const tPages = Date.now();
     // pages the change never reached are said plainly, not left to a film that looks done: why, when the agent said
-    const num = (id: string) => sb.pages.findIndex((p) => p.id === id) + 1;
     for (const [id, why] of this.unchanged) if (why) this.emit({ type: 'note', text: this.say(`第 ${num(id)} 页没有改：${why}`, `Page ${num(id)} was not changed: ${why}`) });
     const missed = [...this.unchanged].filter(([, why]) => !why).map(([id]) => num(id));
     if (missed.length) this.emit({ type: 'note', text: this.say(`${missed.map((n) => `第 ${n} 页`).join('、')}没有改上，画面还是原来的。换个说法再告诉我一次？`, `${missed.length > 1 ? 'Pages' : 'Page'} ${missed.join(', ')} did not change; the picture is as it was. Could you ask again in other words?`) });
@@ -963,21 +1022,54 @@ export class Director {
   /** each session's last error from its model service */
   private lastError = new WeakMap<AgentSession, string>();
 
-  /** the planner's half of a revision: which pages, and what to change on each (written to .studio/revision.json) */
-  private async planRevision(request: string, sb: Storyboard, named: string[]) {
+  /**
+   * The planner's half of a revision: which pages, and what to change on each (written to .studio/revision.json). A
+   * planner that leaves no usable plan (seen: it edited the script and stopped; its model failed before a word; it wrote
+   * a file that would not parse) is asked once more, told what was wrong; a second miss is said to the user in words
+   * they can act on.
+   */
+  private async planRevision(request: string, named: string[]): Promise<{ plan: RevisionPlan } | { why: string }> {
+    const system = plannerSystem(this.o.style, this.o.brief.preferences, this.o.brief.styleNotes, this.o.brief.brand, userAssets(this.project.dir));
     // a fresh, small session per change: resuming the planner would carry the whole making of the film (slow, and every
     // token of it re-read); the files hold everything this decision needs
-    const s = await this.session('reviser', plannerSystem(this.o.style, this.o.brief.preferences, this.o.brief.styleNotes, this.o.brief.brand, userAssets(this.project.dir)), MAX.planTurns);
-    fs.rmSync(this.project.file('.studio/revision.json'), { force: true });   // last change's plan is not this one's
+    let s = await this.session('reviser', system, MAX.planTurns);
+    fs.rmSync(this.project.file(PLAN_FILE), { force: true });   // last change's plan is not this one's
+    const read = () => readRevisionPlan(this.project.exists(PLAN_FILE) ? this.project.read(PLAN_FILE) : undefined, this.project.storyboard().pages.map((p) => p.id));
+    try {
+      let r = await this.send(s, this.planPrompt(request, named));
+      let got = read();
+      if ('plan' in got) return got;
+      if (r.stopReason === 'error') {
+        // the model gave no answer (its service failed): the same question again, in a session of its own
+        await s.close();
+        s = await this.session('reviser', system, MAX.planTurns);
+        r = await this.send(s, this.planPrompt(request, named));
+      } else {
+        r = await this.send(s, `${got.problem}, so the change can't go ahead. Write ${PLAN_FILE} now, as { "pages": [{ "id": "p03", "note": "…" }] } with the storyboard's page ids, or { "pages": [] } when no page's picture changes. Keep what you already changed in the files; don't do it again.`);
+      }
+      got = read();
+      if ('plan' in got) return got;
+      const service = r.error ? serviceTrouble(r.error) : undefined;
+      return { why: service ? this.say(service.zh, service.en) : this.say(
+        '这次没能定下要怎么改，片子还是原来的样子。换个说法再说一次，最好说明是第几页、要改成什么样。',
+        "I couldn't work out how to make this change, so the film is as it was. Could you ask again in other words, saying which page and what it should become?") };
+    } finally {
+      await s.close();
+    }
+  }
+  /** what the planner is told of a change: the request, the storyboard and script as they are now, the pages it names */
+  private planPrompt(request: string, named: string[]) {
+    const sb = this.project.storyboard();
     // hand over what the decision needs up front (the script, and the code of the pages the request names) — reading
     // them file by file costs a model round trip each
     const code = named.map((id) => `pages/${id}.js:\n\`\`\`js\n${this.project.read(`pages/${id}.js`)}\n\`\`\``).join('\n\n');
-    await this.send(s, `The film is finished. The user's change to it:
+    return `The film is finished. The user's change to it:
 ${request}
 
-Decide which pages to change and how: change only the pages that need it (usually 1–2). Touch script.js only when the user asks to change the narration; then change the matching cues and keep their number the same.
+Decide which pages to change and how: change only the pages that need it (usually 1–2, and every page the user's words reach when they ask for more). Touch script.js only when the user asks to change the narration; then change the matching cues and keep their number the same.
 ${[voiceNote('revise', this.o.brief.voice), langNote('revise', this.o.brief.lang, this.o.brief.replyLang).trim()].filter(Boolean).join('\n')}
-Write the decision to .studio/revision.json: { "pages": [{ "id": "p03", "note": "the change for the page agent, down to objects and actions" }] }, then tell the user in one sentence what you will change.
+Write the decision to ${PLAN_FILE}: { "pages": [{ "id": "p03", "note": "the change for the page agent, down to objects and actions" }] }, with the page ids exactly as in the storyboard, then tell the user in one sentence what you will change.
+Always write the file. When no page's picture changes, write { "pages": [] }: for a change to the narration alone (in script.js), a question, thanks, or something a change can't do here (another style, the voice's speed), which you then tell the user in a sentence or two.
 The storyboard and script.js${named.length ? ' and the code of the pages mentioned' : ''} are given below; don't read them again. Read pages/<id>.js for other pages only if you need to.
 You decide only which pages change and what they should become; the page agent writes the code. Don't look into the engine, take screenshots or run tools. When the user points at a page (a page in <references>), that is usually the page to change.
 
@@ -986,8 +1078,7 @@ Storyboard: ${sb.pages.map((p) => `${p.id} ${p.section}: ${p.say}`).join('\n')}
 script.js:
 \`\`\`js
 ${this.project.read('script.js')}
-\`\`\`${code ? `\n\n${code}` : ''}`);
-    await s.close();
+\`\`\`${code ? `\n\n${code}` : ''}`;
   }
 
   /** Whole run. `approve` is called with the storyboard and resolves with optional feedback (the user's edits). */
