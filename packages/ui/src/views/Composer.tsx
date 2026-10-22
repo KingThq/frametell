@@ -8,6 +8,7 @@ import { Lightbox, type LightItem } from './Lightbox';
 import { FilmSettings } from '../components/FilmSettings';
 import { reportShort } from '../components/Credits';
 import { useT } from '../i18n';
+import { track } from '../lib/track';
 
 // The message box to the director. Above the words sits a tray of references — the pages, lines and frames picked on
 // the workbench, files attached, pasted or dropped — so a change request points at exactly what it means.
@@ -37,6 +38,9 @@ const writeQueue = (id: string, q: Queued[]) => { try { if (q.length) localStora
 /** the run has to rest this long before the queue goes: the log of a run under way arrives just after the page opens,
  * and a step can hand over to the next with a beat where nothing runs */
 const SETTLE_MS = 1500;
+
+/** a change about pages (a page, a line, a frame of one in the tray) or about the whole film, as a hosted service is told */
+const scopeOf = (refs: Ref[]): 'page' | 'film' => (refs.some((r) => r.kind === 'page' || r.kind === 'line' || r.kind === 'frame') ? 'page' : 'film');
 
 /** one queued message: its words (edited in place) and what it carries */
 function QueuedRow({ q, project, onSave, onRemove }: { q: Queued; project: ProjectView; onSave: (text: string) => void; onRemove: () => void }) {
@@ -186,6 +190,16 @@ export function Composer({ run, project, viewing, openSettings }: { run: RunView
   const running = isWorking(run);
   const ref = useRef<HTMLTextAreaElement>(null);
   const picker = useRef<HTMLInputElement>(null);
+  // a change being written, told to a hosted service (lib/track.ts) when it starts (the box taken, a page handed over)
+  // and when it goes; refs only. The box taking the focus back after a send is not a new start
+  const composing = useRef(false), refocus = useRef(false), projectId = useRef(project.id);
+  projectId.current = project.id;
+  const startEdit = (scope: 'page' | 'film') => {
+    if (composing.current || refocus.current) return;
+    composing.current = true;
+    track('edit-open', { project: projectId.current, scope });
+  };
+  const takeFocusBack = () => { refocus.current = true; ref.current?.focus(); refocus.current = false; };
   const focus = () => requestAnimationFrame(() => { const el = ref.current; if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } });
 
   const add = (r: Ref) => setItems((cur) => {
@@ -197,8 +211,8 @@ export function Composer({ run, project, viewing, openSettings }: { run: RunView
   });
   // the workbench hands over pages, lines and frames; “change this page”-style prompts still prefill the words
   useEffect(() => {
-    const onRef = (e: Event) => { add((e as CustomEvent<Ref>).detail); focus(); };
-    const onCompose = (e: Event) => { const t = (e as CustomEvent<string>).detail; setText((cur) => (cur.trim() ? cur : t)); focus(); };
+    const onRef = (e: Event) => { const r = (e as CustomEvent<Ref>).detail; startEdit(scopeOf([r])); add(r); focus(); };
+    const onCompose = (e: Event) => { const t = (e as CustomEvent<string>).detail; startEdit('page'); setText((cur) => (cur.trim() ? cur : t)); focus(); };
     addEventListener('studio:ref', onRef); addEventListener('studio:compose', onCompose);
     return () => { removeEventListener('studio:ref', onRef); removeEventListener('studio:compose', onCompose); };
   }, []);
@@ -244,10 +258,12 @@ export function Composer({ run, project, viewing, openSettings }: { run: RunView
   const clear = () => { setText(''); for (const x of items) if (x.preview?.startsWith('blob:')) URL.revokeObjectURL(x.preview); setItems([]); };
   const send = async () => {
     if (!canSend) return;
+    track('edit-submit', { project: project.id, scope: scopeOf(refs), refs: refs.length, queued: running || queue.length > 0 });
+    composing.current = false;
     // the film is being made (or a queue is still waiting its turn): this one waits too, after the others
     if (running || queue.length) {
       setQueue((q) => [...q, { id: Math.random().toString(36).slice(2, 10), text: text.trim(), refs }]);
-      clear(); ref.current?.focus();
+      clear(); takeFocusBack();
       return;
     }
     setBusy(true);
@@ -257,7 +273,7 @@ export function Composer({ run, project, viewing, openSettings }: { run: RunView
     } catch (e) {
       // short of credits: the notice above says so, and what was written stays in the box to send again
       if (!reportShort(project.id, e)) setNote((e as Error).message);
-    } finally { setBusy(false); ref.current?.focus(); }
+    } finally { setBusy(false); takeFocusBack(); }
   };
 
   // the run at rest: the queue goes as one message (each would otherwise start a change of its own), the references
@@ -338,7 +354,7 @@ export function Composer({ run, project, viewing, openSettings }: { run: RunView
           </div>
         )}
         <label htmlFor="say" className="sr-only">{t('conversation.composer.label')}</label>
-        <textarea id="say" ref={ref} rows={2} value={text} onChange={(e) => setText(e.target.value)} placeholder={placeholder}
+        <textarea id="say" ref={ref} rows={2} value={text} onChange={(e) => setText(e.target.value)} placeholder={placeholder} onFocus={() => startEdit(scopeOf(refs))}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(); }
             else if (e.key === 'Backspace' && !text && items.length && e.currentTarget.selectionStart === 0) setItems((cur) => cur.slice(0, -1));

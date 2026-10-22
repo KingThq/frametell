@@ -105,6 +105,9 @@ export interface Hosted {
      * what the film cost the service in US dollars, given only to its admins, to trace costs */
     spent?(project: string): Promise<{ spent: number; goAhead?: number; cost?: number } | null>;
   };
+  /** what the person does in the workbench (lib/track.ts): a short name and a few small plain fields, never what was
+   *  typed; absent: nothing is told to anyone */
+  track?(name: string, props: Record<string, string | number | boolean>): void;
 }
 
 /** what a hosted service refused for want of credits: a failed call carries `credits` (what it needed, what was there) */

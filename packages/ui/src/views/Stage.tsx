@@ -9,6 +9,7 @@ import { AssetsButton, AssetsPanel } from './Assets';
 import { pageName } from '../lib/describe';
 import { Lightbox } from './Lightbox';
 import { clip, type Ref } from '../lib/refs';
+import { milestones, trackOnce, track } from '../lib/track';
 import { t as tr, useT } from '../i18n';
 
 // The workbench is about the film and its pages, each page's picture next to the words it carries: a film view (player,
@@ -154,11 +155,23 @@ function Film({ run, project, ids, tl, subs, playKey, takePlay, onFocus }: { run
     if (cut) { takePlay?.(); return; }
     if (live.ready && takePlay?.()) seekFrame(frame.current, 0, true);
   }, [playKey, live.ready, cut]);
+  // the finished film watched (lib/track.ts: a hosted service's, nothing elsewhere): its first play since the workbench
+  // opened, and how far it got (25, 50, 100 %), each once
+  const done = finished(run);
+  const watched = (at: number, duration: number, playing: boolean) => {
+    if (!done || !playing) return;
+    trackOnce(project.id, 'play', 'preview-play', { exported: !!cut });
+    for (const pct of milestones(at, duration)) trackOnce(project.id, `pct:${pct}`, 'preview-progress', { pct, exported: !!cut });
+  };
+  const liveDuration = tl?.duration || run.ready?.duration || 0;
+  useEffect(() => { if (!cut) watched(live.t, liveDuration, live.playing); }, [live.t, live.playing, liveDuration, !!cut, done]); // eslint-disable-line react-hooks/exhaustive-deps
 
   let screen: React.ReactNode;
   if (cut) {
     const src = subs ? cut.path : cut.noSubs;
-    screen = <video ref={video} key={`${src}-${playKey ?? 0}`} controls autoPlay={!!playKey} onTimeUpdate={(e) => setVt(e.currentTarget.currentTime)} className="h-full w-full rounded-xl bg-black object-contain" src={client.fileUrl(project, relPath(src, project.id))} />;
+    screen = <video ref={video} key={`${src}-${playKey ?? 0}`} controls autoPlay={!!playKey}
+      onPlay={(e) => watched(e.currentTarget.currentTime, e.currentTarget.duration, true)}
+      onTimeUpdate={(e) => { const v = e.currentTarget; setVt(v.currentTime); watched(v.currentTime, v.duration, !v.paused); }} className="h-full w-full rounded-xl bg-black object-contain" src={client.fileUrl(project, relPath(src, project.id))} />;
   } else if (okCount > 0) {
     screen = <div className="relative h-full w-full">{live.frames({ title: tr('stage.previewTitle'), className: 'h-full w-full rounded-xl border-0 bg-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent' })}</div>;
   } else {
@@ -580,7 +593,7 @@ export function Stage({ run, project, selected, onSelect, playKey, pagePlay, onR
               <button className="fs-btn fs-btn-ghost fs-btn-sm" aria-pressed={subs} onClick={() => setSubs(!subs)} title={subs ? tr('stage.subsOnTitle') : tr('stage.subsOffTitle')}>
                 {subs ? <Captions size={14} aria-hidden /> : <CaptionsOff size={14} aria-hidden />}{subs ? tr('stage.subsOn') : tr('stage.subsOff')}
               </button>
-              <a className="fs-btn fs-btn-secondary fs-btn-sm" href={downloadUrl(project, relPath(cut, project.id), !subs)} download><Download size={13} aria-hidden /> {subs ? tr('stage.downloadSubs') : tr('stage.downloadNoSubs')}</a>
+              <a className="fs-btn fs-btn-secondary fs-btn-sm" href={downloadUrl(project, relPath(cut, project.id), !subs)} download onClick={() => track('download', { project: project.id, subs })}><Download size={13} aria-hidden /> {subs ? tr('stage.downloadSubs') : tr('stage.downloadNoSubs')}</a>
               <RevealFile file={savedAt(exported!, cut)} size="fs-btn-sm" />
               <DeckControls project={project} size="fs-btn-sm" />
             </span>

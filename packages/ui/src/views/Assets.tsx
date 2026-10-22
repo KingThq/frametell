@@ -4,6 +4,7 @@ import { Check, ImagePlus, Images, Library, Loader2, RotateCcw, Sparkles, Trash2
 import { client, type LibraryAsset, type ProjectView, type UserAsset } from '../lib/client';
 import { ASSET_ACCEPT, ASSET_MAX_COUNT, assetPath, assetThumbPath, fmtBytes, makeThumb, nameOf, refuse, isSvgFile } from '../lib/assets';
 import { toSend, type Ref } from '../lib/refs';
+import { track } from '../lib/track';
 import { isWorking, type RunView } from '../lib/run';
 import { reportShort } from '../components/Credits';
 import { Lightbox } from './Lightbox';
@@ -204,6 +205,7 @@ function Drawer({ project, run, onRef, onClose }: { project: ProjectView; run: R
       onClose();   // the composer takes the focus
       return;
     }
+    track('edit-submit', { project: id, scope: 'page', refs: 1, from: 'assets' });
     try { await client.say(id, text, toSend([ref])); }
     catch (e) { if (reportShort(id, e)) { onClose(); return; } throw e; }
     handed.set(`${id}:${file}`, whereShort(w));
