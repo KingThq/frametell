@@ -85,7 +85,9 @@ export function Home({ openSettings, prefsStamp }: { openSettings: (section?: st
   const picked = voiceList.find((v) => v.id === voiceId);
   // a voice of a service with no key can be heard, not used: the film would come out silent
   const voiceNoKey = !!picked && voices.data?.configured[picked.provider] === false;
-  const hasInput = !!topic.trim() || files.length > 0 || assets.length > 0;
+  // pictures alone say what is seen, not what the film is about: a sentence or a document is still needed
+  const hasInput = !!topic.trim() || files.length > 0;
+  const onlyAssets = !hasInput && assets.length > 0;
   // a hosted plan may draw in only some styles: the others show, marked, and say how to get them
   const lockedStyle = (id: string) => !!credits?.styles && !credits.styles.includes(id);
   const canSearch = !!settings.data?.search?.provider;
@@ -135,7 +137,7 @@ export function Home({ openSettings, prefsStamp }: { openSettings: (section?: st
     if (!cur.includes(id)) await client.updateSettings({ models: { [provider]: [...cur, id] } });
     settings.reload(); models.reload();
   };
-  const hint = noModel ? null : !hasInput ? t('home.hintInput') : !modelId ? t('home.hintModel') : voiceNoKey ? t('home.hintVoiceKey') : null;
+  const hint = noModel ? null : onlyAssets ? t('assets.home.needTopic') : !hasInput ? t('home.hintInput') : !modelId ? t('home.hintModel') : voiceNoKey ? t('home.hintVoiceKey') : null;
 
   return (
     <main className="mx-auto w-full max-w-[880px] px-6 pb-24 pt-14 sm:pt-20">
@@ -255,6 +257,7 @@ export function Home({ openSettings, prefsStamp }: { openSettings: (section?: st
             <p className="text-[12.5px] text-seal" role="alert">{error}</p>
           ) : hint ? (
             <p className="text-[12.5px] text-ink-3">{hint}</p>
+
           ) : credits && estimate > credits.available ? (
             <p className="text-[12.5px] text-seal" role="status">{t('home.short', { n: estimate.toLocaleString(intlTag()) })} <a className="underline underline-offset-2" href={credits.url} target="_top">{t('home.topUp')}</a></p>
           ) : (

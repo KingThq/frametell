@@ -562,7 +562,7 @@ export function Stage({ run, project, selected, onSelect, playKey, pagePlay, onR
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <AssetsPanel project={project} onRef={onRef} />
+      <AssetsPanel project={project} run={run} onRef={onRef} />
       {!focused && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-5 pt-4">
           <div className="flex shrink-0 rounded-lg bg-ink/[0.05] p-0.5" role="tablist" aria-label={tr('stage.viewTabs')}>
@@ -571,6 +571,7 @@ export function Stage({ run, project, selected, onSelect, playKey, pagePlay, onR
                 className={`whitespace-nowrap rounded-md px-3 py-1 text-[12.5px] font-medium transition-colors ${view === k ? 'bg-surface text-ink shadow-sm' : 'text-ink-3 hover:text-ink'}`}>{l}</button>
             ))}
           </div>
+          <span className="h-5 w-px bg-line" aria-hidden />
           <AssetsButton project={project} />
           {!cut && finished(run) && <span className="ml-auto flex flex-wrap items-center justify-end gap-2"><span className="hidden text-[12px] text-ink-3 md:inline">{run.stale ? tr('stage.revisedPreview') : tr('stage.livePreview')}</span><CoverPicker run={run} project={project} ids={ids} tl={tl} size="fs-btn-sm" /><DeckControls project={project} size="fs-btn-sm" /><ExportControls run={run} project={project} size="fs-btn-sm" /></span>}
           {cut && (
