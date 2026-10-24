@@ -33,7 +33,7 @@ function useTimeline(id: string, key: string) {
  * A player that does not come up (the engine reports it could not build, or it says nothing for a while) is loaded
  * again: it used to stay dark until the whole panel was reloaded.
  */
-function useLivePlayer(version: string, url: string, from = 0) {
+function useLivePlayer(version: string, url: string, from = 0, until?: number) {
   const { locale } = useT();   // the player's own words (play hint, buttons) in the panel's language, not the film's
   const frame = useRef<HTMLIFrameElement>(null);
   const behind = useRef<HTMLIFrameElement>(null);
@@ -85,12 +85,14 @@ function useLivePlayer(version: string, url: string, from = 0) {
     return () => { removeEventListener('message', on); later.forEach(clearTimeout); };
   }, []);
   const frames = ({ className, ...props }: React.IframeHTMLAttributes<HTMLIFrameElement>) => (boot.current ??= from, docs.map((d, i) => (
-    <iframe key={keyOf(d)} ref={i === 0 ? frame : behind} data-v={d.v} src={`${url}?from=${(d.from ?? boot.current!).toFixed(2)}&lang=${locale}`} sandbox={sandboxFor(url)} allow="autoplay; fullscreen" {...props} tabIndex={i === 0 ? undefined : -1} aria-hidden={i > 0 || undefined}
+    <iframe key={keyOf(d)} ref={i === 0 ? frame : behind} data-v={d.v} src={`${url}?from=${(d.from ?? boot.current!).toFixed(2)}&lang=${locale}${until ? `&to=${until.toFixed(2)}` : ''}`} sandbox={sandboxFor(url)} allow="autoplay; fullscreen" {...props} tabIndex={i === 0 ? undefined : -1} aria-hidden={i > 0 || undefined}
       className={`${className ?? ''} ${i > 0 ? '!absolute inset-0 pointer-events-none !opacity-0' : ''}`} />
   )));
   return { frame, frames, ...st };
 }
 const RETRIES = 4, SILENT_MS = 20_000;
+/** where the preview ends while the film waits at its first page (the rest isn't drawn yet); undefined otherwise */
+const firstPageEnd = (run: RunView, tl: Timeline | null) => (run.firstPage ? tl?.pages.find((p) => p.id === run.firstPage!.page)?.end : undefined);
 /** the film as a player shows it: changes when a page is drawn, not each time one starts or goes round its check (drawnPages) */
 function useDrawn(run: RunView, ids: string[]) {
   const seen = useRef<DrawnSeen>({});
@@ -143,7 +145,8 @@ function Film({ run, project, ids, tl, subs, playKey, takePlay, onFocus }: { run
   const video = useRef<HTMLVideoElement>(null);
   const [vt, setVt] = useState(0);
   // the player picks up a page when it changes, and the film when it is ready again (a new voice changes no page, only the narration)
-  const live = useLivePlayer(useDrawn(run, ids) + (run.ready?.at ?? ''), client.fileUrl(project, 'index.html'));
+  // while the first page waits for the user only it is drawn: the preview plays it and stops at its end
+  const live = useLivePlayer(useDrawn(run, ids) + (run.ready?.at ?? ''), client.fileUrl(project, 'index.html'), 0, firstPageEnd(run, tl));
   const frame = live.frame, ft = live.t;
   const okCount = ids.filter((id) => ['ok', 'flagged'].includes(run.pages[id]?.status)).length;
   const cut = film(run);
@@ -378,7 +381,7 @@ function Focus({ id, active: shown, playKey, wantPlay, run, project, ids, tl, on
   const timed = lines.some((l) => l.abs != null);
   // the player boots straight onto the page it opens on (past the cross-fade from the page before); later turns seek,
   // and a new version of the film boots where the one on screen was
-  const live = useLivePlayer(version, client.fileUrl(project, 'index.html'), pt ? Math.min(pt.start + 0.6, pt.end - 0.1) : 0);
+  const live = useLivePlayer(version, client.fileUrl(project, 'index.html'), pt ? Math.min(pt.start + 0.6, pt.end - 0.1) : 0, firstPageEnd(run, tl));
   const { frame, t, playing: running, ready } = live;
   const poster = p?.thumb ? relPath(p.thumb, project.id) : tl?.posters?.[id];
   const moments = useMemo(() => momentsOf(id, tl, run), [id, pt?.start, pt?.end, lines.length, timed]);

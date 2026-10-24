@@ -505,6 +505,9 @@ export class Director {
    * the pages to draw everything themselves, as before.
    */
   async kit() {
+    // settled already (written, given up, or not wanted): a run that continues after something else stopped it (seen:
+    // the narration failing three times wrote the kit three times) does not pay for it again
+    if (this.state.kit) return;
     const sb = this.project.storyboard();
     const designed = this.designed();
     const items = kitPlan(sb.look);

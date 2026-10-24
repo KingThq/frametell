@@ -51,7 +51,8 @@
     frameScale();
     frame.style.visibility = '';
     if (deck) DECK({ render: (t) => ENGINE.renderAt(t) });
-    else PLAYER({ from: parseFloat(q.get('from') || '0'), render: (t) => ENGINE.renderAt(t) });
+    // ?to=: the preview ends there (a film whose first page waits for the user plays only that page)
+    else PLAYER({ from: parseFloat(q.get('from') || '0'), to: parseFloat(q.get('to') || '0') || undefined, render: (t) => ENGINE.renderAt(t) });
   }).catch((e) => {
     // a film that did not build stays dark: embedded in the Studio panel, say so, and the panel loads it again
     console.error(e);

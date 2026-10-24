@@ -5,8 +5,9 @@
 (function () {
   const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
-  window.PLAYER = function ({ from = 0, render }) {
-    const dur = ENGINE.layout.duration;
+  window.PLAYER = function ({ from = 0, to, render }) {
+    // `to`: where the preview ends, when it shows only the start of the film (the first page, before the rest is drawn)
+    const dur = to > 0 ? Math.min(ENGINE.layout.duration, to) : ENGINE.layout.duration;
     // the player speaks the Studio panel's language when embedded there (?lang=), else the film's (META.lang; a film
     // made before it was set: Chinese if its title is)
     const meta = (window.SCRIPT && SCRIPT.META) || {};
