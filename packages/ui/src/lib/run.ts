@@ -27,7 +27,7 @@ export type FeedItem = In & (
   | { kind: 'pictures'; key: string; at: number }
   /** the first page drawn alone, for the person to confirm the look before the rest (one per time it is shown: only the
    *  latest can be answered); `answer`: what they said, once the film moved on from it */
-  | { kind: 'first_page'; key: string; page: string; answer?: 'go' | 'change'; at: number }
+  | { kind: 'first_page'; key: string; page: string; answer?: 'go' | 'change'; at: number; /** when it goes on by itself */ goOnAt?: number }
   | { kind: 'paused'; key: string; reason: 'user' | 'interrupted' | 'error' | 'credits'; message?: string; at: number }
   | { kind: 'check'; key: string; round: number; reds: number; yellows: number; messages: string[]; at: number }
   | { kind: 'approval'; key: string; storyboard: Storyboard; at: number }
@@ -306,7 +306,7 @@ function step(v: RunView, e: LoggedEvent): RunView {
       r.activity = undefined; r.resuming = undefined;
       // the same wait said again (a run picked up again at it, from before the engine stopped repeating it): one card
       if (r.feed.at(-1)?.kind === 'first_page' && (r.feed.at(-1) as { page: string }).page === e.page && !(r.feed.at(-1) as { answer?: string }).answer) return r;
-      push({ kind: 'first_page', key, page: e.page, at, stage: 'pages' });
+      push({ kind: 'first_page', key, page: e.page, at, stage: 'pages', ...(e.goOnAt ? { goOnAt: e.goOnAt } : {}) });
       return r;
     case 'paused': {
       leaveFirst();

@@ -7,7 +7,7 @@ import { bundledSample, ELEVENLABS_DEFAULT_VOICES, ElevenLabsError, elevenLabsTt
 import { BRAND_DIR, Project, STYLES, cleanBrand, cleanLook, openProjectFile, writeIn, type OpenFile, type Renderer, type Timeline } from '@frametell/agent';
 import { linkProject } from '@frametell/engine/tools/project.mjs';
 import { DATA_DIR, configFile, patchConfig, publicConfig, type ConfigStore } from './config.js';
-import { Projects } from './runner.js';
+import { FIRST_PAGE_WAIT_MS, Projects } from './runner.js';
 import { checkEnv } from './env.js';
 import { applyProxy } from './net.js';
 import { attach, cleanRefs } from './refs.js';
@@ -69,6 +69,13 @@ export interface StudioOptions {
    */
   web?: boolean;
   /**
+   * the first page waits this long for the user to confirm the look, then the rest is drawn in it (default 15 minutes;
+   * 0: it waits). `goOnHere` false: the wait is said (goOnAt) but this process does not go on by itself: a host that
+   * parks its runs while they wait (a sandbox) goes on for them, metered as the user's own go-ahead
+   */
+  firstPageWaitMs?: number;
+  goOnHere?: boolean;
+  /**
    * take a brand brief and its files with a new project (`NewProjectInput.brand`, createProject's `brandFiles`): for a
    * host that keeps brands for its users. Off by default: a new project then ignores both
    */
@@ -85,7 +92,7 @@ export class Studio {
     this.dataDir = o.dataDir ?? DATA_DIR;
     this.config = o.config ?? configFile(this.dataDir);
     this.brands = o.brand === true;
-    this.store = new Projects(path.join(this.dataDir, 'projects'), this.config, o.renderer, o.review, o.onEvent, { localFiles: o.localFiles ?? true, web: o.web ?? true });
+    this.store = new Projects(path.join(this.dataDir, 'projects'), this.config, o.renderer, o.review, o.onEvent, { localFiles: o.localFiles ?? true, web: o.web ?? true }, { waitMs: o.firstPageWaitMs ?? FIRST_PAGE_WAIT_MS, here: o.goOnHere ?? true });
     applyProxy(this.config.load().proxy);
     // every project reaches the engine through links; point them at this install (it may have moved, or been renamed)
     if (o.linkProjects !== false) try { for (const id of fs.readdirSync(this.store.root)) { try { linkProject(this.store.dir(id)); } catch {} } } catch {}

@@ -64,6 +64,7 @@ export default {
     change: '按这个改第一页',
     pictures: '每张配图都可以在上面的配图那一行单独重画',
     busy: '片子正忙，稍后再试',
+    goOn: (v: { min: number }) => `${v.min} 分钟内没回应，会按这个风格自动画完其余页`,
     going: (v: { n: number }) => `好，按这个风格画其余 ${v.n} 页`,
     changing: '改法发过去了',
     wentAhead: '第一页确认了，其余页照这个风格画',

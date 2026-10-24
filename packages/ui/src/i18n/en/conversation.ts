@@ -63,6 +63,7 @@ const en: typeof zh = {
     change: 'Change the first page',
     pictures: 'Each picture can be redrawn on its own from the pictures above',
     busy: 'The film is busy. Try again in a moment',
+    goOn: (v: { min: number }) => `No answer within ${v.min} min and the rest is drawn in this look`,
     going: (v) => `Drawing the other ${v.n} ${v.n === 1 ? 'page' : 'pages'} in this look`,
     changing: 'Change sent',
     wentAhead: 'First page approved; the rest follow its look',

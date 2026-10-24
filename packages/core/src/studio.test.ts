@@ -585,3 +585,30 @@ test('a new film takes the user\'s pictures before it starts, and a refused one 
     assert.equal(studio.projects().length, before, 'no film made half-way');
   } finally { fs.rmSync(dataDir, { recursive: true, force: true }); }
 });
+
+test('the first page goes on by itself when its wait runs out, here; a host that parks its runs goes on for them', async () => {
+  const { Projects } = await import('./runner.js');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ft-wait-'));
+  try {
+    for (const here of [true, false]) {
+      const store = new Projects(path.join(dir, String(here)), memoryConfig(), undefined, undefined, undefined, undefined, { waitMs: 60, here });
+      const p = store.create({ title: 'T', topic: 't', style: 'whiteboard', durationSec: 60, model: 'anthropic/x', lang: 'zh' } as never, []);
+      const r = store.runner(p.id) as unknown as { gate?: (f?: string) => void; status: string; emit(e: unknown): void };
+      fs.writeFileSync(path.join(store.dir(p.id), '.studio', 'state.json'), JSON.stringify({ stage: 'pages', firstPage: 'waiting', pages: {} }));
+      let answered: string | undefined | 'none' = 'none';
+      r.gate = (f) => { answered = f; };
+      r.status = 'awaiting_approval';
+      r.emit({ type: 'first_page', page: 'p01', goOnAt: Date.now() + 60 });
+      await new Promise((ok) => setTimeout(ok, 150));
+      assert.equal(answered, here ? undefined : 'none', `here: ${here}`);
+      // a stop before the time ends the wait
+      if (here) {
+        answered = 'none'; r.gate = (f) => { answered = f; };
+        r.emit({ type: 'first_page', page: 'p01', goOnAt: Date.now() + 60 });
+        r.emit({ type: 'paused', reason: 'user' });
+        await new Promise((ok) => setTimeout(ok, 150));
+        assert.equal(answered, 'none');
+      }
+    }
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});

@@ -47,7 +47,7 @@ export type StudioEvent =
   | { type: 'kit'; status: 'start' | 'checking' | 'done' | 'failed'; components?: string[]; round?: number; sheet?: string; detail?: string }
   /** the film's first page is drawn and checked: the run waits (as at the storyboard) for the user to confirm the look,
    *  or say what to change in it, before the other pages are drawn */
-  | { type: 'first_page'; page: string }
+  | { type: 'first_page'; page: string; /** when the film goes on by itself if the user says nothing (ms since the epoch) */ goOnAt?: number }
   /** one of the film's generated pictures (pictures.ts): being drawn, drawn (`file` in the project, its size), or not
    *  had. `sample`: the film's first, which the others are drawn from; `note`: what the user asked of it */
   | { type: 'picture'; id: string; status: 'drawing' | 'done' | 'failed'; what?: string; kind?: string; sample?: boolean; file?: string; w?: number; h?: number; note?: string; detail?: string }

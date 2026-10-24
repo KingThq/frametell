@@ -45,7 +45,7 @@ function writeMeta(dir: string, m: ProjectMeta) { m.updatedAt = new Date().toISO
 export class Projects {
   private runners = new Map<string, Runner>();
   /** `reach`: what the research may read beyond the project (see ResearchReach) */
-  constructor(readonly root: string, readonly config: ConfigStore, private renderer?: Renderer, private review?: 'full' | 'defects', private onEvent?: (project: string, e: Logged) => void, private reach: ResearchReach = FULL_REACH) {}
+  constructor(readonly root: string, readonly config: ConfigStore, private renderer?: Renderer, private review?: 'full' | 'defects', private onEvent?: (project: string, e: Logged) => void, private reach: ResearchReach = FULL_REACH, private wait: FirstPageWait = { waitMs: FIRST_PAGE_WAIT_MS, here: true }) {}
 
   dir(id: string) { return path.join(this.root, id); }
 
@@ -97,7 +97,7 @@ export class Projects {
   runner(id: string): Runner {
     if (!fs.existsSync(studioFile(this.dir(id), 'project.json'))) throw new Error(tr('项目不存在', 'Project not found'));
     let r = this.runners.get(id);
-    if (!r) { r = new Runner(id, this.dir(id), this.config, this.renderer, this.review, this.onEvent, this.reach); this.runners.set(id, r); }
+    if (!r) { r = new Runner(id, this.dir(id), this.config, this.renderer, this.review, this.onEvent, this.reach, this.wait); this.runners.set(id, r); }
     return r;
   }
 }
@@ -119,6 +119,10 @@ export interface ResearchReach {
   web: boolean;
 }
 export const FULL_REACH: ResearchReach = { localFiles: true, web: true };
+/** how long the first page waits for the user before the rest is drawn in its look */
+export const FIRST_PAGE_WAIT_MS = 15 * 60_000;
+/** the first page's wait: how long, and whether this process goes on by itself when it runs out */
+export interface FirstPageWait { waitMs: number; here: boolean }
 
 /**
  * What research the film gets before its storyboard, if any: links, repositories and (on this machine) folders named in
@@ -206,6 +210,9 @@ class Runner {
   /** the task now running, settled once it has wound down (its children stopped) */
   private task?: Promise<void>;
   private gate?: (feedback: string | undefined) => void;
+  /** goes on past the first page when its wait runs out */
+  private goOn?: ReturnType<typeof setTimeout>;
+  private stateFirstPageWaiting() { try { return JSON.parse(fs.readFileSync(studioFile(this.dir, 'state.json'), 'utf8')).firstPage === 'waiting'; } catch { return false; } }
   /** an approval that arrived before the run reached the gate (e.g. right after a server restart) */
   private pending?: { feedback?: string };
   /** notes the user left while nothing was running; handed to the director when the run continues */
@@ -229,7 +236,7 @@ class Runner {
   }
   private tr(zh: string, en: string) { return this.replyIn() === 'zh' ? zh : en; }
 
-  constructor(readonly id: string, private dir: string, private config: ConfigStore, private renderer?: Renderer, private review?: 'full' | 'defects', private onEvent?: (project: string, e: Logged) => void, private reach: ResearchReach = FULL_REACH) {
+  constructor(readonly id: string, private dir: string, private config: ConfigStore, private renderer?: Renderer, private review?: 'full' | 'defects', private onEvent?: (project: string, e: Logged) => void, private reach: ResearchReach = FULL_REACH, private wait: FirstPageWait = { waitMs: FIRST_PAGE_WAIT_MS, here: true }) {
     this.log = studioFile(dir, 'events.jsonl');
     if (fs.existsSync(this.log)) {
       const lines = fs.readFileSync(this.log, 'utf8').trim().split('\n').filter(Boolean);
@@ -363,6 +370,14 @@ class Runner {
       return;
     }
     this.tick = 0;
+    // the first page waits for the user: here, when nobody answers in time, the rest is drawn in its look (a host that
+    // parks its runs goes on for them instead). The run moving on (a page drawn, a stop) ends the wait, the first page
+    // shown again starts it anew; a picture drawn again or a note on the way leaves it as it is
+    if (['first_page', 'page', 'stage', 'paused', 'resumed', 'ready'].includes(e.type)) clearTimeout(this.goOn);
+    if (e.type === 'first_page' && this.wait.here && e.goOnAt) {
+      this.goOn = setTimeout(() => { if (this.gate && this.stateFirstPageWaiting()) this.approve(); }, Math.max(0, e.goOnAt - Date.now()));
+      this.goOn.unref?.();
+    }
     const logged = { ...e, seq: ++this.seq, at: Date.now() } as Logged;
     fs.appendFileSync(this.log, JSON.stringify(logged) + '\n');
     for (const fn of this.subs) fn(logged);
@@ -457,6 +472,7 @@ class Runner {
       director = new Director({
         dir, runtime, pages, reviewer, research: plan && research ? { ...research, ...plan } satisfies DirectorOptions['research'] : undefined,
         style: meta.style, look: meta.look, prices, tts, voice, concurrency: cfg.defaults.concurrency, images: imagesFor(cfg),
+        ...(this.wait.waitMs ? { firstPageWaitMs: this.wait.waitMs } : {}),
         brief: { durationSec: meta.durationSec, topic: meta.topic, notes: meta.notes, styleNotes: meta.styleNotes, brand: meta.brand, lang: meta.lang ?? 'zh', replyLang: this.replyIn(meta), voice: provider, preferences: cfg.preferences },
         emit: this.emit, signal: this.abort.signal, renderer: this.renderer, review: this.review, exportDir: this.renderer ? undefined : cfg.exportDir,
       });

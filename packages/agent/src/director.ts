@@ -68,6 +68,9 @@ export interface DirectorOptions {
   /** false: the pages are drawn all at once. Otherwise the first page is drawn alone and the run waits at it (as at the
    *  storyboard) for the user to confirm the film's look, or say what to change, before the rest are drawn */
   firstPage?: boolean;
+  /** how long the first page waits for the user before the rest is drawn in its look (said with the wait: goOnAt);
+   *  whoever holds the run does the going on (a runner's timer, a host's sweep). Absent: it waits */
+  firstPageWaitMs?: number;
 }
 
 interface PageState { status: PageStatus; rounds: number; issues: PageIssue[]; ref?: string; /** runs this page has failed in */ failures?: number }
@@ -794,7 +797,7 @@ export class Director {
     for (;;) {
       if (!drawn(id)) { await this.pages([id], { hold: true }); said = false; }
       this.state.firstPage = 'waiting'; this.save();
-      if (!said) this.emit({ type: 'first_page', page: id });
+      if (!said) this.emit({ type: 'first_page', page: id, ...(this.o.firstPageWaitMs ? { goOnAt: Date.now() + this.o.firstPageWaitMs } : {}) });
       said = false;
       const change = (await approve(this.project.storyboard()))?.trim();
       if (!change) break;

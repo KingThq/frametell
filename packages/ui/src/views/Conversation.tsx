@@ -208,6 +208,7 @@ function FirstPage({ it, run, project, active, onOpen }: { it: Extract<FeedItem,
             </button>
           </form>
           {run.pictures.length > 0 && client.redrawPicture && <p className="mt-1.5 text-[12px] text-ink-3">{t('conversation.firstPage.pictures')}</p>}
+          {it.goOnAt && <p className="mt-1.5 text-[12px] text-ink-3">{t('conversation.firstPage.goOn', { min: Math.max(1, Math.ceil((it.goOnAt - Date.now()) / 60_000)) })}</p>}
           {failed && <p className="mt-1.5 text-[12px] text-seal" role="alert">{failed}</p>}
         </div>
       ) : (
