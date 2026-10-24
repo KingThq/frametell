@@ -292,6 +292,39 @@ ${items.map((it) => `- ${it.name}: ${it.what}`).join('\n')}
 Fail a component when it does not read as what it should be, breaks the film's style card, is cut off or unfinished, or is drawn so badly a page could not use it. Name the component in \`what\`, and use its moment as \`at\`. Pass when every component is usable. Call verdict.`;
 }
 
+/** the director's answer at the first page: which of the film's components the user's change is about */
+export const KIT_CHANGE: AnswerTool = {
+  name: 'components',
+  description: "The film's components this change must be made in: the ones whose look or parts it changes. [] when it changes none of them.",
+  parameters: Type.Object({ names: Type.Array(Type.String({ description: "a component's name, as listed" })) }),
+};
+/** who decides which components a change at the first page reaches */
+export const kitChangeSystem = "You look after a film's own components: the things it draws on several pages, written once so every page draws them alike. You answer only with the components tool.";
+/** what the film's first page is shown with: the change, and the components to choose among */
+export function kitChangeAsk(items: KitItem[], change: string) {
+  return `The user looked at the film's first page and asked for this change: ${change}
+
+The film's components (each is drawn the same on every page that shows it):
+${items.map((it) => `- ${it.name}: ${it.what}`).join('\n')}
+
+Which of them must change for this? A change to how one of these things looks (its colour, shape, parts, size, how it is drawn) is made in its component, or the other pages would still show it the old way. A change to the page alone (where things are, the camera, the background, a label, the pacing) changes none. Call components with their names, or [].`;
+}
+/** what a component's session is asked when the user wants it changed, at the first page */
+export function kitChangePrompt(name: string, change: string, code: string, check: string) {
+  return `The user looked at the film's first page, which draws with this film's components, and asked for a change that reaches your component \`P.${name}\`: ${change}
+
+Your files as they are now (already given; don't read them again):
+${kitPart(name)}:
+\`\`\`js
+${code}
+\`\`\`
+${kitPartCheck(name)}:
+\`\`\`js
+${check}
+\`\`\`
+Make the change in ${kitPart(name)} with edit. **Keep its name, arguments and options as they are**: every page already calls it, and those calls must still work. Change only what the user's words reach. Put all the edits in one reply, each with finish: true; the components are checked again once they apply.`;
+}
+
 /** what the kit session is asked to fix after its check */
 export function kitFixPrompt(name: string, round: number, problems: { name?: string; what: string; fix: string }[], crash?: string) {
   return `Check round ${round}: the components need changes.

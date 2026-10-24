@@ -26,6 +26,8 @@ function artist(systems: Record<string, string>, o: { writesKit?: boolean } = {}
     async open(s) {
       systems[s.name] = s.system;
       return { ref: s.name, close: async () => {}, send: async ({ text }: { text: string }) => {
+        if (s.name === 'kit-route') return { text: '', stopReason: 'done', usage: {}, answers: [{ name: 'components', args: { names: /蓝/.test(text) ? ['globe', 'nope'] : [] } }] } as never;
+        if (s.name.startsWith('kit-') && /^The user looked at the film's first page/.test(text)) { fs.appendFileSync(path.join(s.cwd, `extras/kit/${s.name.slice(4)}.js`), '// bluer\n'); return { text: 'done', stopReason: 'done', usage: {}, answers: [] } as never; }
         if (s.name.startsWith('kit-')) {
           const name = s.name.slice(4);
           if (/^Check round/.test(text)) { if (/They may not be yours/.test(text) && !/throws/.test(text)) return { text: 'not mine', stopReason: 'done', usage: {}, answers: [] } as never; fs.appendFileSync(path.join(s.cwd, `extras/kit/${name}.js`), '// changed\n'); }
@@ -169,4 +171,24 @@ test('a kit that throws goes back to its session with the error, and is kept onc
   assert.equal(round, 2);
   assert.equal(asked.filter((t) => /throws when it runs[\s\S]*this\.nope is not a function/.test(t)).length, 2, 'a crash goes to every component');
   assert.deepEqual(f.d.state.kit, { status: 'done', components: ['globe', 'flag'] });
+});
+
+test('a change at the first page that reaches a component is made in it, checked, and fixed again for the pages', async () => {
+  const f = film();
+  await f.d.kit();
+  const before = fs.readFileSync(path.join(f.dir, 'extras/film-kit.js'), 'utf8');
+  const d = f.d as unknown as { kitChange(change: string): Promise<void> };
+  await d.kitChange('地球画得更蓝一点');
+  const kit = fs.readFileSync(path.join(f.dir, 'extras/film-kit.js'), 'utf8');
+  assert.notEqual(kit, before);
+  assert.match(kit, /B\.globe[\s\S]*\/\/ bluer/);
+  assert.doesNotMatch(kit.split('B.flag')[1] ?? '', /bluer/, 'only the component the change reaches');
+  assert.equal(fs.readFileSync(path.join(f.dir, '.studio/film-kit.js'), 'utf8'), kit, 'kept as checked');
+  assert.throws(() => writeIn(f.dir, 'extras/film-kit.js', 'x'), /every page of this film uses it/);
+  assert.ok(f.events.some((e) => e.type === 'kit' && e.status === 'start' && e.components?.join() === 'globe'));
+  assert.ok(f.prompts.some((p) => /asked for this change to globe: 地球画得更蓝一点/.test(p)));
+  // a change to the page alone reaches none: nothing is written
+  const n = f.checked.length;
+  await d.kitChange('镜头再推近一点');
+  assert.equal(f.checked.length, n);
 });

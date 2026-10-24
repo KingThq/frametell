@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { narrate, type TtsProvider } from '@frametell/voice';
 import { Project, childCmd, projectFiles, type LintIssue, type LintKind, type PageTiming, type Storyboard, type Renderer } from './project.js';
-import { FLAG, VERDICT, fixPrompt, kitFixPrompt, kitPrompt, kitReviewNote, kitReviewerPrompt, kitSystem, langNote, voiceNote, pagePrompt, pageSystem, plannerSystem, replyNote, reviewPrompt, reviewerPrompt, reviewerSystem, scriptPrompt, storyboardFixPrompt, storyboardPrompt, verdictAgain, type Brief, type Problem } from './prompts.js';
+import { FLAG, KIT_CHANGE, VERDICT, fixPrompt, kitChangeAsk, kitChangePrompt, kitChangeSystem, kitFixPrompt, kitPrompt, kitReviewNote, kitReviewerPrompt, kitSystem, langNote, voiceNote, pagePrompt, pageSystem, plannerSystem, replyNote, reviewPrompt, reviewerPrompt, reviewerSystem, scriptPrompt, storyboardFixPrompt, storyboardPrompt, verdictAgain, type Brief, type Problem } from './prompts.js';
 import { KIT_CHECK_FILE, KIT_FILE, KIT_KEPT, kitCell, kitCheckPage, kitIssues, kitPart, kitPartCheck, kitPlan, kitStage, kitTimes, kitWanted, type KitItem } from './kit.js';
 import { addUsage, emptyUsage, type AgentRuntime, type AgentSession, type SessionOptions, type Thinking, type TokenUsage, type TurnResult } from './runtime/types.js';
 import type { PageIssue, PageStatus, Stage, StudioEvent } from './events.js';
@@ -791,13 +791,88 @@ export class Director {
       this.emit({ type: 'first_page', page: id });
       const change = (await approve(this.project.storyboard()))?.trim();
       if (!change) break;
-      // for the first page now, and for every page drawn after it (each reads the notes it hasn't seen)
+      // for the first page now, and for every page drawn after it (each reads the notes it hasn't seen); a change to a
+      // thing the film draws with its own components is made in them first, or the other pages would still draw it the
+      // old way (they are fixed for the pages' file tools)
       this.message(change);
+      await this.kitChange(change);
       this.state.revision = { [id]: change };
       this.state.pages[id] = { ...this.state.pages[id], status: 'queued' }; this.save();
       this.emit({ type: 'note', text: this.say('照这个改第一页，后面的页也会照这个来', 'Changing the first page as you said; the pages after it will follow it too') });
     }
     this.state.revision = undefined; this.state.firstPage = 'done'; this.save();
+  }
+
+  /**
+   * A change the user asked for at the first page, made in the film's components it reaches: the director names them
+   * (none, most often), each one's session makes the change keeping its interface, and they are checked again as at
+   * first. A change that doesn't pass its check is undone: the first page then makes it in the page itself.
+   */
+  private async kitChange(change: string) {
+    const items = this.kitItems();
+    if (!items.length) return;
+    let names: string[] = [];
+    const router = await this.session('kit-route', kitChangeSystem, MAX.reviewerTurns, undefined, undefined, { tools: 'none', answers: [KIT_CHANGE] });
+    try {
+      const r = await this.send(router, kitChangeAsk(items, change));
+      const said = (r.answers.find((a) => a.name === KIT_CHANGE.name)?.args as { names?: unknown } | undefined)?.names;
+      names = Array.isArray(said) ? items.map((x) => x.name).filter((n) => said.includes(n)) : [];
+    } catch (e) { if (stopped(e)) throw e; } finally { await router.close(); }
+    if (!names.length) return;
+    this.emit({ type: 'kit', status: 'start', components: names });
+    const was = new Map(names.map((n) => [n, [this.project.read(kitPart(n)), this.project.read(kitPartCheck(n))] as const]));
+    const undo = () => { for (const [n, [code, check]] of was) { this.project.write(kitPart(n), code); this.project.write(kitPartCheck(n), check); } };
+    const designed = this.designed();
+    const sessions = new Map<string, AgentSession>();
+    let reviewer: AgentSession | undefined, ok = false, sheet: string | undefined, why = '';
+    try {
+      const system = kitSystem(this.o.style, styleExtras(this.o.style), this.o.brief.styleNotes, designed?.card);
+      await Promise.all(names.map(async (n) => {
+        const s = await this.session(`kit-${n}`, system, MAX.kitTurns);
+        sessions.set(n, s);
+        await this.send(s, kitChangePrompt(n, change, was.get(n)![0], was.get(n)![1]) + this.unseen(`kit-${n}`), undefined, KIT_THINKING);
+      }));
+      for (let round = 1; round <= 2; round++) {
+        this.project.write(KIT_FILE, items.map((x) => this.project.read(kitPart(x.name)).trim()).join('\n\n') + '\n');
+        this.project.write(KIT_CHECK_FILE, kitCheckPage(items.map((x) => this.project.read(kitPartCheck(x.name)))));
+        this.emit({ type: 'kit', status: 'checking', round });
+        const { page, times, check: c } = await this.checkKit(items, this.o.look ?? designed?.look, round + 10);
+        const broken = c.issues.filter((i) => BROKEN.includes(i.kind));
+        let problems: { name?: string; what: string; fix: string }[];
+        if (c.crash !== undefined || broken.length) problems = [{ what: c.crash !== undefined ? crashText(c.crash, 'kit') : broken.map((i) => i.msg).join('\n'), fix: 'fix the error' }];
+        else {
+          sheet = c.sheet;
+          try { fs.copyFileSync(c.sheet, this.project.file(`out/snap/kit-change-r${round}.jpg`)); sheet = this.project.file(`out/snap/kit-change-r${round}.jpg`); } catch {}
+          reviewer ??= await this.session('check-kit', reviewerSystem(this.o.style, this.o.brief.styleNotes, designed?.card), MAX.reviewerTurns, undefined, undefined, { tools: 'none', answers: [VERDICT] });
+          const v = await this.verdict(reviewer, kitReviewerPrompt(items, times, round) + `\n\nThe user asked for this change to ${names.join(', ')}: ${change}\nFail those if they don't show it.`, c.sheet);
+          const at = (t: number) => items[Math.max(0, page.cues.filter((q) => q.abs <= t + page.start + 0.01).length - 1)]?.name;
+          problems = [...errorsOf(c.issues).map((i) => ({ name: at(i.local), what: i.msg, fix: 'fix it in the component' })),
+            ...(v?.pass === false ? v.problems : []).map((p) => ({ name: items.find((x) => p.what.includes(x.name))?.name ?? at(p.at), what: p.what, fix: p.fix }))];
+        }
+        if (!problems.length) { ok = true; break; }
+        why = problems.map((p) => p.what).join('; ');
+        if (round === 2) break;
+        await Promise.all(names.map((n) => this.send(sessions.get(n)!, kitFixPrompt(n, round, problems.filter((p) => !p.name || p.name === n), undefined), sheet ? [sheet] : undefined, KIT_THINKING)));
+      }
+    } catch (e) {
+      if (stopped(e)) { undo(); throw e; }
+      why = (e as Error).message;
+    } finally {
+      await reviewer?.close();
+      await Promise.all([...sessions.values()].map((s) => s.close()));
+    }
+    if (!ok) undo();
+    // the kit as it stands now (changed, or put back), fixed again for the pages
+    const kept = this.state.kit!.components.map((n) => this.project.read(kitPart(n)).trim()).join('\n\n') + '\n';
+    this.project.write(KIT_FILE, kept);
+    fs.writeFileSync(this.project.file(KIT_KEPT), kept);
+    freeze(this.o.dir, KIT_FILE);
+    if (ok) this.emit({ type: 'kit', status: 'done', components: this.state.kit!.components, sheet });
+    else {
+      this.emit({ type: 'kit', status: 'done', components: this.state.kit!.components, detail: why.slice(0, 400) });
+      this.emit({ type: 'note', text: this.say(`组件没改成（${names.join('、')}），第一页会在页面里照你说的画`, `The components could not be changed (${names.join(', ')}); the first page makes the change itself`) });
+    }
+    await this.commit(this.say(`按你说的改组件：${names.join('、')}`, `Components changed as asked: ${names.join(', ')}`));
   }
 
   /** `hold`: only these pages, and the film stays at its pages after them (the first page, waiting for the user) */
