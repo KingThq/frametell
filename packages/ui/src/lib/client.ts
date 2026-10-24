@@ -33,6 +33,10 @@ export interface StudioClient {
   createProject(input: NewProjectInput, files: File[], assets?: NewAsset[]): Promise<ProjectView>;
   start(id: string): Promise<void>;
   approve(id: string, feedback?: string): Promise<boolean>;
+  /** one of the film's generated pictures drawn again, `note` what to change: the sample while the storyboard waits (the
+   *  change then holds for every picture), or any picture of a finished film. False while the film is busy. Absent
+   *  where a host can't draw pictures (the desktop bridge) */
+  redrawPicture?(id: string, picture: string, note?: string): Promise<boolean>;
   stop(id: string): Promise<void>;
   /** delete a project and its files; refused while it is being made */
   deleteProject(id: string): Promise<void>;
@@ -156,6 +160,7 @@ export const httpClient: StudioClient = {
   },
   start: async (id) => { await call('POST', `/api/projects/${id}/start`); },
   approve: async (id, feedback) => (await call<{ ok: boolean }>('POST', `/api/projects/${id}/approve`, { feedback })).ok,
+  redrawPicture: async (id, picture, note) => (await call<{ ok: boolean }>('POST', `/api/projects/${id}/picture`, { picture, note })).ok,
   stop: async (id) => { await call('POST', `/api/projects/${id}/stop`); },
   deleteProject: async (id) => { await call('DELETE', `/api/projects/${id}`); },
   moveProject: async (id, group) => { await call('PATCH', `/api/projects/${id}`, { group }); },

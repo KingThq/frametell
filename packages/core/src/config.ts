@@ -31,6 +31,9 @@ export interface Config {
   ttsBaseUrls?: { volcengine?: string; elevenlabs?: string };
   /** web search for research before the storyboard: the engine and its keys (several keys: comma-separated, used in turn) */
   search: SearchSettings;
+  /** an OpenAI-compatible image service (gpt-image-2 by default) for the generated pictures of a style that allows them;
+   *  absent: films draw everything in code. Set in config.json (no panel for it yet) */
+  image?: { key?: string; baseUrl?: string; model?: string };
   /** voices the user added by id (「我的音色」), checked when added */
   myVoices?: VoiceChoice[];
   /** interface language; absent = follow the system */

@@ -12,8 +12,9 @@ import type { PageIssue, PageStatus, Stage, StudioEvent } from './events.js';
 import { designedFonts, designedIssues, designedLook, type Look } from './look.js';
 import { SIGN_OFF_HOLD, cornerMark, signsOff } from './brand.js';
 import { assetsOn, userAssets } from './assets.js';
+import { PICTURES_DIR, PICTURES_MANIFEST, cutOut, pictureFile, pictureIssues, pictureKey, picturePageNote, picturePath, picturePlan, picturePlanNote, picturePrompt, pictureReviewNote, pictureSize, pictureStyle, picturesOn, readPictures, sniffPicture, type ImageProvider, type Picture, type PicturePlan, type Pictures } from './pictures.js';
 import { ENGINE_DIR } from '@frametell/engine/tools/project.mjs';
-import { freeze, openIn } from './projectfs.js';
+import { freeze, openIn, readIn, writeIn } from './projectfs.js';
 import { briefFile, runResearch, type ResearchLimits } from './research/research.js';
 import type { Sources } from './research/sources.js';
 import type { Web } from './research/web.js';
@@ -61,6 +62,9 @@ export interface DirectorOptions {
    * searched when `search`; the brief becomes materials/research.md. Absent: no research
    */
   research?: { runtime: AgentRuntime; prices?: Prices; web: Web; sources: Sources; search: boolean; limits?: Partial<ResearchLimits> };
+  /** draws the film's generated pictures (pictures.ts), for a style that allows them. Absent: no pictures, and the
+   *  storyboard is never told it may ask for any */
+  images?: ImageProvider;
 }
 
 interface PageState { status: PageStatus; rounds: number; issues: PageIssue[]; ref?: string; /** runs this page has failed in */ failures?: number }
@@ -86,11 +90,13 @@ interface State {
   /** this film's own components (kit.ts): written and checked (`components` the ones that passed), given up, or not
    *  wanted (a style with its own, a short film, nothing that recurs) */
   kit?: { status: 'done' | 'failed' | 'none'; components: string[] };
+  /** this film's generated pictures (pictures.ts) were drawn after the go-ahead (those that could be), or none were asked */
+  pictures?: 'done' | 'none';
 }
 
-/** two pieces of work side by side: both run to the end, and the first failure is thrown once both have */
-async function both(a: Promise<unknown>, b: Promise<unknown>) {
-  const r = await Promise.allSettled([a, b]);
+/** pieces of work side by side: all run to the end, and the first failure is thrown once all have */
+async function both(...work: Promise<unknown>[]) {
+  const r = await Promise.allSettled(work);
   const bad = r.find((x): x is PromiseRejectedResult => x.status === 'rejected');
   if (bad) throw bad.reason;
 }
@@ -168,6 +174,13 @@ export function serviceTrouble(text: string): { zh: string; en: string } | undef
 
 /** a stop (Pause), not a failure */
 const stopped = (e: unknown) => (e as Error)?.name === 'AbortError';
+/** `fn` over `items`, at most `n` at a time */
+async function pool<T>(items: T[], n: number, fn: (x: T) => Promise<unknown>) {
+  const queue = [...items];
+  await Promise.all(Array.from({ length: Math.min(n, queue.length) }, async () => { for (let x = queue.shift(); x !== undefined; x = queue.shift()) await fn(x); }));
+}
+/** pictures drawn at once: the image service takes ~30 s for each */
+const PICTURES_AT_ONCE = 4;
 // pageChecks: a drawn page is checked at most 3 times (2 rounds of fixes); a revision starts from a checked page, 2.
 const MAX = { pageLintMs: 90_000, pagesAtOnce: 10, storyboardFix: 2, scriptFix: 2, planTurns: 30, pageTurns: 40, reviewerTurns: 3, pageChecks: 3, kitChecks: 3, kitTurns: 30, revisionChecks: 2, reviewRounds: 2, reviewDefectsMs: 180_000 };
 /** the reviewer looks at one sheet and answers: little thinking, quickly */
@@ -350,7 +363,7 @@ export class Director {
     const all = fs.existsSync(this.project.file('materials')) ? fs.readdirSync(this.project.file('materials')).filter((f) => !f.startsWith('.')) : [];
     const materials = all.filter((f) => /\.(md|markdown|txt|png|jpe?g|webp|gif)$/i.test(f));
     const s = await this.session('planner', plannerSystem(this.o.style, this.o.brief.preferences, this.o.brief.styleNotes, this.o.brief.brand, userAssets(this.project.dir)), MAX.planTurns, this.state.planner);
-    let r = await this.send(s, storyboardPrompt(this.o.brief, this.o.style, materials));
+    let r = await this.send(s, storyboardPrompt(this.o.brief, this.o.style, materials, picturePlanNote(this.pictureStyle())));
     this.state.planner = s.ref; this.save();
     // a turn can end without the file (seen: a gateway answering a one-token "." mid-turn); ask once more, as for pages
     if (!this.project.exists('storyboard.json') && r.stopReason !== 'max_turns') r = await this.send(s, 'storyboard.json does not exist yet; write it, then stop and report. ' + replyNote(this.o.brief.replyLang, this.o.brief.lang));
@@ -369,6 +382,8 @@ export class Director {
     }
     await this.commit(this.say('分镜', 'Storyboard'));
     await s.close();
+    // the film's sample picture, shown with the storyboard: the user confirms the look before the rest are drawn
+    await this.sample();
     const sb = this.project.storyboard();
     this.state.stage = 'approval'; this.save();
     this.emit({ type: 'stage', stage: 'storyboard', status: 'done' });
@@ -412,7 +427,8 @@ export class Director {
     try { look = this.project.storyboard().look; } catch { return []; }   // an unreadable storyboard is reported already
     let ids: string[] = [];
     try { ids = this.project.storyboard().pages.map((p) => p.id); } catch {}
-    return [...(fonts ? designedIssues(look, fonts) : []), ...kitIssues(look, ids)].map((msg) => ({ level: 'red' as const, msg }));
+    const pictures = this.pictureStyle();
+    return [...(fonts ? designedIssues(look, fonts) : []), ...kitIssues(look, ids), ...(pictures ? pictureIssues(look, ids, pictures) : [])].map((msg) => ({ level: 'red' as const, msg }));
   }
 
   /** a designed style's film: the look the director wrote in storyboard.json (its card and what it comes to) */
@@ -578,6 +594,170 @@ export class Director {
     await this.commit(this.say('本片组件', "This film's components"));
   }
 
+  // ── this film's generated pictures (pictures.ts) ─────────────────────────────────────────────
+  /** the style's words for the image model, when the style allows pictures and there is a service to draw them */
+  private pictureStyle() { return this.o.images ? pictureStyle(this.o.style) : undefined; }
+  private planned(): PicturePlan[] { try { return picturePlan(this.project.storyboard().look, this.pictureStyle()); } catch { return []; } }
+  /** the pictures are drawn for every page: the agents' file tools may not change them */
+  private freezePictures() { for (const p of readPictures(this.o.dir).items) freeze(this.o.dir, picturePath(p)); }
+  /** the sample being drawn (at the storyboard, or again at the user's word): the rest wait for it */
+  private drawing?: Promise<void>;
+
+  /** one picture drawn and its file written (not yet listed). Throws when none can be had */
+  private async drawPicture(p: PicturePlan, prompt: string, refs: Picture[], key: string, note?: string): Promise<Picture> {
+    const style = this.pictureStyle()!;
+    const from = refs.flatMap((r) => { try { return [new Uint8Array(readIn(this.o.dir, picturePath(r), { record: true }))]; } catch { return []; } });
+    let data: Uint8Array | undefined, last: unknown;
+    for (let i = 0; i < 2 && !data; i++) {
+      try { data = await this.o.images!.draw({ prompt, size: pictureSize(p), quality: style.quality, transparent: cutOut(p.kind), refs: from.length ? from : undefined, signal: this.o.signal }); }
+      catch (e) { if (stopped(e) || this.o.signal?.aborted) throw e; last = e; }
+    }
+    const got = data && sniffPicture(data);
+    if (!data || !got) throw new Error(data ? 'the image service answered with something that is not a picture' : (last as Error)?.message ?? 'no picture');
+    const file = pictureFile(p.id, data, got.type);
+    fs.mkdirSync(this.project.file(PICTURES_DIR), { recursive: true });
+    writeIn(this.o.dir, `${PICTURES_DIR}/${file}`, data, { record: true });
+    return { id: p.id, file, prompt, w: got.w, h: got.h, alpha: got.alpha, at: new Date().toISOString(), key, ...(note ? { note } : {}) };
+  }
+  /** a picture put in the film's list in place of the one it replaces (whose file goes); `notes`: the look's adjustments
+   *  as they are now. → the picture it replaced */
+  private keepPicture(pic: Picture, notes?: string[]): Picture | undefined {
+    const now = readPictures(this.o.dir);
+    const old = now.items.find((x) => x.id === pic.id);
+    now.items = [...now.items.filter((x) => x.id !== pic.id), pic];
+    if (notes) now.notes = notes;
+    this.project.write(PICTURES_MANIFEST, JSON.stringify(now, null, 2) + '\n');
+    if (old && old.file !== pic.file) { try { fs.rmSync(this.project.file(picturePath(old))); } catch { /* gone */ } }
+    freeze(this.o.dir, picturePath(pic));
+    return old;
+  }
+  private pictureEvent(p: PicturePlan, status: 'drawing' | 'done' | 'failed', o: { sample?: boolean; pic?: Picture; note?: string; detail?: string } = {}) {
+    this.emit({ type: 'picture', id: p.id, status, what: p.what, kind: p.kind, ...(o.sample ? { sample: true } : {}), ...(o.pic ? { file: picturePath(o.pic), w: o.pic.w, h: o.pic.h } : {}), ...(o.note ? { note: o.note } : {}), ...(o.detail ? { detail: o.detail.slice(0, 400) } : {}) });
+  }
+
+  /**
+   * The first picture the storyboard asks for, drawn from nothing: the film's sample, shown with the storyboard so the
+   * user confirms the look before the rest are drawn to match it. `note`: the user's adjustment to the look, kept for
+   * every picture after it. It never holds the film up: a sample that can't be had is said, and the film goes on.
+   */
+  sample(note?: string): Promise<void> {
+    const before = this.drawing;
+    const run = (async () => {
+      await before?.catch(() => {});
+      const style = this.pictureStyle(), first = this.planned()[0];
+      if (!style || !first) return;
+      const pics = readPictures(this.o.dir);
+      const adjust = note?.replace(/\s+/g, ' ').trim().slice(0, 300);
+      if (adjust) pics.notes.push(adjust);
+      const key = pictureKey(first, pics.notes);
+      const had = pics.items.find((x) => x.id === first.id && this.project.exists(picturePath(x)));
+      if (had?.key === key && !adjust) return;   // drawn already (a run that resumed)
+      // an adjustment is a change to the sample there is, not a new draw: drawn from it, so what was liked stays
+      const from = adjust && had ? [had] : [];
+      const prompt = picturePrompt(style, first, pics.notes, from.length ? 'adjust' : 'none');
+      this.pictureEvent(first, 'drawing', { sample: true, note: adjust });
+      try {
+        const pic = await this.drawPicture(first, prompt, from, key);
+        this.keepPicture(pic, pics.notes);
+        this.pictureEvent(first, 'done', { sample: true, pic, note: adjust });
+        await this.commit(this.say('样图', 'Sample picture'));
+      } catch (e) {
+        if (stopped(e) || this.o.signal?.aborted) throw e;
+        // the adjustment is kept even so: the pictures drawn later follow it
+        if (adjust) { const now = readPictures(this.o.dir); now.notes = pics.notes; this.project.write(PICTURES_MANIFEST, JSON.stringify(now, null, 2) + '\n'); }
+        this.pictureEvent(first, 'failed', { sample: true, note: adjust, detail: (e as Error).message });
+      }
+    })();
+    this.drawing = run;
+    return run;
+  }
+
+  /**
+   * Every picture the storyboard asks for, once the user has gone ahead: the sample first (again only if the
+   * storyboard changed it), then the rest side by side, each drawn from the sample so they share its look, and a
+   * picture `like` another drawn from that one. A picture drawn already from the same prompt is kept (a resumed run, a
+   * revision pays nothing again). One that can't be had is left out: its pages draw that part in code.
+   */
+  async pictures() {
+    await this.drawing?.catch(() => {});
+    const style = this.pictureStyle(), plan = this.planned();
+    if (!style || !plan.length) { this.state.pictures = 'none'; this.save(); return; }
+    const pics = readPictures(this.o.dir);
+    const drawn = new Map<string, Picture>();
+    const one = async (p: PicturePlan, refs: Picture[], mode: 'none' | 'look' | 'same') => {
+      const prompt = picturePrompt(style, p, pics.notes, mode), key = pictureKey(p, pics.notes);
+      // drawn already for the same ask (a resumed run, a revision), or drawn again by the user's own word: kept
+      const had = pics.items.find((x) => x.id === p.id);
+      if (had && (had.key === key || had.note) && this.project.exists(picturePath(had))) { drawn.set(p.id, had); return; }
+      this.pictureEvent(p, 'drawing', { sample: p === plan[0] });
+      try {
+        const pic = await this.drawPicture(p, prompt, refs, key);
+        this.keepPicture(pic);
+        drawn.set(p.id, pic);
+        this.pictureEvent(p, 'done', { sample: p === plan[0], pic });
+      } catch (e) {
+        if (stopped(e) || this.o.signal?.aborted) throw e;
+        this.pictureEvent(p, 'failed', { sample: p === plan[0], detail: (e as Error).message });
+      }
+    };
+    const [first, ...rest] = plan;
+    await one(first, [], 'none');
+    const sample = drawn.get(first.id);
+    const look = (): [Picture[], 'none' | 'look'] => (sample ? [[sample], 'look'] : [[], 'none']);
+    await pool(rest.filter((p) => !p.like), PICTURES_AT_ONCE, (p) => one(p, ...look()));
+    await pool(rest.filter((p) => p.like), PICTURES_AT_ONCE, (p) => { const base = drawn.get(p.like!); return base ? one(p, [base], 'same') : one(p, ...look()); });
+    // pictures the storyboard no longer asks for are let go
+    const now = readPictures(this.o.dir);
+    const gone = now.items.filter((x) => !plan.some((p) => p.id === x.id));
+    if (gone.length) {
+      now.items = now.items.filter((x) => !gone.includes(x));
+      this.project.write(PICTURES_MANIFEST, JSON.stringify(now, null, 2) + '\n');
+      for (const g of gone) { try { fs.rmSync(this.project.file(picturePath(g))); } catch { /* gone */ } }
+    }
+    this.state.pictures = 'done'; this.save();
+    this.freezePictures();
+    await this.commit(this.say('本片配图', "This film's pictures"));
+  }
+
+  /**
+   * One picture drawn again at the user's word: the sample while the storyboard waits (a change to the whole look), or
+   * any picture of a finished film, whose pages are pointed at the new file. `note`: what to change in it; drawn from
+   * the picture as it is when there is one, else from the sample's look. A picture that can't be had leaves the old one.
+   */
+  async redrawPicture(id: string, note?: string) {
+    const style = this.pictureStyle(), plan = this.planned();
+    const p = plan.find((x) => x.id === id);
+    if (!style || !p) { this.emit({ type: 'note', text: this.say('这张配图已经不在分镜里了', 'That picture is no longer in the storyboard') }); return; }
+    if (this.state.stage === 'approval' && p === plan[0]) return this.sample(note);
+    const pics = readPictures(this.o.dir);
+    const old = pics.items.find((x) => x.id === id), change = note?.replace(/\s+/g, ' ').trim().slice(0, 300) || undefined;
+    const base = p.like ? pics.items.find((x) => x.id === p.like) : undefined, sample = pics.items.find((x) => x.id === plan[0].id && x.id !== id);
+    const [refs, mode]: [Picture[], 'none' | 'look' | 'same'] = old && change ? [[old], 'same'] : base ? [[base], 'same'] : sample ? [[sample], 'look'] : [[], 'none'];
+    this.pictureEvent(p, 'drawing', { note: change });
+    let pic: Picture;
+    try { pic = await this.drawPicture(p, picturePrompt(style, p, pics.notes, mode, change), refs, pictureKey(p, pics.notes), change); }
+    catch (e) {
+      if (stopped(e) || this.o.signal?.aborted) throw e;
+      this.pictureEvent(p, 'failed', { detail: (e as Error).message });
+      return;
+    }
+    this.keepPicture(pic);
+    // the pages that place it, pointed at the new file (its name carries its content's hash)
+    let moved = 0;
+    if (old && fs.existsSync(this.project.file('pages'))) {
+      for (const f of fs.readdirSync(this.project.file('pages')).filter((n) => n.endsWith('.js'))) {
+        const src = this.project.read(`pages/${f}`);
+        if (src.includes(picturePath(old))) { this.project.write(`pages/${f}`, src.split(picturePath(old)).join(picturePath(pic))); moved++; }
+      }
+    }
+    this.pictureEvent(p, 'done', { pic });
+    await this.commit(this.say(`重画配图 ${id}`, `Picture ${id} drawn again`));
+    if (this.state.stage === 'done') {
+      if (moved) { this.state.exported = false; this.save(); }
+      this.emit({ type: 'ready', duration: (await this.project.timeline()).duration });
+    }
+  }
+
   /** Server-owned META fields, rewritten in place in script.js (the planner must not change them). */
   private setMeta(fields: Record<string, unknown>) {
     let src = this.project.read('script.js');
@@ -636,6 +816,7 @@ export class Director {
     // this film's own components, when it has them: loaded before every page (META.extras), and no page's file tools
     // may change them
     if (this.state.kit?.status === 'done') { this.serverMeta(); freeze(this.o.dir, KIT_FILE); }
+    this.freezePictures();
     const sb = this.project.storyboard();
     const tl = await this.project.timeline();
     const todo = tl.pages.filter((p) => (!only || only.includes(p.id)) && !['ok', 'flagged'].includes(this.state.pages[p.id]?.status ?? ''));
@@ -744,7 +925,7 @@ export class Director {
       const unchanged = () => before !== undefined && this.project.read(`pages/${id}.js`) === before;
       let r: TurnResult | undefined, declined: string | undefined;
       if (!was) {
-        r = await this.send(s, pagePrompt(sb, id, t, this.o.brief.lang, this.o.brief.replyLang, !!fix, this.o.brief.brand, this.assetsOn(sb, id)) + (fix ? revisionNote(id, fix, this.project.read(`pages/${id}.js`)) : added ? addedNote(this.state.revision![id]) : '') + this.unseen(`page-${id}`), undefined, PAGE_THINKING);
+        r = await this.send(s, pagePrompt(sb, id, t, this.o.brief.lang, this.o.brief.replyLang, !!fix, this.o.brief.brand, this.assetsOn(sb, id), picturePageNote(this.picturesOn(sb, id))) + (fix ? revisionNote(id, fix, this.project.read(`pages/${id}.js`)) : added ? addedNote(this.state.revision![id]) : '') + this.unseen(`page-${id}`), undefined, PAGE_THINKING);
         if (!this.project.exists(`pages/${id}.js`)) r = await this.send(s, `pages/${id}.js does not exist yet; write it, then stop.`, undefined, PAGE_THINKING);
         if (!this.project.exists(`pages/${id}.js`)) throw new Error(r.error || this.say('没有写出页面文件', 'No page file was written'));
         // the agent found nothing to change (already so, or nothing this page can do): it says why instead of searching
@@ -782,7 +963,7 @@ export class Director {
           this.setPage(id, { ...st, issues: issues.map(fromLint) }, { sheet: c.sheet });
           const change = unchanged() ? fix : undefined;
           reviewer ??= await this.session(`check-${id}`, reviewerSystem(this.o.style, this.o.brief.styleNotes, this.designed()?.card) + kitReviewNote(this.kitItems()), MAX.reviewerTurns, undefined, undefined, { tools: 'none', answers: [VERDICT] });
-          verdict = await this.verdict(reviewer, reviewerPrompt(sb, id, t, round, issues, times, change, this.o.brief.brand, this.assetsOn(sb, id)), c.sheet);
+          verdict = await this.verdict(reviewer, reviewerPrompt(sb, id, t, round, issues, times, change, this.o.brief.brand, this.assetsOn(sb, id), pictureReviewNote(this.picturesOn(sb, id))), c.sheet);
           const errors = errorsOf(issues), problems = verdict?.pass === false ? verdict.problems : [];
           if (!errors.length && !problems.length) { st.status = 'ok'; st.issues = []; break; }
           if (round === checks) break;
@@ -1007,6 +1188,7 @@ export class Director {
   /** the user's pictures a page places: named by its storyboard, or by the change asked of it. Read from the film's list
    *  now, so a picture added while the film is made is placed by the pages drawn after it */
   private assetsOn(sb: Storyboard, id: string) { return assetsOn(userAssets(this.project.dir), sb.pages, id, this.state.revision?.[id]); }
+  private picturesOn(sb: Storyboard, id: string) { return picturesOn(picturePlan(sb.look, this.pictureStyle()), readPictures(this.o.dir).items, id); }
   /** pages a revision left as they were, with the agent's reason when it gave one */
   private unchanged = new Map<string, string | undefined>();
   /** the revision in progress changed script.js */
@@ -1091,8 +1273,10 @@ ${this.project.read('script.js')}
     if (this.state.stage === 'approval') await this.script(await approve(this.project.storyboard()));
     if (this.state.stage === 'script') await this.script();
     // this film's own components are written while it is narrated (they need the storyboard, not the timing)
-    if (this.state.stage === 'narrate') await both(this.narrate(), this.kit());
+    // and so are its pictures, from the sample the user confirmed
+    if (this.state.stage === 'narrate') await both(this.narrate(), this.kit(), this.pictures());
     if (this.state.stage === 'pages' && !this.state.kit) await this.kit();   // a run that stopped before its kit was done
+    if (this.state.stage === 'pages' && !this.state.pictures) await this.pictures();
     // the voice was changed after the narration was made (while paused): narrate again before going on
     if ((this.state.stage === 'pages' || this.state.stage === 'review') && this.voiceStale()) await this.revoice();
     if (this.state.stage === 'pages') await this.pages();

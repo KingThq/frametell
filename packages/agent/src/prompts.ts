@@ -118,7 +118,8 @@ export function voiceNote(stage: 'storyboard' | 'script' | 'revise', voice?: Bri
 }
 const withVoice = (stage: 'storyboard' | 'script' | 'revise', brief?: Brief) => { const n = voiceNote(stage, brief?.voice); return n ? `\n${n}` : ''; };
 
-export function storyboardPrompt(brief: Brief, style: string, materials: string[]) {
+/** `pictures`: what generated pictures the style allows (picturePlanNote), '' when none */
+export function storyboardPrompt(brief: Brief, style: string, materials: string[], pictures = '') {
   return [
     'Stage 1: storyboard.',
     `The request: ${materials.length ? 'turn the material into' : 'make'} an explainer film of about ${Math.round(brief.durationSec / 60 * 10) / 10} minutes.` + (brief.topic ? ` Topic: ${brief.topic}.` : '') + (brief.audience ? ` Audience: ${brief.audience}.` : ''),
@@ -127,6 +128,7 @@ export function storyboardPrompt(brief: Brief, style: string, materials: string[
     materials.includes('research.md') ? 'materials/research.md is a research brief prepared for this film from what the request points at (and the web): use its facts, the code and quotes it gives for the screen, and heed its Careful section. It is your main source for facts; the user\'s own words and material come first where they differ.' : '',
     `Style: ${style} (write "${style}" as the style in storyboard.json).`,
     kitPlanNote(!!designedFonts(style)),
+    pictures,
     `Material: ${materials.map((m) => 'materials/' + m).join(', ') || '(none; write from the topic)'}`,
     'Stop and report once storyboard.json is written.' + withVoice('storyboard', brief) + langNote('storyboard', brief.lang, brief.replyLang),
   ].filter(Boolean).join('\n');
@@ -147,8 +149,9 @@ export function scriptPrompt(feedback?: string, brief?: Brief) {
 }
 
 /** `brand`: the brand the film is made for; the files of it this page places are listed, with how to place them.
- *  `assets`: the user's pictures this page places (assetsOn), each with its call */
-export function pagePrompt(sb: Storyboard, id: string, t: PageTiming, lang: Lang | undefined = sb.lang, replyLang?: Lang, revising = false, brand?: BrandBrief, assets: UserAsset[] = []) {
+ *  `assets`: the user's pictures this page places (assetsOn), each with its call; `pictures`: the film's generated
+ *  pictures on it (picturePageNote) */
+export function pagePrompt(sb: Storyboard, id: string, t: PageTiming, lang: Lang | undefined = sb.lang, replyLang?: Lang, revising = false, brand?: BrandBrief, assets: UserAsset[] = [], pictures = '') {
   const p = sb.pages.find((x) => x.id === id);
   const outline = sb.pages.map((x) => `- ${x.id} ${x.section}`).join('\n');
   return `You own page **${id}**.
@@ -166,7 +169,7 @@ ${(p?.beats || []).map((b, i) => `  ${i + 1}. [${b.at}] ${b.object} — ${b.acti
 
 ## This page's narration and timing (real voice)
 The page lasts ${(t.end - t.start).toFixed(2)}s; its narration ends at ${(t.speechEnd - t.start).toFixed(2)}s (P.endT).
-${t.cues.map((c) => `- c${c.i}: at ${c.at}s in the page, "${c.text}"`).join('\n')}${sb.pages[sb.pages.length - 1]?.id === id ? endingNote(t, signsOff(brand, sb.pages)) : ''}${brandPageNote(brandFilesOn(brand, sb.pages, id), brand?.emphasis, cornerMark(brand) ? brand?.corner : undefined)}${assetPageNote(assets)}
+${t.cues.map((c) => `- c${c.i}: at ${c.at}s in the page, "${c.text}"`).join('\n')}${sb.pages[sb.pages.length - 1]?.id === id ? endingNote(t, signsOff(brand, sb.pages)) : ''}${brandPageNote(brandFilesOn(brand, sb.pages, id), brand?.emphasis, cornerMark(brand) ? brand?.corner : undefined)}${assetPageNote(assets)}${pictures}
 
 ${revising ? `pages/${id}.js is already written; stop once the change below is made in it and say in one sentence what you changed.` : `Stop once pages/${id}.js is written and say in one sentence what you drew.`}${langNote('page', lang, replyLang)}`;
 }
@@ -212,8 +215,8 @@ export const FLAG: AnswerTool = {
 };
 
 /** what the reviewer is shown each round: the page's storyboard and timing, the checker's findings, the sheet */
-/** `assets`: the user's pictures this page places (assetsOn) */
-export function reviewerPrompt(sb: Storyboard, id: string, t: PageTiming, round: number, issues: LintIssue[], times: { local: number }[], change?: string, brand?: BrandBrief, assets: UserAsset[] = []) {
+/** `assets`: the user's pictures this page places (assetsOn); `pictures`: the film's generated ones (pictureReviewNote) */
+export function reviewerPrompt(sb: Storyboard, id: string, t: PageTiming, round: number, issues: LintIssue[], times: { local: number }[], change?: string, brand?: BrandBrief, assets: UserAsset[] = [], pictures = '') {
   const p = sb.pages.find((x) => x.id === id);
   const must = issues.filter((i) => i.level === 'error'), advice = issues.filter((i) => i.level === 'warn');
   return `${round > 1 ? `Round ${round}: the artist has changed the page since you last saw it.\n\n` : ''}## The page (${id} of ${sb.pages.length}, in the film "${sb.title}")
@@ -223,7 +226,7 @@ export function reviewerPrompt(sb: Storyboard, id: string, t: PageTiming, round:
 ${(p?.beats || []).map((b, i) => `  ${i + 1}. [${b.at}] ${b.object} — ${b.action}${b.text ? `, on-screen text "${b.text}"` : ''}`).join('\n')}
 - The page lasts ${(t.end - t.start).toFixed(1)}s. Narration:
 ${t.cues.map((c) => `  - c${c.i} at ${c.at.toFixed(1)}s: "${c.text}"`).join('\n')}
-${sb.pages[sb.pages.length - 1]?.id === id ? `\nThis page ends the film: after its last line it holds ${(t.end - t.speechEnd).toFixed(1)}s, then the film fades out by itself (not shown in the sheet). Fail it if the film ends mid-move, on a half-drawn or unresolved picture, or on an emptied frame; a still hold after the last line is right.\n` : ''}${change ? `\nThe user asked for this change to the page: ${change}\nFail the page if the pictures don't show it.\n` : ''}${brandReviewNote(brand, brandFilesOn(brand, sb.pages, id))}${assetReviewNote(assets)}
+${sb.pages[sb.pages.length - 1]?.id === id ? `\nThis page ends the film: after its last line it holds ${(t.end - t.speechEnd).toFixed(1)}s, then the film fades out by itself (not shown in the sheet). Fail it if the film ends mid-move, on a half-drawn or unresolved picture, or on an emptied frame; a still hold after the last line is right.\n` : ''}${change ? `\nThe user asked for this change to the page: ${change}\nFail the page if the pictures don't show it.\n` : ''}${brandReviewNote(brand, brandFilesOn(brand, sb.pages, id))}${assetReviewNote(assets)}${pictures}
 ## The checker
 ${must.length ? `Must-fix (already sent to the artist):\n${lintLines(must)}` : 'Nothing must be fixed.'}
 ${advice.length ? `Advice (a measurement; fail on it only if the picture shows a problem):\n${lintLines(advice)}` : ''}

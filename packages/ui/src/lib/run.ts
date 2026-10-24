@@ -23,6 +23,9 @@ export type FeedItem = In & (
   | { kind: 'note'; key: string; text: string; at: number }
   /** this film's own components being written (one line, shown as the run's `kit` stands now) */
   | { kind: 'kit'; key: string; at: number }
+  /** the film's generated pictures after the storyboard (one line, shown as the run's `pictures` stand now); the sample,
+   *  drawn before the go-ahead, is on the storyboard's card instead */
+  | { kind: 'pictures'; key: string; at: number }
   | { kind: 'paused'; key: string; reason: 'user' | 'interrupted' | 'error' | 'credits'; message?: string; at: number }
   | { kind: 'check'; key: string; round: number; reds: number; yellows: number; messages: string[]; at: number }
   | { kind: 'approval'; key: string; storyboard: Storyboard; at: number }
@@ -51,6 +54,23 @@ export interface PageView {
   endedAt?: number;
 }
 
+/** one of the film's generated pictures as it stands now: `file` the latest drawn (kept while it is drawn again, and when
+ *  drawing it again failed); `sample` the film's first, shown with the storyboard; `note` what it was last asked to change */
+export interface Picture {
+  id: string;
+  what: string;
+  kind: string;
+  status: Ev<'picture'>['status'];
+  file?: string;
+  w?: number;
+  h?: number;
+  sample?: boolean;
+  note?: string;
+  detail?: string;
+}
+/** a picture the storyboard asks for (look.pictures): read loosely, the look is the director's own JSON */
+export interface PicturePlan { id: string; kind: string; what: string; shape: 'wide' | 'tall' | 'square' }
+
 export interface RunView {
   seq: number;
   stages: Record<Stage, { status: StageStatus; startedAt?: number; endedAt?: number; detail?: string }>;
@@ -63,6 +83,8 @@ export interface RunView {
   gate?: Ev<'gate'>;
   /** this film's own components (written before its pages, for a designed style's longer films) */
   kit?: { status: Ev<'kit'>['status']; components: string[]; round?: number; sheet?: string };
+  /** the film's generated pictures, in the order they were first heard of */
+  pictures: Picture[];
   video?: { path: string; noSubs: string; duration: number; /** the copies in the export folder */ saved?: { withSubs: string; noSubs: string } };
   /** the film is finished: drawn, checked, playable in the live preview */
   ready?: { duration: number; at: number };
@@ -103,7 +125,7 @@ export const shownStages = (r: RunView) => STAGES.filter((s) => s !== 'research'
 export const STAGE_NAME = new Proxy({} as Record<Stage, string>, { get: (_, k) => t(`run.stage.${String(k) as Stage}`) });
 
 export const emptyRun = (): RunView => ({
-  seq: 0, feed: [], pages: {}, pageOrder: [], awaitingApproval: false,
+  seq: 0, feed: [], pages: {}, pageOrder: [], pictures: [], awaitingApproval: false,
   stages: Object.fromEntries(STAGES.map((s) => [s, { status: 'pending' }])) as RunView['stages'],
 });
 
@@ -248,6 +270,22 @@ function step(v: RunView, e: LoggedEvent): RunView {
       if (e.status === 'start') push({ kind: 'kit', key, at });
       r.kit = { status: e.status, components: e.components ?? r.kit?.components ?? [], round: e.round ?? r.kit?.round, sheet: e.sheet ?? r.kit?.sheet };
       return r;
+    case 'picture': {
+      const old = r.pictures.find((p) => p.id === e.id);
+      const p: Picture = {
+        id: e.id, what: e.what ?? old?.what ?? e.id, kind: e.kind ?? old?.kind ?? 'scene', status: e.status,
+        // a redraw of a finished film doesn't say it is the sample; it still is
+        sample: e.sample || old?.sample || undefined,
+        // drawn again: the last file shows until the new one is there, and stays when the new one can't be had
+        file: e.file ?? old?.file, w: e.file ? e.w : old?.w, h: e.file ? e.h : old?.h,
+        note: e.status === 'drawing' ? e.note : old?.note, detail: e.status === 'failed' ? e.detail : undefined,
+      };
+      r.pictures = old ? r.pictures.map((x) => (x.id === e.id ? p : x)) : [...r.pictures, p];
+      // the sample before the go-ahead belongs to the storyboard's card; the rest get one line where they start
+      const atStoryboard = e.sample && r.stages.script.status === 'pending' && !finished(r);
+      if (!atStoryboard && !r.feed.some((f) => f.kind === 'pictures')) push({ kind: 'pictures', key, at });
+      return r;
+    }
     case 'paused': {
       // close whatever was running: its timer stops, and the chapter reads as stopped rather than in progress
       r.stages = Object.fromEntries(Object.entries(r.stages).map(([k, s]) => [k, s.status === 'running' ? { ...s, status: 'stopped' as StageStatus, endedAt: at } : s])) as RunView['stages'];
@@ -304,6 +342,19 @@ function newPage(id: string, r: RunView): PageView {
   if (!r.pageOrder.includes(id)) r.pageOrder = [...r.pageOrder, id].sort();
   return { id, status: 'queued', round: 0, issues: [], tools: 0 };
 }
+
+/** the pictures the storyboard asks for, in its order; [] when it asks for none */
+export const plannedPictures = (sb?: Storyboard): PicturePlan[] => {
+  const list = (sb?.look as { pictures?: unknown } | undefined)?.pictures;
+  if (!Array.isArray(list)) return [];
+  return list.filter((p): p is Record<string, unknown> => !!p && typeof p === 'object' && typeof (p as { id?: unknown }).id === 'string').map((p) => ({
+    id: p.id as string, kind: typeof p.kind === 'string' ? p.kind : 'scene', what: typeof p.what === 'string' ? p.what : '',
+    shape: p.shape === 'tall' || p.shape === 'square' ? p.shape : 'wide',
+  }));
+};
+/** a picture's width over its height: as drawn, else as its shape is drawn (1536×1024, 1024×1536, 1024²) */
+export const pictureRatio = (p: Pick<Picture, 'w' | 'h'> | undefined, shape?: PicturePlan['shape']) =>
+  p?.w && p.h ? p.w / p.h : shape === 'tall' ? 2 / 3 : shape === 'square' ? 1 : 3 / 2;
 
 /** a project-relative path from an absolute one the core reported (snapshots, video) */
 export const relPath = (abs: string, projectId: string) => { const i = abs.indexOf(projectId + '/'); return i >= 0 ? abs.slice(i + projectId.length + 1) : abs.split('/').slice(-2).join('/'); };

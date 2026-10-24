@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowUpRight, Check, ChevronRight, CircleDashed, Clapperboard, Coins, Download, Loader2, Pause, Play, TriangleAlert } from 'lucide-react';
+import { ArrowUpRight, Check, ChevronRight, CircleDashed, Clapperboard, Coins, Download, Loader2, Pause, Play, RefreshCw, TriangleAlert } from 'lucide-react';
 import { client, downloadUrl, hosted, type ProjectView } from '../lib/client';
-import { clock, film, finished, relPath, shownStages, STAGE_NAME, STAGES, type FeedItem, type PageView, type RunView, type Stage, type Storyboard, isWorking } from '../lib/run';
+import { clock, film, finished, pictureRatio, plannedPictures, relPath, shownStages, STAGE_NAME, STAGES, type FeedItem, type PageView, type Picture, type RunView, type Stage, type Storyboard, isWorking } from '../lib/run';
 import { pageName, stepText, summarizeTools } from '../lib/describe';
 import { useNow } from '../lib/hooks';
 import { Crest } from '../components/Logo';
@@ -9,6 +9,7 @@ import { FilmCredits, orShort, reportShort, ShortNotice, useShort, useSpent } fr
 import { STYLE_NAME } from '../lib/styles';
 import { Composer, RefChip } from './Composer';
 import { DeckControls, ExportControls, RevealFile } from './Export';
+import { Lightbox, type LightItem } from './Lightbox';
 import type { Ref } from '../lib/refs';
 import { track } from '../lib/track';
 import { t, useT } from '../i18n';
@@ -92,12 +93,82 @@ function designedLook(sb: Storyboard) {
   return line ? { line, colours } : undefined;
 }
 
-function Approval({ sb, project, run, active }: { sb: Storyboard; project: ProjectView; run: RunView; active: boolean }) {
+/** a generated picture's file as a URL: picture events give it relative to the project */
+const pictureUrl = (project: ProjectView, p: Picture) => (p.file ? client.fileUrl(project, p.file) : undefined);
+
+/** a picture drawn again, at the person's word: false (the film is busy) or a refusal becomes a line to show */
+async function redraw(project: ProjectView, picture: string, note: string): Promise<string | undefined> {
+  try { return (await client.redrawPicture!(project.id, picture, note.trim() || undefined)) ? undefined : t('conversation.pictures.busy'); }
+  catch (e) { return (e as Error).message; }
+}
+
+/** the film's sample picture on the storyboard's card: the look every other picture will follow, adjusted in words
+ *  and drawn again until it is right (only while the storyboard waits) */
+function Sample({ pic, rest, shape, project, live }: { pic: Picture; rest: number; shape?: 'wide' | 'tall' | 'square'; project: ProjectView; live: boolean }) {
+  useT();
+  const [note, setNote] = useState('');
+  const [sending, setSending] = useState(false);
+  const [failed, setFailed] = useState<string>();
+  const [open, setOpen] = useState(false);
+  const src = pictureUrl(project, pic), ratio = pictureRatio(pic, shape);
+  const drawing = pic.status === 'drawing';
+  const send = async () => {
+    setSending(true); setFailed(undefined);
+    const err = await redraw(project, pic.id, note);
+    setSending(false);
+    if (err) setFailed(err); else setNote('');
+  };
+  return (
+    <div className="mt-3">
+      {/* a box of the picture's own proportions (at most 280px tall), so the card doesn't jump when it arrives */}
+      <div className="fs-checker relative overflow-hidden rounded-xl border border-line" style={{ aspectRatio: String(ratio), width: `min(100%, ${Math.round(280 * ratio)}px)` }}>
+        {src && (
+          <button className="block h-full w-full cursor-zoom-in" onClick={() => setOpen(true)} aria-label={pic.what}>
+            <img src={src} alt={pic.what} loading="lazy" decoding="async" className="h-full w-full object-contain" />
+          </button>
+        )}
+        {drawing ? (
+          <span className={`absolute inset-0 flex items-center justify-center gap-2 px-4 text-center text-[12.5px] ${src ? 'bg-paper/75' : ''}`} role="status">
+            <Loader2 size={14} className="shrink-0 animate-spin text-accent-ink" aria-hidden />
+            <span className="fs-shimmer line-clamp-3">{t('conversation.pictures.sampleDrawing', { note: pic.note })}</span>
+          </span>
+        ) : pic.status === 'failed' && !src && (
+          <span className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-ink/[0.03] px-5 text-center">
+            <TriangleAlert size={15} className="text-ink-3" aria-hidden />
+            <span className="text-[12.5px] leading-relaxed text-ink-2">{t('conversation.pictures.sampleFailed')}</span>
+            {pic.detail && <span className="line-clamp-2 text-[11.5px] text-ink-3" title={pic.detail}>{pic.detail}</span>}
+          </span>
+        )}
+      </div>
+      {pic.status === 'failed' && src && <p className="mt-1.5 text-[12px] text-seal" title={pic.detail}>{t('conversation.pictures.sampleKept')}</p>}
+      <p className="mt-2 text-[12.5px] leading-relaxed text-ink-2">
+        <span className="mr-1.5 text-ink-3">{t('conversation.pictures.sample')}</span>{pic.what}
+        {live && <span className="mt-0.5 block text-ink-3">{t('conversation.pictures.sampleHint', { rest })}</span>}
+      </p>
+      {live && client.redrawPicture && (
+        <form className="mt-2.5 flex gap-2" onSubmit={(e) => { e.preventDefault(); if (!drawing && !sending) void send(); }}>
+          <input className="fs-input h-[30px] min-w-0 flex-1 text-[12.5px]" value={note} maxLength={300} onChange={(e) => setNote(e.target.value)}
+            placeholder={t('conversation.pictures.adjust')} aria-label={t('conversation.pictures.adjust')} />
+          <button type="submit" className="fs-btn fs-btn-secondary fs-btn-sm shrink-0" disabled={drawing || sending}>
+            {sending ? <Loader2 size={13} className="animate-spin" aria-hidden /> : <RefreshCw size={13} aria-hidden />} {t('conversation.pictures.redrawSample')}
+          </button>
+        </form>
+      )}
+      {failed && <p className="mt-1.5 text-[12px] text-seal" role="alert">{failed}</p>}
+      {open && src && <Lightbox items={[{ src, title: pic.what, caption: pic.note }]} index={0} onIndex={() => {}} onClose={() => setOpen(false)} />}
+    </div>
+  );
+}
+
+function Approval({ sb, project, run, active, latest }: { sb: Storyboard; project: ProjectView; run: RunView; active: boolean; latest: boolean }) {
   useT();
   const [sent, setSent] = useState(false);
   const [failed, setFailed] = useState<string>();
   const live = active && !sent;
   const look = useMemo(() => designedLook(sb), [sb]);
+  // the sample is the latest storyboard's (an earlier one, changed since, had its own)
+  const plan = useMemo(() => plannedPictures(sb), [sb]);
+  const sample = latest ? run.pictures.find((p) => p.sample) : undefined;
   // short of credits for the go-ahead: the notice above the composer says so, and the button waits for the balance
   const short = useShort(project.id, run);
   // a go-ahead that was refused (credits, or anything else) leaves the card as it was, to press again
@@ -116,6 +187,7 @@ function Approval({ sb, project, run, active }: { sb: Storyboard; project: Proje
             <span><span className="mr-1.5 text-ink-3">{t('conversation.approval.look')}</span>{look.line}</span>
           </p>
         )}
+        {sample && <Sample pic={sample} rest={Math.max(plan.length, run.pictures.length) - 1} shape={plan.find((p) => p.id === sample.id)?.shape} project={project} live={live} />}
       </div>
       <ol className="divide-y divide-line border-t border-line">
         {sb.pages.map((p, i) => (
@@ -210,6 +282,87 @@ function KitLine({ run }: { run: RunView }) {
   );
   if (k.status === 'failed') return <p className="text-[12.5px] leading-relaxed text-ink-3">{t('conversation.kit.failed')}</p>;
   return <p className="flex items-center gap-1.5 text-[12.5px] text-accent-ink"><Loader2 size={13} className="animate-spin" aria-hidden /> {t(k.status === 'checking' ? 'conversation.kit.checking' : 'conversation.kit.writing', { n: k.components.length, round: k.round ?? 1 })}</p>;
+}
+
+/** the film's generated pictures after the storyboard: each one small, drawn side by side; on a finished film each can
+ *  be drawn again, with a word on what to change */
+function PicturesLine({ run, project }: { run: RunView; project: ProjectView }) {
+  useT();
+  const [light, setLight] = useState<number>();
+  const [editing, setEditing] = useState<string>();
+  const [note, setNote] = useState('');
+  const [sending, setSending] = useState(false);
+  const [failed, setFailed] = useState<string>();
+  const plan = useMemo(() => plannedPictures(run.storyboard), [run.storyboard]);
+  const pics = run.pictures;
+  if (!pics.length) return null;
+  // a picture whose redraw failed keeps its last file: it counts as drawn
+  const done = pics.filter((p) => p.status === 'done' || (p.status === 'failed' && p.file)).length, bad = pics.filter((p) => p.status === 'failed' && !p.file).length;
+  const busy = pics.some((p) => p.status === 'drawing');
+  // drawn again only on a finished film with nothing else under way (the server says no otherwise)
+  const canRedraw = !!client.redrawPicture && finished(run) && !isWorking(run);
+  const shown = pics.filter((p) => p.file);
+  const items: LightItem[] = shown.map((p) => ({ src: pictureUrl(project, p)!, title: p.what, caption: p.note }));
+  const editingPic = pics.find((p) => p.id === editing);
+  const send = async () => {
+    if (!editing) return;
+    setSending(true); setFailed(undefined);
+    const err = await redraw(project, editing, note);
+    setSending(false);
+    if (err) setFailed(err); else { setEditing(undefined); setNote(''); }
+  };
+  return (
+    <div className="text-[12.5px] leading-relaxed" aria-label={t('conversation.pictures.label')}>
+      {busy ? <p className="flex items-center gap-1.5 text-accent-ink"><Loader2 size={13} className="animate-spin" aria-hidden /> {t('conversation.pictures.drawing', { done, n: Math.max(plan.length, pics.length) })}</p>
+        : bad ? <p className="text-ink-3">{t('conversation.pictures.someFailed', { done, failed: bad })}</p>
+        : <p className="flex items-center gap-1.5 text-jade"><Check size={13} aria-hidden /> {t('conversation.pictures.done', { n: done })}</p>}
+      <ul className="mt-2 flex flex-wrap gap-2">
+        {pics.map((p) => {
+          const src = pictureUrl(project, p), drawing = p.status === 'drawing';
+          // 64px tall, as wide as the picture's proportions: the files are 1536px, shown this small by CSS alone
+          const box = { aspectRatio: String(pictureRatio(p, plan.find((x) => x.id === p.id)?.shape)) };
+          return (
+            <li key={p.id} className="flex flex-col items-start gap-0.5">
+              <span className={`fs-checker relative block h-16 overflow-hidden rounded-lg border ${editing === p.id ? 'border-accent/60' : 'border-line'}`} style={box}
+                title={p.status === 'failed' ? [p.what, p.detail].filter(Boolean).join(' · ') : p.what}>
+                {src && (
+                  <button className="block h-full w-full cursor-zoom-in" onClick={() => setLight(shown.indexOf(p))} aria-label={p.what}>
+                    <img src={src} alt={p.what} loading="lazy" decoding="async" className="h-full w-full object-cover" />
+                  </button>
+                )}
+                {drawing ? (
+                  <span className={`absolute inset-0 flex items-center justify-center ${src ? 'bg-paper/70' : 'animate-pulse bg-ink/[0.04]'}`} role="status" aria-label={p.what}>
+                    <Loader2 size={14} className="animate-spin text-accent-ink" aria-hidden />
+                  </span>
+                ) : p.status === 'failed' && (src
+                  ? <TriangleAlert size={12} className="absolute right-1 top-1 rounded-full bg-paper p-px text-seal" aria-label={t('conversation.pictures.failedTile')} />
+                  : <span className="absolute inset-0 flex items-center justify-center bg-ink/[0.04] text-ink-3" aria-label={`${p.what} · ${t('conversation.pictures.failedTile')}`}><TriangleAlert size={14} aria-hidden /></span>)}
+              </span>
+              {canRedraw && p.status !== 'drawing' && (
+                <button className="text-[11.5px] text-ink-3 hover:text-ink" aria-expanded={editing === p.id}
+                  onClick={() => { setEditing(editing === p.id ? undefined : p.id); setNote(''); setFailed(undefined); }}>{t('conversation.pictures.redraw')}</button>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {canRedraw && editingPic && (
+        <form className="mt-2.5 animate-fade" onSubmit={(e) => { e.preventDefault(); if (!sending) void send(); }}>
+          <p className="mb-1.5 truncate text-ink-2">{t('conversation.pictures.redrawOf', { what: editingPic.what })}</p>
+          <div className="flex gap-2">
+            <input className="fs-input h-[30px] min-w-0 flex-1 text-[12.5px]" value={note} maxLength={300} autoFocus onChange={(e) => setNote(e.target.value)}
+              placeholder={t('conversation.pictures.redrawNote')} aria-label={t('conversation.pictures.redrawNote')} />
+            <button type="submit" className="fs-btn fs-btn-secondary fs-btn-sm shrink-0" disabled={sending}>
+              {sending ? <Loader2 size={13} className="animate-spin" aria-hidden /> : <RefreshCw size={13} aria-hidden />} {t('conversation.pictures.redraw')}
+            </button>
+            <button type="button" className="fs-btn fs-btn-ghost fs-btn-sm shrink-0" onClick={() => { setEditing(undefined); setFailed(undefined); }}>{t('conversation.pictures.cancel')}</button>
+          </div>
+        </form>
+      )}
+      {failed && <p className="mt-1.5 text-[12px] text-seal" role="alert">{failed}</p>}
+      {light !== undefined && items[light] && <Lightbox items={items} index={light} onIndex={setLight} onClose={() => setLight(undefined)} />}
+    </div>
+  );
 }
 
 function PausedCard({ item, run, project, latest }: { item: Extract<FeedItem, { kind: 'paused' }>; run: RunView; project: ProjectView; latest: boolean }) {
@@ -395,6 +548,7 @@ function Chapter({ b, run, project, onSelectPage, onPlayPage, selected }: { b: E
   const took = st.startedAt ? clock((st.endedAt ?? now) - st.startedAt) : undefined;
   const statusText = st.status === 'running' ? `${stageDoing(b.stage)} · ${took}` : st.status === 'done' ? [took, humanDetail(b.stage, st.detail, run.storyboard)].filter(Boolean).join(' · ') : st.status === 'skipped' ? t('conversation.chapter.skipped') : st.status === 'stopped' ? t('conversation.chapter.stopped') : st.status === 'failed' ? t('conversation.chapter.failed') : '';
   const approvals = b.items.filter((i) => i.kind === 'approval');
+  const lastApproval = run.feed.filter((i) => i.kind === 'approval').at(-1);
   return (
     <section aria-label={t('conversation.chapter.aria', { n, stage: STAGE_NAME[b.stage] })} className="relative">
       <header className="flex items-center gap-2.5">
@@ -407,10 +561,11 @@ function Chapter({ b, run, project, onSelectPage, onPlayPage, selected }: { b: E
           if (it.kind === 'say') return <Said key={it.key} text={it.text} />;
           if (it.kind === 'note') return <p key={it.key} className="text-[13px] leading-relaxed text-ink-2 animate-rise">{it.text}</p>;
           if (it.kind === 'kit') return <KitLine key={it.key} run={run} />;
+          if (it.kind === 'pictures') return <PicturesLine key={it.key} run={run} project={project} />;
           if (it.kind === 'check') return it.reds + it.yellows === 0
             ? <p key={it.key} className="flex items-center gap-1.5 text-[12.5px] text-jade"><Check size={13} aria-hidden /> {t('conversation.chapter.checkPassed')}</p>
             : <p key={it.key} className="text-[12.5px] leading-relaxed text-ink-3">{t('conversation.chapter.checkIssues', { reds: it.reds, yellows: it.yellows })}</p>;
-          if (it.kind === 'approval') return <Approval key={it.key} sb={it.storyboard} project={project} run={run} active={run.awaitingApproval && approvals.at(-1) === it} />;
+          if (it.kind === 'approval') return <Approval key={it.key} sb={it.storyboard} project={project} run={run} active={run.awaitingApproval && approvals.at(-1) === it} latest={lastApproval === it} />;
           if (it.kind === 'pages' && !b.latest) return <p key={it.key} className="text-[12.5px] text-ink-3">{t('conversation.chapter.pagesDone', { n: run.pageOrder.length })}</p>;
           if (it.kind === 'pages') return <Pages key={it.key} run={run} onSelect={onSelectPage} onPlay={onPlayPage} selected={selected} />;
           if (it.kind === 'error') return <p key={it.key} className="flex items-start gap-1.5 text-[12.5px] leading-relaxed text-seal"><TriangleAlert size={13} className="mt-0.5 shrink-0" aria-hidden />{it.message}</p>;
@@ -467,7 +622,7 @@ export function Conversation({ run, project, onSelectPage, onPlayPage, selected,
   const { locale } = useT();
   const box = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
-  useEffect(() => { const el = box.current; if (el && stick.current) el.scrollTop = el.scrollHeight; }, [run.feed.length, run.pages, run.stages, run.activity, run.revising]);
+  useEffect(() => { const el = box.current; if (el && stick.current) el.scrollTop = el.scrollHeight; }, [run.feed.length, run.pages, run.stages, run.activity, run.revising, run.pictures]);
   const list = useMemo(() => blocks(run.feed), [run.feed]);
   const lastPaused = [...run.feed].reverse().find((f) => f.kind === 'paused');
   // the page open on the workbench, offered to the composer as a one-click reference
@@ -507,6 +662,8 @@ export function Conversation({ run, project, onSelectPage, onPlayPage, selected,
               : <p key={it.key} className="flex items-center gap-2 text-[12.5px] text-ink-3"><Pause size={13} aria-hidden />{t('conversation.paused.once', { error: it.reason === 'error', stage: it.stage ? STAGE_NAME[it.stage] : undefined })}</p>;
             if (it.kind === 'done' || it.kind === 'ready') return run.feed.filter((f) => f.kind === 'done' || f.kind === 'ready').at(-1) === it ? <DoneCard key={it.key} run={run} project={project} onPlay={onPlay} /> : null;
             if (it.kind === 'export') return <ExportLine key={it.key} it={it} project={project} />;
+            // first heard of on a finished film (a picture drawn again): a line of its own
+            if (it.kind === 'pictures') return <PicturesLine key={it.key} run={run} project={project} />;
             if (it.kind === 'note') return <p key={it.key} className="flex items-start gap-2.5 text-[13px] leading-relaxed text-ink-2"><span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-paper ring-1 ring-line"><Crest size={11} /></span>{it.text}</p>;
             return null;
           })}

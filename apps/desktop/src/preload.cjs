@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld('studioBridge', {
   },
   start: (id) => call('start', id),
   approve: (id, feedback) => call('approve', id, feedback),
+  redrawPicture: (id, picture, note) => call('redrawPicture', id, picture, note),
   stop: (id) => call('stop', id),
   deleteProject: (id) => call('deleteProject', id),
   moveProject: (id, group) => call('moveProject', id, group),

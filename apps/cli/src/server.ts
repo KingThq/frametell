@@ -89,6 +89,12 @@ export function createServer(studio = new Studio(), opts: { token?: string } = {
     const { feedback } = (await c.req.json().catch(() => ({}))) as { feedback?: string };
     return c.json({ ok: studio.approve(c.req.param('id'), feedback) });
   });
+  // one of the film's generated pictures drawn again: { picture, note? }
+  app.post('/api/projects/:id/picture', async (c) => {
+    const { picture, note } = (await c.req.json().catch(() => ({}))) as { picture?: unknown; note?: unknown };
+    if (typeof picture !== 'string' || !/^[a-z][a-z0-9-]{1,30}$/.test(picture)) return c.json({ error: 'picture must be a picture id' }, 400);
+    return c.json({ ok: studio.redrawPicture(c.req.param('id'), picture, typeof note === 'string' ? note : undefined) });
+  });
   app.post('/api/projects/:id/export', (c) => c.json({ ok: studio.export(c.req.param('id')) }));
   app.put('/api/projects/:id/cover', async (c) => {
     const { page } = (await c.req.json().catch(() => ({}))) as { page?: unknown };

@@ -45,6 +45,10 @@ export type StudioEvent =
   /** this film's own components (kit.ts), written before its pages: `components` the ones the pages get, `sheet` the
    *  check's contact sheet */
   | { type: 'kit'; status: 'start' | 'checking' | 'done' | 'failed'; components?: string[]; round?: number; sheet?: string; detail?: string }
+  /** one of the film's generated pictures (pictures.ts): being drawn, drawn (`file` in the project, its size), or not
+   *  had. `sample`: the film's first, shown with the storyboard for the user to confirm the look; `note`: the user's
+   *  adjustment it is drawn with */
+  | { type: 'picture'; id: string; status: 'drawing' | 'done' | 'failed'; what?: string; kind?: string; sample?: boolean; file?: string; w?: number; h?: number; note?: string; detail?: string }
   | { type: 'page'; id: string; status: PageStatus; round?: number; issues?: PageIssue[]; sheet?: string; thumb?: string; note?: string }
   /** something the user said to the director (approval feedback, a note while it works, a change after the film) */
   | { type: 'user'; text: string; refs?: UserRef[] }

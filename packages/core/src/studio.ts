@@ -295,6 +295,8 @@ export class Studio {
   /** a picture of the user's own as the cover (JPEG, PNG or WebP): its name in the project, undefined when refused */
   setCoverImage(id: string, data: Uint8Array, o?: { log?: boolean }) { this.store.read(id); return this.store.runner(id).setCoverImage(data, o); }
   approve(id: string, feedback?: string) { return this.store.runner(id).approve(feedback); }
+  /** one of the film's generated pictures drawn again (`note`: what to change); false when the film can't now */
+  redrawPicture(id: string, picture: string, note?: string) { this.store.read(id); return this.store.runner(id).picture(picture, note?.slice(0, 300)); }
   /** `why`: the host stopped it for want of credits, so the film says that instead of "paused" */
   stop(id: string, why?: 'credits') { this.store.runner(id).stop(why); }
   /** a host going away (a sandbox rolled out) stops the film's task without logging a pause: the next host finds it cut

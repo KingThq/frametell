@@ -7,7 +7,7 @@ import crypto from 'node:crypto';
 import { createProject, linkProject } from '@frametell/engine/tools/project.mjs';
 import { createCatalog } from '@frametell/models';
 import { elevenLabsTts, volcengineTts } from '@frametell/voice';
-import { createWeb, userAssets, Director, findSources, hasSources, offlineWeb, openProjectFile, piRuntime, Project, readFd, writeIn, type AgentRuntime, type DirectorOptions, type Renderer, type StudioEvent, type Storyboard, type UserRef } from '@frametell/agent';
+import { createWeb, openaiImages, userAssets, Director, findSources, hasSources, offlineWeb, openProjectFile, piRuntime, Project, readFd, writeIn, type AgentRuntime, type DirectorOptions, type Renderer, type StudioEvent, type Storyboard, type UserRef } from '@frametell/agent';
 import type { Config, ConfigStore } from './config.js';
 import { prepareMaterials } from './materials.js';
 import { applyProxy } from './net.js';
@@ -191,6 +191,9 @@ function voiceFor(meta: ProjectMeta, cfg: Config) {
   return { tts, voice, provider: voice && meta.voice?.provider };
 }
 
+/** the image service that draws a film's generated pictures, when one is set up */
+const imagesFor = (cfg: Config) => (cfg.image?.key ? openaiImages(cfg.image.key, { baseUrl: cfg.image.baseUrl, model: cfg.image.model }) : undefined);
+
 class Runner {
   private subs = new Set<(e: Logged) => void>();
   private seq = 0;
@@ -237,7 +240,9 @@ class Runner {
       // a line the process died in the middle of writing does not parse: skip it, and the last that does is the last event
       const events = lines.flatMap((l) => { try { return [JSON.parse(l) as Logged]; } catch { return []; } });
       const last = events.at(-1);
-      this.status = last?.type === 'approval' ? 'awaiting_approval' : this.stateStage() === 'done' ? 'done' : lines.length ? 'stopped' : 'idle';
+      // the sample picture drawn again while the storyboard waits comes after it in the log
+      const lastStep = events.findLast((e) => e.type !== 'picture');
+      this.status = lastStep?.type === 'approval' ? 'awaiting_approval' : this.stateStage() === 'done' ? 'done' : lines.length ? 'stopped' : 'idle';
       // an export cut short by the app closing: the film is still there to preview, the export can simply run again
       // (the last export began and never ended: any render line may come after its start)
       const renders = events.filter((e) => e.type === 'stage' && e.stage === 'render');
@@ -451,7 +456,7 @@ class Runner {
       const { tts, voice, provider } = voiceFor(meta, cfg);
       director = new Director({
         dir, runtime, pages, reviewer, research: plan && research ? { ...research, ...plan } satisfies DirectorOptions['research'] : undefined,
-        style: meta.style, look: meta.look, prices, tts, voice, concurrency: cfg.defaults.concurrency,
+        style: meta.style, look: meta.look, prices, tts, voice, concurrency: cfg.defaults.concurrency, images: imagesFor(cfg),
         brief: { durationSec: meta.durationSec, topic: meta.topic, notes: meta.notes, styleNotes: meta.styleNotes, brand: meta.brand, lang: meta.lang ?? 'zh', replyLang: this.replyIn(meta), voice: provider, preferences: cfg.preferences },
         emit: this.emit, signal: this.abort.signal, renderer: this.renderer, review: this.review, exportDir: this.renderer ? undefined : cfg.exportDir,
       });
@@ -498,6 +503,28 @@ class Runner {
     if (this.gate) { const g = this.gate; this.gate = undefined; this.status = 'running'; g(feedback?.trim() || undefined); return true; }
     if (this.status === 'awaiting_approval' || this.status === 'stopped') { this.pending = { feedback: feedback?.trim() || undefined }; void this.start(); return true; }
     return false;
+  }
+
+  /**
+   * One of the film's generated pictures drawn again, with the user's `note` on what to change: while the storyboard
+   * waits, the sample (the note then adjusts the look of every picture); once the film is finished, any of them. False
+   * when the film is anywhere else (being made, paused, exporting).
+   */
+  picture(id: string, note?: string): boolean {
+    if (this.halted) return false;
+    if (this.gate && this.director) { void this.director.redrawPicture(id, note).catch((e: Error) => this.emit({ type: 'error', message: e.message })); return true; }
+    if (this.status === 'awaiting_approval') {
+      // no director yet (the process started since the storyboard): open the run at its gate first
+      void this.start();
+      void (async () => {
+        for (let i = 0; i < 600 && !(this.gate && this.director); i++) await new Promise((r) => setTimeout(r, 100));
+        if (this.gate && this.director) await this.director.redrawPicture(id, note).catch((e: Error) => this.emit({ type: 'error', message: e.message }));
+      })();
+      return true;
+    }
+    if (this.status === 'running' || this.stateStage() !== 'done') return false;
+    void this.launch((d) => d.redrawPicture(id, note));
+    return true;
   }
 
   /** stop the run; `why`: the host stopped it because the account ran out of credits (said so, not as the user's pause) */
