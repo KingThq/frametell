@@ -240,9 +240,9 @@ class Runner {
       // a line the process died in the middle of writing does not parse: skip it, and the last that does is the last event
       const events = lines.flatMap((l) => { try { return [JSON.parse(l) as Logged]; } catch { return []; } });
       const last = events.at(-1);
-      // the sample picture drawn again while the storyboard waits comes after it in the log
+      // a picture drawn again while the run waits comes after the wait in the log
       const lastStep = events.findLast((e) => e.type !== 'picture');
-      this.status = lastStep?.type === 'approval' ? 'awaiting_approval' : this.stateStage() === 'done' ? 'done' : lines.length ? 'stopped' : 'idle';
+      this.status = lastStep?.type === 'approval' || lastStep?.type === 'first_page' ? 'awaiting_approval' : this.stateStage() === 'done' ? 'done' : lines.length ? 'stopped' : 'idle';
       // an export cut short by the app closing: the film is still there to preview, the export can simply run again
       // (the last export began and never ended: any render line may come after its start)
       const renders = events.filter((e) => e.type === 'stage' && e.stage === 'render');
@@ -395,7 +395,7 @@ class Runner {
     return () => { this.subs.delete(live); fs.unwatchFile(this.log, follow); };
   }
 
-  /** start or continue the run; it pauses at storyboard approval */
+  /** start or continue the run; it pauses at the storyboard, and at the first page, for the user to go ahead */
   start() {
     return this.launch((d) => d.run(async () => {
       if (this.pending) { const p = this.pending; this.pending = undefined; return p.feedback; }
@@ -499,22 +499,25 @@ class Runner {
   }
 
   /** the user confirmed the storyboard (optionally with change requests) */
-  approve(feedback?: string) {
+  approve(feedback?: string, o: { said?: boolean } = {}) {
+    // a change to the first page asked from its card (not said in the conversation) is kept in the conversation too
+    if (feedback?.trim() && !o.said && this.stateStage() === 'pages') this.emit({ type: 'user', text: feedback.trim() });
     if (this.gate) { const g = this.gate; this.gate = undefined; this.status = 'running'; g(feedback?.trim() || undefined); return true; }
     if (this.status === 'awaiting_approval' || this.status === 'stopped') { this.pending = { feedback: feedback?.trim() || undefined }; void this.start(); return true; }
     return false;
   }
 
   /**
-   * One of the film's generated pictures drawn again, with the user's `note` on what to change: while the storyboard
-   * waits, the sample (the note then adjusts the look of every picture); once the film is finished, any of them. False
-   * when the film is anywhere else (being made, paused, exporting).
+   * One of the film's generated pictures drawn again, with the user's `note` on what to change: while the first page
+   * waits for the user, or once the film is finished. False when the film is anywhere else (being made, paused,
+   * exporting).
    */
   picture(id: string, note?: string): boolean {
-    if (this.halted) return false;
+    // at the storyboard nothing is drawn yet
+    if (this.halted || this.stateStage() === 'approval') return false;
     if (this.gate && this.director) { void this.director.redrawPicture(id, note).catch((e: Error) => this.emit({ type: 'error', message: e.message })); return true; }
     if (this.status === 'awaiting_approval') {
-      // no director yet (the process started since the storyboard): open the run at its gate first
+      // no director yet (the process started since the first page): open the run at its gate first
       void this.start();
       void (async () => {
         for (let i = 0; i < 600 && !(this.gate && this.director); i++) await new Promise((r) => setTimeout(r, 100));
@@ -552,7 +555,7 @@ class Runner {
       const rest = !!said || refs.some((r) => r.kind !== 'voice');
       if (this.switchVoice(voice, rest ? text : undefined) || !rest) return true;
     }
-    if (this.gate || this.status === 'awaiting_approval') return this.approve(text);
+    if (this.gate || this.status === 'awaiting_approval') return this.approve(text, { said: true });
     if (this.status === 'running' && this.exporting) {
       this.afterExport.push(text);
       this.emit({ type: 'note', text: this.tr('记下了，导出完就接着改', 'Noted. I’ll make the change once the export finishes.') });

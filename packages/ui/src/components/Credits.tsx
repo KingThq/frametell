@@ -109,7 +109,8 @@ export function useShort(project: string, run: RunView) {
   const refused = s?.project === project ? s : null;
   if (refused && (have ?? refused.available) < refused.needed) return { kind: 'step' as const, needed: refused.needed, available: have ?? refused.available };
   const need = film?.goAhead;
-  if (run.awaitingApproval && need && have != null && have < need) return { kind: 'goAhead' as const, needed: need, available: have };
+  // the storyboard's go-ahead (the first page's comes after it, with the film already under way)
+  if (run.awaitingApproval && !run.firstPage && need && have != null && have < need) return { kind: 'goAhead' as const, needed: need, available: have };
   // the film was stopped part-way for want of credits: said until the balance is topped up
   if (run.paused?.reason === 'credits' && (have == null || have <= 0)) return { kind: 'stopped' as const, needed: 0, available: have ?? 0 };
   return null;

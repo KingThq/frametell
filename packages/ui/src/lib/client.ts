@@ -33,8 +33,8 @@ export interface StudioClient {
   createProject(input: NewProjectInput, files: File[], assets?: NewAsset[]): Promise<ProjectView>;
   start(id: string): Promise<void>;
   approve(id: string, feedback?: string): Promise<boolean>;
-  /** one of the film's generated pictures drawn again, `note` what to change: the sample while the storyboard waits (the
-   *  change then holds for every picture), or any picture of a finished film. False while the film is busy. Absent
+  /** one of the film's generated pictures drawn again, `note` what to change: any of them while the first page waits
+   *  (it is shown again with the new one), or on a finished film. False while the film is busy. Absent
    *  where a host can't draw pictures (the desktop bridge) */
   redrawPicture?(id: string, picture: string, note?: string): Promise<boolean>;
   stop(id: string): Promise<void>;

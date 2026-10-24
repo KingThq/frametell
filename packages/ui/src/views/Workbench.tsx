@@ -119,7 +119,7 @@ export function Workbench({ id, openSettings }: { id: string; openSettings: (sec
   const [pausing, setPausing] = useState(false);
   useEffect(() => { if (!running) setPausing(false); }, [running]);
   const pause = (pid: string) => { setPausing(true); client.stop(pid).catch(() => setPausing(false)); };
-  const status = pausing && running ? t('workbench.status.pausing') : run.revising ? t('workbench.status.revising') : run.exporting ? t('workbench.status.exporting') : run.resuming ? t('workbench.status.preparing') : finished(run) && !running ? t('workbench.status.done') : run.awaitingApproval ? t('workbench.status.awaitingApproval') : run.paused ? t('workbench.status.paused') : run.current ? t('workbench.status.stageRunning', { stage: STAGE_NAME[run.current] }) : t('workbench.status.preparing');
+  const status = pausing && running ? t('workbench.status.pausing') : run.revising ? t('workbench.status.revising') : run.exporting ? t('workbench.status.exporting') : run.resuming ? t('workbench.status.preparing') : finished(run) && !running ? t('workbench.status.done') : run.firstPage ? t('workbench.status.awaitingFirstPage') : run.awaitingApproval ? t('workbench.status.awaitingApproval') : run.paused ? t('workbench.status.paused') : run.current ? t('workbench.status.stageRunning', { stage: STAGE_NAME[run.current] }) : t('workbench.status.preparing');
   const play = () => { setSelected(undefined); setPane('stage'); setPlayKey((k) => k + 1); };
   // a page double-clicked in the conversation: its close-up, playing from the page's start
   const playPage = (pid: string) => { setSelected(pid); setPane('stage'); setPagePlay((k) => k + 1); };

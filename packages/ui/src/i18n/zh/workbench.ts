@@ -15,6 +15,7 @@ export default {
     exporting: '导出中',
     done: '已完成',
     awaitingApproval: '等你确认分镜',
+    awaitingFirstPage: '等你看第一页',
     paused: '已暂停',
     pausing: '正在暂停…',
     stageRunning: '{stage}中',

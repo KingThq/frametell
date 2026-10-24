@@ -16,6 +16,7 @@ const en: typeof zh = {
     exporting: 'Exporting',
     done: 'Done',
     awaitingApproval: 'Waiting for your storyboard sign-off',
+    awaitingFirstPage: 'Waiting for you to check the first page',
     paused: 'Paused',
     pausing: 'Pausing…',
     stageRunning: '{stage} in progress',

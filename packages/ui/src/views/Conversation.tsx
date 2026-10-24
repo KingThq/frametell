@@ -102,73 +102,12 @@ async function redraw(project: ProjectView, picture: string, note: string): Prom
   catch (e) { return (e as Error).message; }
 }
 
-/** the film's sample picture on the storyboard's card: the look every other picture will follow, adjusted in words
- *  and drawn again until it is right (only while the storyboard waits) */
-function Sample({ pic, rest, shape, project, live }: { pic: Picture; rest: number; shape?: 'wide' | 'tall' | 'square'; project: ProjectView; live: boolean }) {
-  useT();
-  const [note, setNote] = useState('');
-  const [sending, setSending] = useState(false);
-  const [failed, setFailed] = useState<string>();
-  const [open, setOpen] = useState(false);
-  const src = pictureUrl(project, pic), ratio = pictureRatio(pic, shape);
-  const drawing = pic.status === 'drawing';
-  const send = async () => {
-    setSending(true); setFailed(undefined);
-    const err = await redraw(project, pic.id, note);
-    setSending(false);
-    if (err) setFailed(err); else setNote('');
-  };
-  return (
-    <div className="mt-3">
-      {/* a box of the picture's own proportions (at most 280px tall), so the card doesn't jump when it arrives */}
-      <div className="fs-checker relative overflow-hidden rounded-xl border border-line" style={{ aspectRatio: String(ratio), width: `min(100%, ${Math.round(280 * ratio)}px)` }}>
-        {src && (
-          <button className="block h-full w-full cursor-zoom-in" onClick={() => setOpen(true)} aria-label={pic.what}>
-            <img src={src} alt={pic.what} loading="lazy" decoding="async" className="h-full w-full object-contain" />
-          </button>
-        )}
-        {drawing ? (
-          <span className={`absolute inset-0 flex items-center justify-center gap-2 px-4 text-center text-[12.5px] ${src ? 'bg-paper/75' : ''}`} role="status">
-            <Loader2 size={14} className="shrink-0 animate-spin text-accent-ink" aria-hidden />
-            <span className="fs-shimmer line-clamp-3">{t('conversation.pictures.sampleDrawing', { note: pic.note })}</span>
-          </span>
-        ) : pic.status === 'failed' && !src && (
-          <span className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-ink/[0.03] px-5 text-center">
-            <TriangleAlert size={15} className="text-ink-3" aria-hidden />
-            <span className="text-[12.5px] leading-relaxed text-ink-2">{t('conversation.pictures.sampleFailed')}</span>
-            {pic.detail && <span className="line-clamp-2 text-[11.5px] text-ink-3" title={pic.detail}>{pic.detail}</span>}
-          </span>
-        )}
-      </div>
-      {pic.status === 'failed' && src && <p className="mt-1.5 text-[12px] text-seal" title={pic.detail}>{t('conversation.pictures.sampleKept')}</p>}
-      <p className="mt-2 text-[12.5px] leading-relaxed text-ink-2">
-        <span className="mr-1.5 text-ink-3">{t('conversation.pictures.sample')}</span>{pic.what}
-        {live && <span className="mt-0.5 block text-ink-3">{t('conversation.pictures.sampleHint', { rest })}</span>}
-      </p>
-      {live && client.redrawPicture && (
-        <form className="mt-2.5 flex gap-2" onSubmit={(e) => { e.preventDefault(); if (!drawing && !sending) void send(); }}>
-          <input className="fs-input h-[30px] min-w-0 flex-1 text-[12.5px]" value={note} maxLength={300} onChange={(e) => setNote(e.target.value)}
-            placeholder={t('conversation.pictures.adjust')} aria-label={t('conversation.pictures.adjust')} />
-          <button type="submit" className="fs-btn fs-btn-secondary fs-btn-sm shrink-0" disabled={drawing || sending}>
-            {sending ? <Loader2 size={13} className="animate-spin" aria-hidden /> : <RefreshCw size={13} aria-hidden />} {t('conversation.pictures.redrawSample')}
-          </button>
-        </form>
-      )}
-      {failed && <p className="mt-1.5 text-[12px] text-seal" role="alert">{failed}</p>}
-      {open && src && <Lightbox items={[{ src, title: pic.what, caption: pic.note }]} index={0} onIndex={() => {}} onClose={() => setOpen(false)} />}
-    </div>
-  );
-}
-
-function Approval({ sb, project, run, active, latest }: { sb: Storyboard; project: ProjectView; run: RunView; active: boolean; latest: boolean }) {
+function Approval({ sb, project, run, active }: { sb: Storyboard; project: ProjectView; run: RunView; active: boolean }) {
   useT();
   const [sent, setSent] = useState(false);
   const [failed, setFailed] = useState<string>();
   const live = active && !sent;
   const look = useMemo(() => designedLook(sb), [sb]);
-  // the sample is the latest storyboard's (an earlier one, changed since, had its own)
-  const plan = useMemo(() => plannedPictures(sb), [sb]);
-  const sample = latest ? run.pictures.find((p) => p.sample) : undefined;
   // short of credits for the go-ahead: the notice above the composer says so, and the button waits for the balance
   const short = useShort(project.id, run);
   // a go-ahead that was refused (credits, or anything else) leaves the card as it was, to press again
@@ -187,7 +126,6 @@ function Approval({ sb, project, run, active, latest }: { sb: Storyboard; projec
             <span><span className="mr-1.5 text-ink-3">{t('conversation.approval.look')}</span>{look.line}</span>
           </p>
         )}
-        {sample && <Sample pic={sample} rest={Math.max(plan.length, run.pictures.length) - 1} shape={plan.find((p) => p.id === sample.id)?.shape} project={project} live={live} />}
       </div>
       <ol className="divide-y divide-line border-t border-line">
         {sb.pages.map((p, i) => (
@@ -207,6 +145,75 @@ function Approval({ sb, project, run, active, latest }: { sb: Storyboard; projec
         </div>
       ) : (
         <p className="flex items-center gap-1.5 border-t border-line px-4 py-3 text-[12.5px] text-jade"><Check size={14} aria-hidden /> {t('conversation.approval.approved')}</p>
+      )}
+    </div>
+  );
+}
+
+/** the first page, drawn and checked alone: the person confirms the look and the rest are drawn side by side, or says
+ *  what to change and it is drawn again (the pages after it read the same words). Only the latest one can be answered */
+function FirstPage({ it, run, project, active, onOpen }: { it: Extract<FeedItem, { kind: 'first_page' }>; run: RunView; project: ProjectView; active: boolean; onOpen: (id: string) => void }) {
+  useT();
+  const [note, setNote] = useState('');
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState<'go' | 'change'>();
+  const [said, setSaid] = useState<string>();
+  const [failed, setFailed] = useState<string>();
+  const live = active && !sent;
+  const p = run.pages[it.page];
+  const still = p?.thumb ?? p?.sheet;
+  const rest = Math.max((run.storyboard?.pages.length ?? run.pageOrder.length) - 1, 0);
+  const n = (run.storyboard?.pages.findIndex((x) => x.id === it.page) ?? -1) + 1 || 1;
+  const section = run.storyboard?.pages.find((x) => x.id === it.page)?.section;
+  // a reply that was refused (credits, or anything else) leaves the card as it was, to answer again
+  const answer = async (text?: string) => {
+    setSending(true); setFailed(undefined);
+    try {
+      if (await client.approve(project.id, text)) { setSent(text ? 'change' : 'go'); setSaid(text); setNote(''); }
+      else setFailed(t('conversation.firstPage.busy'));
+    } catch (e) { if (!reportShort(project.id, e)) setFailed((e as Error).message); }
+    setSending(false);
+  };
+  const outcome = it.answer ?? sent;
+  if (!active) return (
+    <p className="flex items-start gap-1.5 text-[12.5px] leading-relaxed text-ink-3">
+      {outcome === 'go' ? <Check size={13} className="mt-0.5 shrink-0 text-jade" aria-hidden /> : <RefreshCw size={12} className="mt-[3px] shrink-0" aria-hidden />}
+      <span>{t(outcome === 'go' ? 'conversation.firstPage.wentAhead' : outcome === 'change' ? 'conversation.firstPage.changed' : 'conversation.firstPage.shown')}{said && <span className="text-ink-2">「{said}」</span>}</span>
+    </p>
+  );
+  return (
+    <div className={`rounded-2xl border bg-surface transition-shadow duration-300 animate-rise ${live ? 'border-accent/50 shadow-[0_0_0_4px_rgb(var(--fs-accent)/0.07)]' : 'border-line'}`}>
+      <div className="px-4 pb-3 pt-3.5">
+        <h4 className="text-balance text-[14.5px] font-semibold leading-snug">{t('conversation.firstPage.title')}</h4>
+        {/* the page as its check saw it, in a 16:9 box so the card doesn't jump when it arrives; a click opens it */}
+        <button className="group relative mt-3 block aspect-video w-full overflow-hidden rounded-xl border border-line bg-paper-2/60" onClick={() => onOpen(it.page)} aria-label={t('conversation.firstPage.open', { n })}>
+          {still && <img src={client.fileUrl(project, relPath(still, project.id))} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.02]" />}
+          <span className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-paper/90 px-2.5 py-1 text-[11.5px] text-ink shadow-sm"><Play size={10} className="fill-current" aria-hidden /> {t('conversation.firstPage.open', { n })}</span>
+        </button>
+        {section && <p className="mt-2 truncate text-[12.5px] text-ink-2"><span className="mr-1.5 text-ink-3">{pageName(it.page)}</span>{section}</p>}
+      </div>
+      {live ? (
+        <div className="border-t border-line px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span className="text-[12.5px] text-ink-3">{t('conversation.firstPage.hint', { n: rest })}</span>
+            <button className="fs-btn fs-btn-accent" disabled={sending} onClick={() => void answer()}>
+              {sending && !note.trim() ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Check size={14} aria-hidden />} {t('conversation.firstPage.go')}
+            </button>
+          </div>
+          <form className="mt-3 flex gap-2" onSubmit={(e) => { e.preventDefault(); if (note.trim() && !sending) void answer(note.trim()); }}>
+            <input className="fs-input h-[30px] min-w-0 flex-1 text-[12.5px]" value={note} maxLength={600} onChange={(e) => setNote(e.target.value)}
+              placeholder={t('conversation.firstPage.adjust')} aria-label={t('conversation.firstPage.adjust')} />
+            <button type="submit" className="fs-btn fs-btn-secondary fs-btn-sm shrink-0" disabled={!note.trim() || sending}>
+              {sending && note.trim() ? <Loader2 size={13} className="animate-spin" aria-hidden /> : <RefreshCw size={13} aria-hidden />} {t('conversation.firstPage.change')}
+            </button>
+          </form>
+          {run.pictures.length > 0 && client.redrawPicture && <p className="mt-1.5 text-[12px] text-ink-3">{t('conversation.firstPage.pictures')}</p>}
+          {failed && <p className="mt-1.5 text-[12px] text-seal" role="alert">{failed}</p>}
+        </div>
+      ) : (
+        <p className="flex items-start gap-1.5 border-t border-line px-4 py-3 text-[12.5px] text-jade">
+          <Check size={14} className="mt-px shrink-0" aria-hidden /> <span>{t(sent === 'change' ? 'conversation.firstPage.changing' : 'conversation.firstPage.going', { n: rest })}{said && <span className="text-ink-2">「{said}」</span>}</span>
+        </p>
       )}
     </div>
   );
@@ -233,7 +240,9 @@ const PAGE_STATE: Record<PageView['status'], { text: (p?: PageView) => string; i
 
 function Pages({ run, onSelect, onPlay, selected }: { run: RunView; onSelect: (id: string) => void; onPlay: (id: string) => void; selected?: string }) {
   useT();
-  const ids = run.pageOrder.length ? run.pageOrder : run.storyboard?.pages.map((p) => p.id) || [];
+  // while the first page waits only it has been heard of: the others are listed as waiting their turn
+  const planned = run.storyboard?.pages.map((p) => p.id) || [];
+  const ids = run.firstPage ? [...new Set([...run.pageOrder, ...planned])].sort() : run.pageOrder.length ? run.pageOrder : planned;
   return (
     <ul className="space-y-0.5" aria-label={t('conversation.page.progressLabel')}>
       {ids.map((id) => {
@@ -284,8 +293,8 @@ function KitLine({ run }: { run: RunView }) {
   return <p className="flex items-center gap-1.5 text-[12.5px] text-accent-ink"><Loader2 size={13} className="animate-spin" aria-hidden /> {t(k.status === 'checking' ? 'conversation.kit.checking' : 'conversation.kit.writing', { n: k.components.length, round: k.round ?? 1 })}</p>;
 }
 
-/** the film's generated pictures after the storyboard: each one small, drawn side by side; on a finished film each can
- *  be drawn again, with a word on what to change */
+/** the film's generated pictures after the storyboard: each one small, drawn side by side; while the first page waits,
+ *  and on a finished film, each can be drawn again, with a word on what to change */
 function PicturesLine({ run, project }: { run: RunView; project: ProjectView }) {
   useT();
   const [light, setLight] = useState<number>();
@@ -299,8 +308,9 @@ function PicturesLine({ run, project }: { run: RunView; project: ProjectView }) 
   // a picture whose redraw failed keeps its last file: it counts as drawn
   const done = pics.filter((p) => p.status === 'done' || (p.status === 'failed' && p.file)).length, bad = pics.filter((p) => p.status === 'failed' && !p.file).length;
   const busy = pics.some((p) => p.status === 'drawing');
-  // drawn again only on a finished film with nothing else under way (the server says no otherwise)
-  const canRedraw = !!client.redrawPicture && finished(run) && !isWorking(run);
+  // drawn again only while the first page waits, or on a finished film with nothing else under way (the server says no
+  // otherwise)
+  const canRedraw = !!client.redrawPicture && (!!run.firstPage || (finished(run) && !isWorking(run)));
   const shown = pics.filter((p) => p.file);
   const items: LightItem[] = shown.map((p) => ({ src: pictureUrl(project, p)!, title: p.what, caption: p.note }));
   const editingPic = pics.find((p) => p.id === editing);
@@ -546,13 +556,15 @@ function Chapter({ b, run, project, onSelectPage, onPlayPage, selected }: { b: E
   const n = shownStages(run).indexOf(b.stage) + 1;
   const now = useNow(st.status === 'running');
   const took = st.startedAt ? clock((st.endedAt ?? now) - st.startedAt) : undefined;
-  const statusText = st.status === 'running' ? `${stageDoing(b.stage)} · ${took}` : st.status === 'done' ? [took, humanDetail(b.stage, st.detail, run.storyboard)].filter(Boolean).join(' · ') : st.status === 'skipped' ? t('conversation.chapter.skipped') : st.status === 'stopped' ? t('conversation.chapter.stopped') : st.status === 'failed' ? t('conversation.chapter.failed') : '';
+  // the pages stage stays open while the first page waits: what it waits for, not a clock running
+  const waiting = b.latest && b.stage === 'pages' && !!run.firstPage;
+  const statusText = waiting ? t('conversation.firstPage.waiting') : st.status === 'running' ? `${stageDoing(b.stage)} · ${took}` : st.status === 'done' ? [took, humanDetail(b.stage, st.detail, run.storyboard)].filter(Boolean).join(' · ') : st.status === 'skipped' ? t('conversation.chapter.skipped') : st.status === 'stopped' ? t('conversation.chapter.stopped') : st.status === 'failed' ? t('conversation.chapter.failed') : '';
   const approvals = b.items.filter((i) => i.kind === 'approval');
-  const lastApproval = run.feed.filter((i) => i.kind === 'approval').at(-1);
+  const lastFirst = run.feed.filter((i) => i.kind === 'first_page').at(-1);
   return (
     <section aria-label={t('conversation.chapter.aria', { n, stage: STAGE_NAME[b.stage] })} className="relative">
       <header className="flex items-center gap-2.5">
-        <StageMark n={n} status={st.status} />
+        <StageMark n={n} status={waiting ? 'pending' : st.status} />
         <h3 className="text-[13.5px] font-semibold text-ink">{STAGE_NAME[b.stage]}</h3>
         <span className={`truncate text-[12.5px] ${st.status === 'running' ? 'text-accent-ink' : 'text-ink-3'}`}>{statusText}</span>
       </header>
@@ -565,7 +577,8 @@ function Chapter({ b, run, project, onSelectPage, onPlayPage, selected }: { b: E
           if (it.kind === 'check') return it.reds + it.yellows === 0
             ? <p key={it.key} className="flex items-center gap-1.5 text-[12.5px] text-jade"><Check size={13} aria-hidden /> {t('conversation.chapter.checkPassed')}</p>
             : <p key={it.key} className="text-[12.5px] leading-relaxed text-ink-3">{t('conversation.chapter.checkIssues', { reds: it.reds, yellows: it.yellows })}</p>;
-          if (it.kind === 'approval') return <Approval key={it.key} sb={it.storyboard} project={project} run={run} active={run.awaitingApproval && approvals.at(-1) === it} latest={lastApproval === it} />;
+          if (it.kind === 'approval') return <Approval key={it.key} sb={it.storyboard} project={project} run={run} active={run.awaitingApproval && !run.firstPage && approvals.at(-1) === it} />;
+          if (it.kind === 'first_page') return <FirstPage key={it.key} it={it} run={run} project={project} active={!!run.firstPage && lastFirst === it} onOpen={onSelectPage} />;
           if (it.kind === 'pages' && !b.latest) return <p key={it.key} className="text-[12.5px] text-ink-3">{t('conversation.chapter.pagesDone', { n: run.pageOrder.length })}</p>;
           if (it.kind === 'pages') return <Pages key={it.key} run={run} onSelect={onSelectPage} onPlay={onPlayPage} selected={selected} />;
           if (it.kind === 'error') return <p key={it.key} className="flex items-start gap-1.5 text-[12.5px] leading-relaxed text-seal"><TriangleAlert size={13} className="mt-0.5 shrink-0" aria-hidden />{it.message}</p>;
@@ -573,7 +586,7 @@ function Chapter({ b, run, project, onSelectPage, onPlayPage, selected }: { b: E
         })}
         {/* the steps are worth seeing while they happen, or when they went wrong; once the stage has its result
             (a storyboard to confirm, pages drawn) they say nothing the result does not */}
-        {(st.status === 'running' || st.status === 'failed') && !approvals.length && <Process items={b.items} />}
+        {(st.status === 'running' || st.status === 'failed') && !approvals.length && !waiting && <Process items={b.items} />}
       </div>
     </section>
   );
@@ -603,6 +616,7 @@ function NowBar({ run, project }: { run: RunView; project: ProjectView }) {
     : run.exporting ? t('conversation.bar.exporting')
     : run.resuming ? t('conversation.live.preparing')
     : finished(run) && !running ? t('conversation.bar.ready', { secs: seconds, stale: !!run.stale })
+    : run.firstPage ? t('conversation.bar.firstPage')
     : run.awaitingApproval ? t('conversation.bar.awaiting')
     : run.paused ? t('conversation.bar.paused')
     : running && run.current === 'pages' && busyCount > 1 ? t('conversation.live.pagesAtOnce', { n: busyCount })

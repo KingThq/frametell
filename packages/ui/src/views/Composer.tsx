@@ -314,7 +314,8 @@ export function Composer({ run, project, viewing, openSettings }: { run: RunView
   const switchTo = items.find((x) => x.ref?.kind === 'voice')?.ref as Extract<Ref, { kind: 'voice' }> | undefined;
   const narrated = run.stages.narrate.status === 'done';
 
-  const placeholder = t(run.awaitingApproval ? 'conversation.composer.placeholder.approval'
+  const placeholder = t(run.firstPage ? 'conversation.composer.placeholder.firstPage'
+    : run.awaitingApproval ? 'conversation.composer.placeholder.approval'
     : finished(run) && !run.current ? (items.length ? 'conversation.composer.placeholder.finishedWithItems' : 'conversation.composer.placeholder.finished')
     : run.paused ? 'conversation.composer.placeholder.paused'
     : run.current ? 'conversation.composer.placeholder.running'

@@ -23,9 +23,11 @@ export type FeedItem = In & (
   | { kind: 'note'; key: string; text: string; at: number }
   /** this film's own components being written (one line, shown as the run's `kit` stands now) */
   | { kind: 'kit'; key: string; at: number }
-  /** the film's generated pictures after the storyboard (one line, shown as the run's `pictures` stand now); the sample,
-   *  drawn before the go-ahead, is on the storyboard's card instead */
+  /** the film's generated pictures after the storyboard (one line, shown as the run's `pictures` stand now) */
   | { kind: 'pictures'; key: string; at: number }
+  /** the first page drawn alone, for the person to confirm the look before the rest (one per time it is shown: only the
+   *  latest can be answered); `answer`: what they said, once the film moved on from it */
+  | { kind: 'first_page'; key: string; page: string; answer?: 'go' | 'change'; at: number }
   | { kind: 'paused'; key: string; reason: 'user' | 'interrupted' | 'error' | 'credits'; message?: string; at: number }
   | { kind: 'check'; key: string; round: number; reds: number; yellows: number; messages: string[]; at: number }
   | { kind: 'approval'; key: string; storyboard: Storyboard; at: number }
@@ -55,7 +57,7 @@ export interface PageView {
 }
 
 /** one of the film's generated pictures as it stands now: `file` the latest drawn (kept while it is drawn again, and when
- *  drawing it again failed); `sample` the film's first, shown with the storyboard; `note` what it was last asked to change */
+ *  drawing it again failed); `note` what it was last asked to change */
 export interface Picture {
   id: string;
   what: string;
@@ -64,7 +66,6 @@ export interface Picture {
   file?: string;
   w?: number;
   h?: number;
-  sample?: boolean;
   note?: string;
   detail?: string;
 }
@@ -78,7 +79,10 @@ export interface RunView {
   pages: Record<string, PageView>;
   pageOrder: string[];
   storyboard?: Storyboard;
+  /** waiting for the person: at the storyboard, or at the first page (then `firstPage` is set too) */
   awaitingApproval: boolean;
+  /** the first page is drawn and waits for the person to confirm the look (or say what to change) before the rest */
+  firstPage?: { page: string };
   cost?: { amount: number; currency: 'CNY' | 'USD'; usage: Ev<'cost'>['usage'] };
   gate?: Ev<'gate'>;
   /** this film's own components (written before its pages, for a designed style's longer films) */
@@ -145,6 +149,13 @@ function step(v: RunView, e: LoggedEvent): RunView {
   const r: RunView = { ...v, seq: e.seq, activeAt: at };
   const stage = v.current;
   const push = (item: FeedItem) => { r.feed = [...r.feed, { ...item, stage: item.stage ?? stage } as FeedItem]; };
+  // the film moved on from its first page: the wait is over, and the card says what was decided when that is known
+  const leaveFirst = (answer?: 'go' | 'change') => {
+    if (!r.firstPage) return;
+    r.firstPage = undefined; r.awaitingApproval = false;
+    const i = r.feed.map((f) => f.kind === 'first_page').lastIndexOf(true);
+    if (i >= 0 && answer) r.feed = r.feed.map((f, j) => (j === i ? { ...f, answer } as FeedItem : f));
+  };
   switch (e.type) {
     case 'stage': {
       // after the film is finished, rendering is an export, not a step of making it: one line in the conversation
@@ -158,6 +169,8 @@ function step(v: RunView, e: LoggedEvent): RunView {
         return r;
       }
       r.resuming = undefined;
+      // drawing the pages again after the first page says nothing yet: the next page drawn tells whether it went ahead
+      if (e.status === 'start' && e.stage !== 'pages') leaveFirst(e.stage === 'review' ? 'go' : undefined);
       const s = { ...r.stages[e.stage] };
       if (e.status === 'start') { s.status = 'running'; s.startedAt = at; s.endedAt = undefined; r.current = e.stage; r.paused = undefined; r.revising = undefined; r.startedAt ??= at; }
       else { s.status = e.status; s.endedAt = at; s.detail = e.detail; if (r.current === e.stage) r.current = undefined; r.activity = undefined; }
@@ -238,6 +251,8 @@ function step(v: RunView, e: LoggedEvent): RunView {
       push({ kind: 'approval', key, storyboard: e.storyboard, at, stage: 'storyboard' });
       return r;
     case 'page': {
+      // after the first page: drawn again is a change to it, another page drawn is the go-ahead
+      if (r.firstPage) leaveFirst(e.id === r.firstPage.page ? 'change' : 'go');
       const p = r.pages[e.id] ? { ...r.pages[e.id] } : newPage(e.id, r);
       // a film from before issues had fields logged them as lines of text: kept as notes, which the panel doesn't word.
       // A page its own check left with a note (flagged) is shown drawn like any other: the note asks nothing of the
@@ -261,7 +276,9 @@ function step(v: RunView, e: LoggedEvent): RunView {
     case 'gate': r.gate = e; return r;
     case 'error': r.error = e.message; push({ kind: 'error', key, message: e.message, at }); return r;
     case 'user':
-      if (r.awaitingApproval) r.awaitingApproval = false;   // at the storyboard, saying something is the change request
+      // at the storyboard or the first page, saying something is the change request
+      if (r.firstPage) leaveFirst('change');
+      else if (r.awaitingApproval) r.awaitingApproval = false;
       // after the film, a change request: its own round (a switch of voice alone is not planned: it narrates right away)
       else if ((r.ready || r.video) && !r.current && !r.exporting && (e.text || e.refs?.some((x) => x.kind !== 'voice'))) { r.revising = at; r.startedAt = at; }
       push({ kind: 'user', key, text: e.text, refs: e.refs, at }); return r;
@@ -274,19 +291,23 @@ function step(v: RunView, e: LoggedEvent): RunView {
       const old = r.pictures.find((p) => p.id === e.id);
       const p: Picture = {
         id: e.id, what: e.what ?? old?.what ?? e.id, kind: e.kind ?? old?.kind ?? 'scene', status: e.status,
-        // a redraw of a finished film doesn't say it is the sample; it still is
-        sample: e.sample || old?.sample || undefined,
         // drawn again: the last file shows until the new one is there, and stays when the new one can't be had
         file: e.file ?? old?.file, w: e.file ? e.w : old?.w, h: e.file ? e.h : old?.h,
         note: e.status === 'drawing' ? e.note : old?.note, detail: e.status === 'failed' ? e.detail : undefined,
       };
       r.pictures = old ? r.pictures.map((x) => (x.id === e.id ? p : x)) : [...r.pictures, p];
-      // the sample before the go-ahead belongs to the storyboard's card; the rest get one line where they start
-      const atStoryboard = e.sample && r.stages.script.status === 'pending' && !finished(r);
-      if (!atStoryboard && !r.feed.some((f) => f.kind === 'pictures')) push({ kind: 'pictures', key, at });
+      // one line for all of them, where the first is heard of
+      if (!r.feed.some((f) => f.kind === 'pictures')) push({ kind: 'pictures', key, at });
       return r;
     }
+    // the first page waits for the person, as the storyboard did; shown again after a change (or a picture drawn again)
+    case 'first_page':
+      r.firstPage = { page: e.page }; r.awaitingApproval = true;
+      r.activity = undefined; r.resuming = undefined;
+      push({ kind: 'first_page', key, page: e.page, at, stage: 'pages' });
+      return r;
     case 'paused': {
+      leaveFirst();
       // close whatever was running: its timer stops, and the chapter reads as stopped rather than in progress
       r.stages = Object.fromEntries(Object.entries(r.stages).map(([k, s]) => [k, s.status === 'running' ? { ...s, status: 'stopped' as StageStatus, endedAt: at } : s])) as RunView['stages'];
       r.current = undefined;
@@ -306,6 +327,7 @@ function step(v: RunView, e: LoggedEvent): RunView {
       r.resuming = at;
       return r;
     case 'ready':
+      leaveFirst('go');
       r.resuming = undefined;
       r.ready = { duration: e.duration, at };
       r.stale = !!r.video;

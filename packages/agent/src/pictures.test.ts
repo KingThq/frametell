@@ -87,47 +87,39 @@ function film(o: { fail?: RegExp } = {}) {
   const sb = { title: 'T', summary: 'S', look: { pictures: PLAN }, pages: ids.map((id) => ({ id, section: 's', say: '…', beats: [] })) };
   Object.assign(d.project, { commit: async () => undefined, storyboard: () => sb, timeline: async () => ({ duration: 15, pages: [] }) });
   Object.assign(d, { pictureStyle: () => STYLE });
-  return { d: d as unknown as Pick<Director, 'sample' | 'pictures' | 'redrawPicture'> & { state: { stage: string; exported?: boolean; pictures?: string } }, dir, calls, events, sb };
+  return { d: d as unknown as Pick<Director, 'pictures' | 'redrawPicture'> & { state: { stage: string; exported?: boolean; pictures?: string } }, dir, calls, events, sb };
 }
 const pictureEvents = (events: StudioEvent[]) => events.filter((e): e is Extract<StudioEvent, { type: 'picture' }> => e.type === 'picture');
 
-test('the sample is drawn alone, from nothing; drawn again with the user\'s adjustment, which every picture then follows', async () => {
+test('after the go-ahead the first picture is drawn from nothing, the rest from it, and a `like` from its own', async () => {
   const f = film();
-  await f.d.sample();
-  assert.equal(f.calls.length, 1);
+  await f.d.pictures();
+  assert.equal(f.calls.length, 3);
   assert.equal(f.calls[0].refs, 0);
   assert.ok(f.calls[0].transparent, 'a character is cut out');
-  const first = readPictures(f.dir).items;
-  assert.deepEqual(first.map((p) => p.id), ['bird']);
-  assert.match(first[0].file, /^bird-[0-9a-f]{10}\.png$/);
-  assert.deepEqual(pictureEvents(f.events).map((e) => [e.id, e.status, e.sample]), [['bird', 'drawing', true], ['bird', 'done', true]]);
-  // a run that resumes at the gate draws nothing again
-  await f.d.sample();
-  assert.equal(f.calls.length, 1);
-
-  await f.d.sample('颜色再亮一点');
-  assert.equal(f.calls.length, 2);
-  assert.match(f.calls[1].prompt, /Adjustments to the look: 颜色再亮一点/);
-  assert.equal(f.calls[1].refs, 1, 'an adjustment is drawn from the sample there is');
-  assert.match(f.calls[1].prompt, /this picture as it is now: keep its subject/);
-  const again = readPictures(f.dir);
-  assert.deepEqual(again.notes, ['颜色再亮一点']);
-  assert.notEqual(again.items[0].file, first[0].file);
-  assert.ok(!fs.existsSync(path.join(f.dir, 'assets/gen', first[0].file)), 'the old sample is let go');
-  assert.equal(pictureEvents(f.events).at(-2)?.note, '颜色再亮一点');
-
-  // after the go-ahead: the sample is kept, the rest drawn from it, the bird in flight from the bird
-  await f.d.pictures();
-  assert.equal(f.calls.length, 4);
   const whale = f.calls.find((c) => /humpback/.test(c.prompt))!, fly = f.calls.find((c) => /bird flying/.test(c.prompt))!;
   assert.equal(whale.refs, 1);
-  assert.match(whale.prompt, /shows the look of this film[\s\S]*Adjustments to the look: 颜色再亮一点/);
+  assert.match(whale.prompt, /shows the look of this film/);
   assert.equal(fly.refs, 1);
   assert.match(fly.prompt, /shows this very subject: keep it exactly the same/);
   assert.equal(f.d.state.pictures, 'done');
-  assert.deepEqual(readPictures(f.dir).items.map((p) => p.id).sort(), ['bird', 'bird-fly', 'whale']);
+  const items = readPictures(f.dir).items;
+  assert.deepEqual(items.map((p) => p.id).sort(), ['bird', 'bird-fly', 'whale']);
+  assert.match(items.find((p) => p.id === 'bird')!.file, /^bird-[0-9a-f]{10}\.png$/);
+  assert.ok(pictureEvents(f.events).some((e) => e.id === 'bird' && e.status === 'done' && e.sample));
   // fixed for the pages: the agents' file tools refuse them
-  assert.throws(() => writeIn(f.dir, `assets/gen/${readPictures(f.dir).items[0].file}`, 'x'), /every page of this film uses it/);
+  assert.throws(() => writeIn(f.dir, `assets/gen/${items[0].file}`, 'x'), /every page of this film uses it/);
+  // a resumed run draws nothing again
+  f.d.state.pictures = undefined;
+  await f.d.pictures();
+  assert.equal(f.calls.length, 3);
+});
+
+test('no picture is drawn again while the storyboard waits: there is nothing drawn yet', async () => {
+  const f = film();
+  f.d.state.stage = 'approval';
+  await f.d.redrawPicture('bird', 'brighter');
+  assert.equal(f.calls.length, 0);
 });
 
 test('a picture that can\'t be had is left out, said, and never holds the film up', async () => {

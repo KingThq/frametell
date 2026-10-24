@@ -65,6 +65,9 @@ export interface DirectorOptions {
   /** draws the film's generated pictures (pictures.ts), for a style that allows them. Absent: no pictures, and the
    *  storyboard is never told it may ask for any */
   images?: ImageProvider;
+  /** false: the pages are drawn all at once. Otherwise the first page is drawn alone and the run waits at it (as at the
+   *  storyboard) for the user to confirm the film's look, or say what to change, before the rest are drawn */
+  firstPage?: boolean;
 }
 
 interface PageState { status: PageStatus; rounds: number; issues: PageIssue[]; ref?: string; /** runs this page has failed in */ failures?: number }
@@ -92,6 +95,8 @@ interface State {
   kit?: { status: 'done' | 'failed' | 'none'; components: string[] };
   /** this film's generated pictures (pictures.ts) were drawn after the go-ahead (those that could be), or none were asked */
   pictures?: 'done' | 'none';
+  /** the first page waits for the user to confirm the look before the others are drawn, or they did */
+  firstPage?: 'waiting' | 'done';
 }
 
 /** pieces of work side by side: all run to the end, and the first failure is thrown once all have */
@@ -138,9 +143,9 @@ Fix this error first: it is most likely a call to a function that does not exist
  * A page that already works, changed: the current code is handed over, and the change is made with targeted edits.
  * Rewriting a 300-line page to change one thing is minutes of output (seen: 10k tokens, 3 minutes, for a title).
  */
-const revisionNote = (id: string, fix: string, code: string) => `
+const revisionNote = (id: string, fix: string, code: string, first = false) => `
 
-This page is a **revision**: the film is finished and the user asked for a change to this page. The change: ${fix}
+This page is a **revision**: ${first ? 'it is the film\'s first page, drawn before the others for the user to see the look, and they' : 'the film is finished and the user'} asked for a change to this page. The change: ${fix}
 Here is the current pages/${id}.js; it is already given, so don't read it again:
 \`\`\`js
 ${code}
@@ -382,8 +387,6 @@ export class Director {
     }
     await this.commit(this.say('分镜', 'Storyboard'));
     await s.close();
-    // the film's sample picture, shown with the storyboard: the user confirms the look before the rest are drawn
-    await this.sample();
     const sb = this.project.storyboard();
     this.state.stage = 'approval'; this.save();
     this.emit({ type: 'stage', stage: 'storyboard', status: 'done' });
@@ -600,8 +603,6 @@ export class Director {
   private planned(): PicturePlan[] { try { return picturePlan(this.project.storyboard().look, this.pictureStyle()); } catch { return []; } }
   /** the pictures are drawn for every page: the agents' file tools may not change them */
   private freezePictures() { for (const p of readPictures(this.o.dir).items) freeze(this.o.dir, picturePath(p)); }
-  /** the sample being drawn (at the storyboard, or again at the user's word): the rest wait for it */
-  private drawing?: Promise<void>;
 
   /** one picture drawn and its file written (not yet listed). Throws when none can be had */
   private async drawPicture(p: PicturePlan, prompt: string, refs: Picture[], key: string, note?: string): Promise<Picture> {
@@ -636,50 +637,12 @@ export class Director {
   }
 
   /**
-   * The first picture the storyboard asks for, drawn from nothing: the film's sample, shown with the storyboard so the
-   * user confirms the look before the rest are drawn to match it. `note`: the user's adjustment to the look, kept for
-   * every picture after it. It never holds the film up: a sample that can't be had is said, and the film goes on.
-   */
-  sample(note?: string): Promise<void> {
-    const before = this.drawing;
-    const run = (async () => {
-      await before?.catch(() => {});
-      const style = this.pictureStyle(), first = this.planned()[0];
-      if (!style || !first) return;
-      const pics = readPictures(this.o.dir);
-      const adjust = note?.replace(/\s+/g, ' ').trim().slice(0, 300);
-      if (adjust) pics.notes.push(adjust);
-      const key = pictureKey(first, pics.notes);
-      const had = pics.items.find((x) => x.id === first.id && this.project.exists(picturePath(x)));
-      if (had?.key === key && !adjust) return;   // drawn already (a run that resumed)
-      // an adjustment is a change to the sample there is, not a new draw: drawn from it, so what was liked stays
-      const from = adjust && had ? [had] : [];
-      const prompt = picturePrompt(style, first, pics.notes, from.length ? 'adjust' : 'none');
-      this.pictureEvent(first, 'drawing', { sample: true, note: adjust });
-      try {
-        const pic = await this.drawPicture(first, prompt, from, key);
-        this.keepPicture(pic, pics.notes);
-        this.pictureEvent(first, 'done', { sample: true, pic, note: adjust });
-        await this.commit(this.say('样图', 'Sample picture'));
-      } catch (e) {
-        if (stopped(e) || this.o.signal?.aborted) throw e;
-        // the adjustment is kept even so: the pictures drawn later follow it
-        if (adjust) { const now = readPictures(this.o.dir); now.notes = pics.notes; this.project.write(PICTURES_MANIFEST, JSON.stringify(now, null, 2) + '\n'); }
-        this.pictureEvent(first, 'failed', { sample: true, note: adjust, detail: (e as Error).message });
-      }
-    })();
-    this.drawing = run;
-    return run;
-  }
-
-  /**
-   * Every picture the storyboard asks for, once the user has gone ahead: the sample first (again only if the
-   * storyboard changed it), then the rest side by side, each drawn from the sample so they share its look, and a
+   * Every picture the storyboard asks for, once the user has gone ahead: the first from nothing, then the rest side by
+   * side, each drawn from the first so they share its look, and a
    * picture `like` another drawn from that one. A picture drawn already from the same prompt is kept (a resumed run, a
    * revision pays nothing again). One that can't be had is left out: its pages draw that part in code.
    */
   async pictures() {
-    await this.drawing?.catch(() => {});
     const style = this.pictureStyle(), plan = this.planned();
     if (!style || !plan.length) { this.state.pictures = 'none'; this.save(); return; }
     const pics = readPictures(this.o.dir);
@@ -720,15 +683,15 @@ export class Director {
   }
 
   /**
-   * One picture drawn again at the user's word: the sample while the storyboard waits (a change to the whole look), or
-   * any picture of a finished film, whose pages are pointed at the new file. `note`: what to change in it; drawn from
+   * One picture drawn again at the user's word, while the first page waits for them or once the film is finished: the
+   * pages that place it are pointed at the new file. `note`: what to change in it; drawn from
    * the picture as it is when there is one, else from the sample's look. A picture that can't be had leaves the old one.
    */
   async redrawPicture(id: string, note?: string) {
+    if (this.state.stage !== 'done' && this.state.firstPage !== 'waiting') return;
     const style = this.pictureStyle(), plan = this.planned();
     const p = plan.find((x) => x.id === id);
     if (!style || !p) { this.emit({ type: 'note', text: this.say('这张配图已经不在分镜里了', 'That picture is no longer in the storyboard') }); return; }
-    if (this.state.stage === 'approval' && p === plan[0]) return this.sample(note);
     const pics = readPictures(this.o.dir);
     const old = pics.items.find((x) => x.id === id), change = note?.replace(/\s+/g, ' ').trim().slice(0, 300) || undefined;
     const base = p.like ? pics.items.find((x) => x.id === p.like) : undefined, sample = pics.items.find((x) => x.id === plan[0].id && x.id !== id);
@@ -755,7 +718,7 @@ export class Director {
     if (this.state.stage === 'done') {
       if (moved) { this.state.exported = false; this.save(); }
       this.emit({ type: 'ready', duration: (await this.project.timeline()).duration });
-    }
+    } else if (this.state.firstPage === 'waiting') this.emit({ type: 'first_page', page: (await this.project.timeline()).pages[0].id });
   }
 
   /** Server-owned META fields, rewritten in place in script.js (the planner must not change them). */
@@ -810,7 +773,35 @@ export class Director {
   }
 
   // ── ④ pages ──────────────────────────────────────────────────────────────────────────────────
-  async pages(only?: string[]) {
+  /**
+   * The film's first page, drawn and checked alone, and shown to the user before the rest: they confirm the look (the
+   * style, the pictures, how the page is built), or say what to change. A change is made to the first page and noted
+   * for every page after it, and the first page waits again; once they go ahead, the others are drawn side by side. A
+   * film of one page, or one whose other pages are drawn already (a run from before this), has nothing to wait for.
+   */
+  async firstPage(approve: (sb: Storyboard) => Promise<string | undefined>) {
+    if (this.state.firstPage === 'done') return;
+    const tl = await this.project.timeline();
+    const drawn = (id: string) => ['ok', 'flagged'].includes(this.state.pages[id]?.status ?? '');
+    if (this.o.firstPage === false || tl.pages.length < 2 || tl.pages.slice(1).some((p) => drawn(p.id))) { this.state.firstPage = 'done'; this.save(); return; }
+    const id = tl.pages[0].id;
+    for (;;) {
+      if (!drawn(id)) await this.pages([id], { hold: true });
+      this.state.firstPage = 'waiting'; this.save();
+      this.emit({ type: 'first_page', page: id });
+      const change = (await approve(this.project.storyboard()))?.trim();
+      if (!change) break;
+      // for the first page now, and for every page drawn after it (each reads the notes it hasn't seen)
+      this.message(change);
+      this.state.revision = { [id]: change };
+      this.state.pages[id] = { ...this.state.pages[id], status: 'queued' }; this.save();
+      this.emit({ type: 'note', text: this.say('照这个改第一页，后面的页也会照这个来', 'Changing the first page as you said; the pages after it will follow it too') });
+    }
+    this.state.revision = undefined; this.state.firstPage = 'done'; this.save();
+  }
+
+  /** `hold`: only these pages, and the film stays at its pages after them (the first page, waiting for the user) */
+  async pages(only?: string[], o: { hold?: boolean } = {}) {
     this.emit({ type: 'stage', stage: 'pages', status: 'start' });
     this.state.stage = 'pages'; this.save();
     // this film's own components, when it has them: loaded before every page (META.extras), and no page's file tools
@@ -847,8 +838,9 @@ export class Director {
     const thrown = settled.find((x): x is PromiseRejectedResult => x.status === 'rejected');
     if (thrown) throw thrown.reason;
     this.firstTurn = undefined;
-    const bad = Object.entries(this.state.pages).filter(([, s]) => s.status === 'failed');
+    const bad = Object.entries(this.state.pages).filter(([id, s]) => s.status === 'failed' && (!o.hold || only?.includes(id)));
     const ids = bad.map(([id]) => id);
+    if (o.hold && !bad.length) return;
     this.emit({ type: 'stage', stage: 'pages', status: bad.length ? 'failed' : 'done', detail: bad.length ? this.say(`失败：${ids.join('、')}`, `Failed: ${ids.join(', ')}`) : undefined });
     if (bad.length) throw new Error(this.notDrawn(bad));
     this.state.stage = 'review'; this.save();
@@ -925,7 +917,7 @@ export class Director {
       const unchanged = () => before !== undefined && this.project.read(`pages/${id}.js`) === before;
       let r: TurnResult | undefined, declined: string | undefined;
       if (!was) {
-        r = await this.send(s, pagePrompt(sb, id, t, this.o.brief.lang, this.o.brief.replyLang, !!fix, this.o.brief.brand, this.assetsOn(sb, id), picturePageNote(this.picturesOn(sb, id))) + (fix ? revisionNote(id, fix, this.project.read(`pages/${id}.js`)) : added ? addedNote(this.state.revision![id]) : '') + this.unseen(`page-${id}`), undefined, PAGE_THINKING);
+        r = await this.send(s, pagePrompt(sb, id, t, this.o.brief.lang, this.o.brief.replyLang, !!fix, this.o.brief.brand, this.assetsOn(sb, id), picturePageNote(this.picturesOn(sb, id))) + (fix ? revisionNote(id, fix, this.project.read(`pages/${id}.js`), this.state.firstPage === 'waiting') : added ? addedNote(this.state.revision![id]) : '') + this.unseen(`page-${id}`), undefined, PAGE_THINKING);
         if (!this.project.exists(`pages/${id}.js`)) r = await this.send(s, `pages/${id}.js does not exist yet; write it, then stop.`, undefined, PAGE_THINKING);
         if (!this.project.exists(`pages/${id}.js`)) throw new Error(r.error || this.say('没有写出页面文件', 'No page file was written'));
         // the agent found nothing to change (already so, or nothing this page can do): it says why instead of searching
@@ -1279,7 +1271,7 @@ ${this.project.read('script.js')}
     if (this.state.stage === 'pages' && !this.state.pictures) await this.pictures();
     // the voice was changed after the narration was made (while paused): narrate again before going on
     if ((this.state.stage === 'pages' || this.state.stage === 'review') && this.voiceStale()) await this.revoice();
-    if (this.state.stage === 'pages') await this.pages();
+    if (this.state.stage === 'pages') { await this.firstPage(approve); await this.pages(); }
     if (this.state.stage === 'review') await this.review();
     if (this.state.stage === 'render') await this.ready();   // a run saved before exports were separate: it is ready to preview
     if (this.state.change) { this.state.change = undefined; this.save(); }
