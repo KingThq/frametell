@@ -304,6 +304,8 @@ function step(v: RunView, e: LoggedEvent): RunView {
     case 'first_page':
       r.firstPage = { page: e.page }; r.awaitingApproval = true;
       r.activity = undefined; r.resuming = undefined;
+      // the same wait said again (a run picked up again at it, from before the engine stopped repeating it): one card
+      if (r.feed.at(-1)?.kind === 'first_page' && (r.feed.at(-1) as { page: string }).page === e.page && !(r.feed.at(-1) as { answer?: string }).answer) return r;
       push({ kind: 'first_page', key, page: e.page, at, stage: 'pages' });
       return r;
     case 'paused': {

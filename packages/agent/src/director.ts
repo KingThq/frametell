@@ -788,10 +788,14 @@ export class Director {
     const drawn = (id: string) => ['ok', 'flagged'].includes(this.state.pages[id]?.status ?? '');
     if (this.o.firstPage === false || tl.pages.length < 2 || tl.pages.slice(1).some((p) => drawn(p.id))) { this.state.firstPage = 'done'; this.save(); return; }
     const id = tl.pages[0].id;
+    // a run picked up again while it waits (the app restarted, the user answered after a pause) has said so already:
+    // the wait is said once, and again only for a first page drawn anew
+    let said = this.state.firstPage === 'waiting';
     for (;;) {
-      if (!drawn(id)) await this.pages([id], { hold: true });
+      if (!drawn(id)) { await this.pages([id], { hold: true }); said = false; }
       this.state.firstPage = 'waiting'; this.save();
-      this.emit({ type: 'first_page', page: id });
+      if (!said) this.emit({ type: 'first_page', page: id });
+      said = false;
       const change = (await approve(this.project.storyboard()))?.trim();
       if (!change) break;
       // for the first page now, and for every page drawn after it (each reads the notes it hasn't seen); a change to a

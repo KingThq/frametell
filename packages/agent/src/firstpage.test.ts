@@ -76,3 +76,14 @@ test('no wait for a one-page film, a host that turns it off, or a film whose oth
   await f.d.firstPage(async () => { asked++; return undefined; });
   assert.equal(asked, 0);
 });
+
+test('a run picked up again while the first page waits does not say so a second time', async () => {
+  const f = film();
+  f.d.state.stage = 'pages';
+  await f.d.firstPage(async () => { throw new DOMException('aborted', 'AbortError'); }).catch(() => {});
+  assert.equal(f.events.filter((e) => e.type === 'first_page').length, 1);
+  // the run continues (the user goes ahead after a restart): the wait is not announced again
+  await f.d.firstPage(async () => undefined);
+  assert.equal(f.events.filter((e) => e.type === 'first_page').length, 1);
+  assert.equal(f.d.state.firstPage, 'done');
+});
