@@ -165,9 +165,6 @@ function FirstPage({ it, run, project, active, onOpen }: { it: Extract<FeedItem,
   const rest = Math.max((run.storyboard?.pages.length ?? run.pageOrder.length) - 1, 0);
   const n = (run.storyboard?.pages.findIndex((x) => x.id === it.page) ?? -1) + 1 || 1;
   const section = run.storyboard?.pages.find((x) => x.id === it.page)?.section;
-  const kitPlan = ((run.storyboard?.look as { kit?: { name: string; what: string }[] } | undefined)?.kit ?? []);
-  const kitSheet = run.kit?.status === 'done' ? run.kit.sheet : undefined;
-  const kitNames = (run.kit?.components ?? []).map((n) => kitPlan.find((x) => x.name === n)?.what ?? n);
   // a reply that was refused (credits, or anything else) leaves the card as it was, to answer again
   const answer = async (text?: string) => {
     setSending(true); setFailed(undefined);
@@ -194,17 +191,6 @@ function FirstPage({ it, run, project, active, onOpen }: { it: Extract<FeedItem,
           <span className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-paper/90 px-2.5 py-1 text-[11.5px] text-ink shadow-sm"><Play size={10} className="fill-current" aria-hidden /> {t('conversation.firstPage.open', { n })}</span>
         </button>
         {section && <p className="mt-2 truncate text-[12.5px] text-ink-2"><span className="mr-1.5 text-ink-3">{pageName(it.page)}</span>{section}</p>}
-        {/* the film's own components, as their check drew them: the things the other pages will show, confirmed with the
-            first page even when it shows only some of them */}
-        {kitSheet && (
-          <div className="mt-3">
-            <p className="text-[12.5px] text-ink-2">{t('conversation.firstPage.kit', { n: kitNames.length })}</p>
-            <a href={client.fileUrl(project, relPath(kitSheet, project.id))} target="_blank" rel="noreferrer" className="mt-1.5 block aspect-video w-full overflow-hidden rounded-xl border border-line bg-paper-2/60">
-              <img src={client.fileUrl(project, relPath(kitSheet, project.id))} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
-            </a>
-            <ul className="mt-1 space-y-0.5 text-[12px] text-ink-3">{kitNames.map((w) => <li key={w} className="truncate">· {w}</li>)}</ul>
-          </div>
-        )}
       </div>
       {live ? (
         <div className="border-t border-line px-4 py-3">

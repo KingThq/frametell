@@ -62,7 +62,6 @@ const en: typeof zh = {
     adjust: 'What should change? For example, “thicker lines” or “warmer colours”',
     change: 'Change the first page',
     pictures: 'Each picture can be redrawn on its own from the pictures above',
-    kit: (v: { n: number }) => `These ${v.n} things come back on later pages: check them too (change how they look, and every page follows)`,
     busy: 'The film is busy. Try again in a moment',
     going: (v) => `Drawing the other ${v.n} ${v.n === 1 ? 'page' : 'pages'} in this look`,
     changing: 'Change sent',
