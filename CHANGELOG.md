@@ -23,6 +23,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The film's components are written side by side: each by a session of its own (`kit-<name>`), in a file of its own (`extras/kit/<name>.js`, with its lines for the check page in `extras/kit/<name>.check.js`), all at once. The server puts them together into `extras/film-kit.js` and the check page, checks them once, and sends each component's problems back to its own session, those sessions fixing at the same time; an error no component can be pinned on goes to all of them. The pages wait for the slowest component instead of all of them in turn.
 
+### Fixed
+
+- A change asked for at the first page is taken as one for the whole film. The planner makes it in the storyboard and the narration first, on every page it reaches (an opening hook dropped, chapters kept apart, nothing left out), the narration is voiced again where it changed, and the first page is drawn to the planner's note. Before, only the first page's picture changed: the words stayed as they were.
+- What the user says mid-run is a standing direction: every page's first message and its reviewer read all of it, and the reviewer never fails a page for following it. Before, a page drawn again in a fresh session saw none of the earlier notes, and its reviewer, judging by the storyboard, put back what the user had ruled out.
+- A change to a finished film that asks for more than a page holds (everything, more detail, a full review) adds pages instead of packing one.
+
 ## [0.7.3] - 2026-10-19
 
 ### Added

@@ -11,7 +11,7 @@ const PAGE = (id: string) => `ENGINE.visual('${id}', (P) => {\n  P.text('${id}',
 
 /** the page model writes its page; `asked` keeps each page session's prompts; `routes`: the router's answers, in turn
  *  (none: it answers nothing, and every message is a change) */
-function artist(asked: Record<string, string[]>, routes: unknown[] = []): AgentRuntime {
+function artist(asked: Record<string, string[]>, routes: unknown[] = [], planner?: (text: string, cwd: string) => void): AgentRuntime {
   return {
     id: 'pi', model: { provider: 'x', id: 'flash' },
     async open(s) {
@@ -21,6 +21,7 @@ function artist(asked: Record<string, string[]>, routes: unknown[] = []): AgentR
           const id = s.name.slice(5), f = path.join(s.cwd, `pages/${id}.js`);
           fs.writeFileSync(f, fs.existsSync(f) ? fs.readFileSync(f, 'utf8') + '// changed\n' : PAGE(id));
         }
+        if (s.name === 'reviser') planner?.(text, s.cwd);
         if (s.name === 'route') { const a = routes.shift(); return { text: '', stopReason: 'done', usage: {}, answers: a ? [{ name: 'route', args: a }] : [] } as never; }
         return { text: 'done', stopReason: 'done', usage: {}, answers: s.name.startsWith('check-') ? [{ name: 'verdict', args: { pass: true, problems: [] } }] : [] } as never;
       } };
@@ -28,12 +29,12 @@ function artist(asked: Record<string, string[]>, routes: unknown[] = []): AgentR
   };
 }
 
-function film(o: { pages?: number; firstPage?: boolean; routes?: unknown[] } = {}) {
+function film(o: { pages?: number; firstPage?: boolean; routes?: unknown[]; planner?: (text: string, cwd: string) => void } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ft-firstpage-'));
   fs.mkdirSync(path.join(dir, 'pages'));
   fs.writeFileSync(path.join(dir, 'script.js'), "(function (root) {\n  const META = {\n    style: 'whiteboard',\n    extras: [],\n  };\n  root.SCRIPT = { META, PAGES: [] };\n})(globalThis);\n");
   const asked: Record<string, string[]> = {}, events: StudioEvent[] = [];
-  const art = artist(asked, o.routes);
+  const art = artist(asked, o.routes, o.planner);
   const d = new Director({ dir, style: 'whiteboard', brief: { durationSec: 60, lang: 'zh', replyLang: 'zh' }, runtime: art, reviewer: { runtime: art }, emit: (e) => events.push(e), ...(o.firstPage === false ? { firstPage: false } : {}) });
   const n = o.pages ?? 3;
   const sb = { title: 'T', summary: 'S', pages: Array.from({ length: n }, (_, i) => ({ id: `p0${i + 1}`, section: 's', say: '…', beats: [] })) };
@@ -60,7 +61,9 @@ test('the first page is drawn alone and waits for the user; a change is made to 
   // then the rest, which are told what the user said
   await f.d.pages();
   assert.deepEqual(drawn(f), ['p01', 'p02', 'p03']);
-  assert.match(f.asked['page-p02'][0], /The user just added[\s\S]*线条再粗一点，配色更暖/);
+  assert.match(f.asked['page-p02'][0], /The user's directions for this film[\s\S]*线条再粗一点，配色更暖/);
+  // the planner was asked first, with the change as one for the whole film
+  assert.match(f.asked.reviser?.[0] ?? '', /first page \(p01\) is drawn[\s\S]*线条再粗一点[\s\S]*direction for the whole film/);
   assert.equal(f.asked['page-p01'].length, 2, 'the first page is not drawn a third time');
   assert.equal(f.d.state.stage, 'review');
 });
@@ -104,4 +107,24 @@ test('a question at the first page is answered and the page waits on, not redraw
   assert.match(f.asked['page-p01'][1], /线条再粗一点/);
   assert.equal(f.events.filter((e) => e.type === 'first_page').length, 2);
   assert.equal(f.d.state.firstPage, 'done');
+});
+
+test('a change at the first page is made in the narration and the plan first, and every later redraw keeps it', async () => {
+  const f = film({ planner: (text, cwd) => {
+    // the planner takes the hook out of the narration, and tells the first page what to change
+    const hook = /不要开头的提问/.test(text.split('\n')[1] ?? '');
+    fs.appendFileSync(path.join(cwd, 'script.js'), `// ${hook ? 'hook' : 'more'}\n`);
+    fs.mkdirSync(path.join(cwd, '.studio'), { recursive: true });
+    fs.writeFileSync(path.join(cwd, '.studio/revision.json'), JSON.stringify({ pages: [{ id: 'p01', note: hook ? '去掉问号和问句，直接写结论' : '三栏都写满' }] }));
+  } });
+  f.d.state.stage = 'pages';
+  const answers = ['不要开头的提问，直接讲内容', '所有内容都要有', undefined];
+  await f.d.firstPage(async () => answers.shift());
+  const notes = f.events.filter((e) => e.type === 'note').map((e) => (e as { text: string }).text);
+  assert.ok(notes.some((n) => /改了口播/.test(n)), 'the user is told the narration changed');
+  // the first page is drawn to the planner's note, not the bare words
+  assert.match(f.asked['page-p01'][1], /去掉问号和问句/);
+  // drawn a third time, the page and its reviewer still read the first direction (seen: the hook came back)
+  assert.match(f.asked['page-p01'][2], /The user's directions for this film[\s\S]*不要开头的提问[\s\S]*所有内容都要有/);
+  assert.match(f.asked['check-p01'].at(-1) ?? '', /outrank the storyboard[\s\S]*不要开头的提问/);
 });

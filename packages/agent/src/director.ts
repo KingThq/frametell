@@ -156,6 +156,12 @@ ${code}
 Change only what needs changing, with edit; **never rewrite the whole file with write**. **Put all the edits in one reply** (one reply can call edit several times), each with finish: true: you're done once they apply, no reply needed and no need to read the file again; the check screenshots will show the result.
 If this page already shows the change, or the change says nothing this page can do, don't go looking for what was meant (other files, the film's history, other folders): change nothing and call flag with one sentence for the user, in the language you reply in, saying what you found.`;
 
+/** the user's notes so far, which outrank the storyboard (Director.directions) */
+const directionsNote = (all: string[]) => all.length ? `
+
+The user's directions for this film, in the order given (where they differ from the storyboard, they win; follow those that concern this page):
+${all.map((n) => `- ${n}`).join('\n')}` : '';
+
 /** a page the change adds (the planner put it in the storyboard): it has no code yet, so it is drawn like any new page */
 const addedNote = (fix: string) => `
 
@@ -305,6 +311,16 @@ export class Director {
       planned: durationSec !== undefined,
       ...(cost.amount > 0 ? { cost } : {}),
     };
+  }
+  /**
+   * Every note the user gave, as the film's standing directions: a page's first message and its reviewer read all of
+   * them. Handed out only once each (unseen), a page drawn again in a fresh session saw none of them: seen, a first page
+   * whose user asked for no hook was drawn a third time with the hook back, its reviewer judging it by the storyboard.
+   */
+  private directions(key?: string): string[] {
+    const all = this.state.notes ?? [];
+    if (key) { (this.state.cursors ??= {})[key] = all.length; this.save(); }
+    return all;
   }
   /** the notes a session hasn't seen yet, as a block to append to its next message */
   private unseen(key: string): string {
@@ -832,11 +848,12 @@ export class Director {
     const tl = await this.project.timeline();
     const drawn = (id: string) => ['ok', 'flagged'].includes(this.state.pages[id]?.status ?? '');
     if (this.o.firstPage === false || tl.pages.length < 2 || tl.pages.slice(1).some((p) => drawn(p.id))) { this.state.firstPage = 'done'; this.save(); return; }
-    const id = tl.pages[0].id;
     // a run picked up again while it waits (the app restarted, the user answered after a pause) has said so already:
     // the wait is said once, and again only for a first page drawn anew
     let said = this.state.firstPage === 'waiting';
     for (;;) {
+      // the first page as the storyboard has it now (a change may have rewritten the film's plan)
+      const id = (await this.project.timeline()).pages[0].id;
       if (!drawn(id)) { await this.pages([id], { hold: true }); said = false; }
       this.state.firstPage = 'waiting'; this.save();
       if (!said) this.emit({ type: 'first_page', page: id, ...(this.o.firstPageWaitMs ? { goOnAt: Date.now() + this.o.firstPageWaitMs } : {}) });
@@ -848,16 +865,45 @@ export class Director {
       const heard = await this.route(change);
       if (heard.reply) this.emit({ type: 'note', text: heard.reply });
       if (heard.kind === 'question') { said = true; continue; }
-      // for the first page now, and for every page drawn after it (each reads the notes it hasn't seen); a change to a
-      // thing the film draws with its own components is made in them first, or the other pages would still draw it the
-      // old way (they are fixed for the pages' file tools)
-      this.message(change);
-      await this.kitChange(change);
-      this.state.revision = { [id]: change };
-      this.state.pages[id] = { ...this.state.pages[id], status: 'queued' }; this.save();
-      this.emit({ type: 'note', text: this.say('照这个改第一页，后面的页也会照这个来', 'Changing the first page as you said; the pages after it will follow it too') });
+      await this.firstPageChange(id, change);
     }
     this.state.revision = undefined; this.state.firstPage = 'done'; this.save();
+  }
+
+  /**
+   * A change the user asked for at the first page. What people ask for here is most often about the whole film: what it
+   * says and how (no opening hook, keep the chapters apart, leave nothing out). Only the first page is drawn, so the
+   * planner makes the change in the storyboard and the narration first, on every page it reaches, and the narration is
+   * voiced again where it changed; then the first page is drawn to it. Handed to the first page alone, with the words
+   * fixed, the change never reached what was said, and the next redraw put back what the user had ruled out (seen).
+   * The change stays one of the film's directions, read by every page and its reviewer.
+   */
+  private async firstPageChange(id: string, change: string) {
+    this.message(change);
+    // a change to a thing the film draws with its own components is made in them first, or the other pages would still
+    // draw it the old way (they are fixed for the pages' file tools)
+    await this.kitChange(change);
+    const file = (f: string) => (this.project.exists(f) ? this.project.read(f) : '');
+    const script = file('script.js'), storyboard = file('storyboard.json');
+    this.emit({ type: 'note', text: this.say('收到，我先看看这条要改到哪些地方', 'Got it. Let me see what this changes in the film') });
+    const got = await this.planRevision(change, [id], id);
+    const words = file('script.js') !== script, plan = file('storyboard.json') !== storyboard;
+    // the first page as the plan has it now: when the planner wrote no note for it, the change itself is its brief
+    const first = (await this.project.timeline()).pages[0].id;
+    const note = 'plan' in got ? got.plan.find((p) => p.id === first)?.note : undefined;
+    this.wordsChanged = words;
+    if (words) {
+      this.serverMeta();
+      if (this.o.tts && this.o.voice) await narrate(this.o.dir, { tts: this.o.tts, voice: this.o.voice, signal: this.o.signal, child: childCmd, files: projectFiles });   // unchanged lines cost nothing
+      await this.commit(this.say('照用户的意见改口播', 'Narration changed as the user asked'));
+    } else if (plan) await this.commit(this.say('照用户的意见改分镜', 'Storyboard changed as the user asked'));
+    this.state.revision = { [first]: note ?? change };
+    this.state.pages[first] = { ...this.state.pages[first], status: 'queued', rounds: 0, issues: [] }; this.save();
+    this.emit({ type: 'note', text: words
+      ? this.say('改了口播和后面各页的安排，第一页照这个重画，后面的页也会照这个来', 'I changed the narration and the plan for the pages after it; redrawing the first page to match, and the rest will follow')
+      : plan
+      ? this.say('改了后面各页的安排，第一页照这个重画，后面的页也会照这个来', 'I changed the plan for the pages after it; redrawing the first page to match, and the rest will follow')
+      : this.say('照这个改第一页，后面的页也会照这个来', 'Changing the first page as you said; the pages after it will follow it too') });
   }
 
   /**
@@ -1049,7 +1095,7 @@ export class Director {
       const unchanged = () => before !== undefined && this.project.read(`pages/${id}.js`) === before;
       let r: TurnResult | undefined, declined: string | undefined;
       if (!was) {
-        r = await this.send(s, pagePrompt(sb, id, t, this.o.brief.lang, this.o.brief.replyLang, !!fix, this.o.brief.brand, this.assetsOn(sb, id), picturePageNote(this.picturesOn(sb, id))) + (fix ? revisionNote(id, fix, this.project.read(`pages/${id}.js`), this.state.firstPage === 'waiting') : added ? addedNote(this.state.revision![id]) : '') + this.unseen(`page-${id}`), undefined, PAGE_THINKING);
+        r = await this.send(s, pagePrompt(sb, id, t, this.o.brief.lang, this.o.brief.replyLang, !!fix, this.o.brief.brand, this.assetsOn(sb, id), picturePageNote(this.picturesOn(sb, id))) + (fix ? revisionNote(id, fix, this.project.read(`pages/${id}.js`), this.state.firstPage === 'waiting') : added ? addedNote(this.state.revision![id]) : '') + directionsNote(this.directions(`page-${id}`)), undefined, PAGE_THINKING);
         if (!this.project.exists(`pages/${id}.js`)) r = await this.send(s, `pages/${id}.js does not exist yet; write it, then stop.`, undefined, PAGE_THINKING);
         if (!this.project.exists(`pages/${id}.js`)) throw new Error(r.error || this.say('没有写出页面文件', 'No page file was written'));
         // the agent found nothing to change (already so, or nothing this page can do): it says why instead of searching
@@ -1087,7 +1133,7 @@ export class Director {
           this.setPage(id, { ...st, issues: issues.map(fromLint) }, { sheet: c.sheet });
           const change = unchanged() ? fix : undefined;
           reviewer ??= await this.session(`check-${id}`, reviewerSystem(this.o.style, this.o.brief.styleNotes, this.designed()?.card) + kitReviewNote(this.kitItems()), MAX.reviewerTurns, undefined, undefined, { tools: 'none', answers: [VERDICT] });
-          verdict = await this.verdict(reviewer, reviewerPrompt(sb, id, t, round, issues, times, change, this.o.brief.brand, this.assetsOn(sb, id), pictureReviewNote(this.picturesOn(sb, id))), c.sheet);
+          verdict = await this.verdict(reviewer, reviewerPrompt(sb, id, t, round, issues, times, change, this.o.brief.brand, this.assetsOn(sb, id), pictureReviewNote(this.picturesOn(sb, id)), this.directions()), c.sheet);
           const errors = errorsOf(issues), problems = verdict?.pass === false ? verdict.problems : [];
           if (!errors.length && !problems.length) { st.status = 'ok'; st.issues = []; break; }
           if (round === checks) break;
@@ -1334,7 +1380,7 @@ export class Director {
    * a file that would not parse) is asked once more, told what was wrong; a second miss is said to the user in words
    * they can act on.
    */
-  private async planRevision(request: string, named: string[]): Promise<{ plan: RevisionPlan } | { why: string }> {
+  private async planRevision(request: string, named: string[], first?: string): Promise<{ plan: RevisionPlan } | { why: string }> {
     const system = plannerSystem(this.o.style, this.o.brief.preferences, this.o.brief.styleNotes, this.o.brief.brand, userAssets(this.project.dir));
     // a fresh, small session per change: resuming the planner would carry the whole making of the film (slow, and every
     // token of it re-read); the files hold everything this decision needs
@@ -1342,14 +1388,14 @@ export class Director {
     fs.rmSync(this.project.file(PLAN_FILE), { force: true });   // last change's plan is not this one's
     const read = () => readRevisionPlan(this.project.exists(PLAN_FILE) ? this.project.read(PLAN_FILE) : undefined, this.project.storyboard().pages.map((p) => p.id));
     try {
-      let r = await this.send(s, this.planPrompt(request, named));
+      let r = await this.send(s, first ? this.firstPagePlanPrompt(request, first) : this.planPrompt(request, named));
       let got = read();
       if ('plan' in got) return got;
       if (r.stopReason === 'error') {
         // the model gave no answer (its service failed): the same question again, in a session of its own
         await s.close();
         s = await this.session('reviser', system, MAX.planTurns);
-        r = await this.send(s, this.planPrompt(request, named));
+        r = await this.send(s, first ? this.firstPagePlanPrompt(request, first) : this.planPrompt(request, named));
       } else {
         r = await this.send(s, `${got.problem}, so the change can't go ahead. Write ${PLAN_FILE} now, as { "pages": [{ "id": "p03", "note": "…" }] } with the storyboard's page ids, or { "pages": [] } when no page's picture changes. Keep what you already changed in the files; don't do it again.`);
       }
@@ -1373,6 +1419,7 @@ export class Director {
 ${request}
 
 Decide which pages to change and how: change only the pages that need it (usually 1–2, and every page the user's words reach when they ask for more). Touch script.js only when the user asks to change the narration; then change the matching cues and keep their number the same.
+When the user asks for more than a page can hold (everything, more detail, a full review, more examples), add pages instead of packing one: each new page gets an id after the last one, its entry in storyboard.json and its cues in script.js (3–8 short lines, like the others), and goes in the plan with a note of what it shows. Add as many as the request needs; one page per topic is a good measure.
 ${[voiceNote('revise', this.o.brief.voice), langNote('revise', this.o.brief.lang, this.o.brief.replyLang).trim()].filter(Boolean).join('\n')}
 Write the decision to ${PLAN_FILE}: { "pages": [{ "id": "p03", "note": "the change for the page agent, down to objects and actions" }] }, with the page ids exactly as in the storyboard, then tell the user in one sentence what you will change.
 Always write the file. When no page's picture changes, write { "pages": [] }: for a change to the narration alone (in script.js), a question, thanks, or something a change can't do here (another style, the voice's speed), which you then tell the user in a sentence or two.
@@ -1385,6 +1432,35 @@ script.js:
 \`\`\`js
 ${this.project.read('script.js')}
 \`\`\`${code ? `\n\n${code}` : ''}`;
+  }
+
+  /** what the planner is told of a change asked at the first page: it is about the whole film, whose other pages are not
+   *  drawn yet, so the storyboard and the narration are its to change (firstPageChange) */
+  private firstPagePlanPrompt(request: string, id: string) {
+    return `The film's first page (${id}) is drawn so the user can see the look before the rest; no other page is drawn yet, and the narration is voiced. The user looked at it and said:
+${request}
+
+Take this as a direction for the whole film, not only its first page, and make the film follow it:
+- When it is about what is said or how (an opening hook, a framing, what is linked or kept apart, what is left out or must be in, the order), change script.js and storyboard.json to match, on every page it reaches. The pages after the first are not drawn yet, so change their storyboard entries and their narration freely; a page's cues may be added or removed. Add pages (ids after the last one, each with its storyboard entry and its cues) only when the request needs more than the pages hold. Keep the ids of the pages that stay.
+- When it is about the picture alone, leave both files as they are.
+${[voiceNote('revise', this.o.brief.voice), langNote('revise', this.o.brief.lang, this.o.brief.replyLang).trim()].filter(Boolean).join('\n')}
+Then write ${PLAN_FILE} with what the first page's agent must change, down to objects and actions: { "pages": [{ "id": "<the first page's id>", "note": "…" }] }. Then tell the user in one or two sentences what you changed: the narration, the plan of the pages, the first page.
+The storyboard and script.js are given below; don't read them again. Don't look into the engine, take screenshots or run tools other than to edit the files.
+
+Storyboard (storyboard.json):
+\`\`\`json
+${this.project.exists('storyboard.json') ? this.project.read('storyboard.json') : JSON.stringify(this.project.storyboard(), null, 2)}
+\`\`\`
+
+script.js:
+\`\`\`js
+${this.project.read('script.js')}
+\`\`\`
+
+The first page's code (pages/${id}.js), for what it shows now:
+\`\`\`js
+${this.project.exists(`pages/${id}.js`) ? this.project.read(`pages/${id}.js`) : ''}
+\`\`\``;
   }
 
   /** Whole run. `approve` is called with the storyboard and resolves with optional feedback (the user's edits). */

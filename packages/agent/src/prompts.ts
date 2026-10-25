@@ -216,7 +216,7 @@ export const FLAG: AnswerTool = {
 
 /** what the reviewer is shown each round: the page's storyboard and timing, the checker's findings, the sheet */
 /** `assets`: the user's pictures this page places (assetsOn); `pictures`: the film's generated ones (pictureReviewNote) */
-export function reviewerPrompt(sb: Storyboard, id: string, t: PageTiming, round: number, issues: LintIssue[], times: { local: number }[], change?: string, brand?: BrandBrief, assets: UserAsset[] = [], pictures = '') {
+export function reviewerPrompt(sb: Storyboard, id: string, t: PageTiming, round: number, issues: LintIssue[], times: { local: number }[], change?: string, brand?: BrandBrief, assets: UserAsset[] = [], pictures = '', directions: string[] = []) {
   const p = sb.pages.find((x) => x.id === id);
   const must = issues.filter((i) => i.level === 'error'), advice = issues.filter((i) => i.level === 'warn');
   return `${round > 1 ? `Round ${round}: the artist has changed the page since you last saw it.\n\n` : ''}## The page (${id} of ${sb.pages.length}, in the film "${sb.title}")
@@ -226,7 +226,7 @@ export function reviewerPrompt(sb: Storyboard, id: string, t: PageTiming, round:
 ${(p?.beats || []).map((b, i) => `  ${i + 1}. [${b.at}] ${b.object} — ${b.action}${b.text ? `, on-screen text "${b.text}"` : ''}`).join('\n')}
 - The page lasts ${(t.end - t.start).toFixed(1)}s. Narration:
 ${t.cues.map((c) => `  - c${c.i} at ${c.at.toFixed(1)}s: "${c.text}"`).join('\n')}
-${sb.pages[sb.pages.length - 1]?.id === id ? `\nThis page ends the film: after its last line it holds ${(t.end - t.speechEnd).toFixed(1)}s, then the film fades out by itself (not shown in the sheet). Fail it if the film ends mid-move, on a half-drawn or unresolved picture, or on an emptied frame; a still hold after the last line is right.\n` : ''}${change ? `\nThe user asked for this change to the page: ${change}\nFail the page if the pictures don't show it.\n` : ''}${brandReviewNote(brand, brandFilesOn(brand, sb.pages, id))}${assetReviewNote(assets)}${pictures}
+${sb.pages[sb.pages.length - 1]?.id === id ? `\nThis page ends the film: after its last line it holds ${(t.end - t.speechEnd).toFixed(1)}s, then the film fades out by itself (not shown in the sheet). Fail it if the film ends mid-move, on a half-drawn or unresolved picture, or on an emptied frame; a still hold after the last line is right.\n` : ''}${change ? `\nThe user asked for this change to the page: ${change}\nFail the page if the pictures don't show it.\n` : ''}${directions.length ? `\nThe user's directions for this film, in the order given (they outrank the storyboard: never fail the page for following them, or ask for a beat they ruled out; fail it if it goes against them):\n${directions.map((n) => `- ${n}`).join('\n')}\n` : ''}${brandReviewNote(brand, brandFilesOn(brand, sb.pages, id))}${assetReviewNote(assets)}${pictures}
 ## The checker
 ${must.length ? `Must-fix (already sent to the artist):\n${lintLines(must)}` : 'Nothing must be fixed.'}
 ${advice.length ? `Advice (a measurement; fail on it only if the picture shows a problem):\n${lintLines(advice)}` : ''}
