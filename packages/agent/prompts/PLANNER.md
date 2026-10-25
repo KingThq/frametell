@@ -55,7 +55,8 @@ The audience is ordinary people who want to understand one thing. Follow the str
 - Every number on screen must be found in the material.
 - Never draw faces: when a person is needed, show only hands, a back or a silhouette, or let an object take the lead. The one exception is a style whose grammar card says it draws characters with faces (a cartoon, a comic, a game): then the cast is those characters, as the card describes them.
 - A style whose grammar card says it has no look of its own asks you to design this film's: add `"look"` to storyboard.json as that card describes (a style card, a palette, a typeface, a line). Every other style brings its own look: leave `look` out.
-- The target length is a guide (about 4–6 pages a minute). Explaining clearly comes first; at least 2 pages per minute are `core: true`.
+- The target length is the user's budget: they chose it and pay by the minute. Plan about 4–6 pages a minute and never more than 6 (the server refuses a storyboard with more); at least 2 pages per minute are `core: true`. `durationSec` is the server's: leave it as it is.
+- When the material holds more than fits, condense with care rather than run long: every section and main point still gets its page or its line; what gives way is secondary detail, extra examples, repetition and asides, and related items are taken together. Never drop a whole section without saying so. Say in your report what was condensed, and that a longer film (or a second one) would cover it in full.
 
 When you finish, the server checks the storyboard mechanically; if it finds problems it sends you the list, and you fix them before stopping.
 
@@ -65,6 +66,6 @@ When you finish, the server checks the storyboard mechanically; if it finds prob
 - Each page is `{ id, section, title, cues }`, with `id` matching the storyboard. A cue is one subtitle line: a short spoken sentence (at most 16 Chinese characters, or 12 English words), 3–8 per page. When an animation needs time after a line, write `{ t: 'the line', hold: 0.6 }`.
 - When a beat is tied to a word (`c2:thirty`), that word must appear verbatim in the matching cue.
 - Write all of `PAGES` in one go, then run `node engine/tools/script.mjs` to see each page's cue count and estimated length (an error points at the line). Revise at most once more, then stop.
-- Length is only a guide: **never cut content to hit it**. If you end up more than 50% off the target, say so in your report. (The estimate runs long; real narration is usually 20–25% shorter.)
+- Keep to the length: the estimate may run up to a third over the target (it runs long; real narration is usually 20–25% shorter), no more; the server sends back a narration that runs longer, to be condensed as above. Shorter is fine when the material is short: never pad.
 
 **Tone**: a sincere friend sharing something, saying plainly what works and how. No AI-speak or filler ("a little trick", "a whole new flavour"); no "it's not X, it's Y" constructions; go easy on metaphors (the picture is already the metaphor); follow any technical term with one plain-language sentence; no signposts between pages ("next, let's look at…"): a page opens from what the last one found; the first line says what the film is about, and the ending is simple and direct, never preachy.

@@ -196,6 +196,11 @@ async function pool<T>(items: T[], n: number, fn: (x: T) => Promise<unknown>) {
 /** pictures drawn at once: the image service takes ~30 s for each */
 const PICTURES_AT_ONCE = 4;
 // pageChecks: a drawn page is checked at most 3 times (2 rounds of fixes); a revision starts from a checked page, 2.
+/** the length a film is held to: the user's choice, which they pay for by the minute. At most 6 pages a minute (one
+ *  more for a short film), and a narration whose estimate runs at most a third over (the estimate runs long; real
+ *  narration comes out 20–25% shorter). A 10-minute film of three textbook chapters ran to 70 pages and 22 minutes
+ *  when length was only a guide. */
+export const lengthBudget = (durationSec: number) => ({ pages: Math.ceil((durationSec / 60) * 6) + 1, estimateSec: Math.round(durationSec * 4 / 3) });
 const MAX = { pageLintMs: 90_000, pagesAtOnce: 10, storyboardFix: 2, scriptFix: 2, planTurns: 30, pageTurns: 40, reviewerTurns: 3, pageChecks: 3, kitChecks: 3, kitTurns: 30, revisionChecks: 2, reviewRounds: 2, reviewDefectsMs: 180_000 };
 /** the reviewer looks at one sheet and answers: little thinking, quickly */
 const REVIEWER_THINKING: Thinking = 'low';
@@ -434,13 +439,15 @@ export class Director {
     // a turn can end without the file (seen: a gateway answering a one-token "." mid-turn); ask once more, as for pages
     if (!this.project.exists('storyboard.json') && r.stopReason !== 'max_turns') r = await this.send(s, 'storyboard.json does not exist yet; write it, then stop and report. ' + replyNote(this.o.brief.replyLang, this.o.brief.lang));
     if (!this.project.exists('storyboard.json')) this.fail('storyboard', this.say(`没有写出分镜：${r.error || r.text}`, `No storyboard was written: ${r.error || r.text}`));
-    // the film's language is the server's to say (the page agents and the checks read it from here)
+    // the film's language and length are the server's to say (the page agents and the checks read them from here): a
+    // planner once raised its own target from 1 minute to 2
+    const target = this.o.brief.durationSec;
     try {
       const j = this.project.storyboard();
-      if (j.lang !== (this.o.brief.lang ?? 'zh')) this.project.write('storyboard.json', JSON.stringify({ ...j, lang: this.o.brief.lang ?? 'zh' }, null, 2));
+      if (j.lang !== (this.o.brief.lang ?? 'zh') || (target && j.durationSec !== target)) this.project.write('storyboard.json', JSON.stringify({ ...j, lang: this.o.brief.lang ?? 'zh', ...(target ? { durationSec: target } : {}) }, null, 2));
     } catch {}
     for (let round = 1; ; round++) {
-      const issues = [...this.project.storyboardIssues(), ...this.lookIssues()];
+      const issues = [...this.project.storyboardIssues(), ...this.lookIssues(), ...this.lengthIssues()];
       this.emit({ type: 'storyboard_check', round, issues });
       const reds = issues.filter((i) => i.level === 'red');
       if (!reds.length || round > MAX.storyboardFix) break;
@@ -464,6 +471,7 @@ export class Director {
     let r = await this.send(s, scriptPrompt(feedback, this.o.brief) + this.unseen('planner'));
     this.state.planner = s.ref; this.save();
     let check: Awaited<ReturnType<Project['scriptCheck']>>;
+    let condensed = false;
     for (let ask = 0; ; ask++) {
       // the planner rewrites script.js: put the server-owned fields back (a lost META.voice once rendered a silent film)
       this.serverMeta();
@@ -471,8 +479,18 @@ export class Director {
       if (check.code) this.fail('script', this.say(`口播脚本有错：`, `The narration script has an error: `) + `${check.err || check.out} ${r.error ?? ''}`);
       // the pages drawn are the narration's: a turn that ended before every storyboard page had its words made a
       // one-page film of an eight-page storyboard, green all the way. Ask for the rest; stop if they still don't come.
-      const narrated = new Set((await this.project.timeline()).pages.map((p) => p.id));
+      const timeline = await this.project.timeline();
+      const narrated = new Set(timeline.pages.map((p) => p.id));
       const missing = this.project.storyboard().pages.map((p) => p.id).filter((id) => !narrated.has(id));
+      // the length the user chose is kept to: a narration that runs well over is sent back once to be condensed (not
+      // after the user's own changes to the storyboard: what they asked for comes first)
+      const target = this.o.brief.durationSec, over = !missing.length && !feedback && !condensed && target > 0 && timeline.duration > lengthBudget(target).estimateSec;
+      if (over) {
+        condensed = true;
+        const m = (sec: number) => Math.round(sec / 6) / 10;
+        r = await this.send(s, `script.js is estimated at ${m(timeline.duration)} minutes; the film is ${m(target)} minutes, the length the user chose and pays for, and the estimate may run at most ${m(lengthBudget(target).estimateSec)}. Condense the narration to fit: keep every page and every main point, and cut secondary detail, extra examples, repetition and asides (fewer cues on a page, shorter lines). Then run node engine/tools/script.mjs, stop, and say in your report what was condensed. ` + replyNote(this.o.brief.replyLang, this.o.brief.lang));
+        continue;
+      }
       if (!missing.length) break;
       if (ask === MAX.scriptFix) this.fail('script', this.say(`口播没有写完：分镜里的 ${missing.join('、')} 没有口播`, `The narration is unfinished: ${missing.join(', ')} of the storyboard ha${missing.length > 1 ? 've' : 's'} no narration`) + (r.error ? ` (${r.error})` : ''));
       r = await this.send(s, `script.js has no narration for ${missing.join(', ')}: every page of storyboard.json needs its entry in PAGES, in the storyboard's order, with the same id. Add the missing pages and keep the ones already written, then run node engine/tools/script.mjs and stop. ` + replyNote(this.o.brief.replyLang, this.o.brief.lang));
@@ -481,6 +499,16 @@ export class Director {
     await s.close();
     this.state.stage = 'narrate'; this.save();
     this.emit({ type: 'stage', stage: 'script', status: 'done', detail: check.out.split('\n').pop() });
+  }
+
+  /** a storyboard with more pages than the length the user chose holds (lengthBudget) */
+  private lengthIssues(): { level: 'red'; msg: string }[] {
+    const target = this.o.brief.durationSec;
+    let pages = 0;
+    try { pages = this.project.storyboard().pages.length; } catch { return []; }   // an unreadable storyboard is reported already
+    const most = target > 0 ? lengthBudget(target).pages : Infinity;
+    if (pages <= most) return [];
+    return [{ level: 'red', msg: `${pages} pages for a ${Math.round(target / 6) / 10}-minute film: at most ${most}. The length is the user's choice and they pay for it: condense (every section and main point kept, secondary detail, extra examples and repetition given way, related items taken together) rather than run long, and say in your report what was condensed.` }];
   }
 
   /** what the storyboard's `look` still lacks: the film's components (any style), and for a designed style's film (its

@@ -32,3 +32,39 @@ test('a narration still short of the storyboard stops the film, saying which pag
   assert.equal(sent.length, 3);
   assert.match(error ?? '', /p02、p03 没有口播/);
 });
+
+/** the narration step of a 1-minute film whose planner's n-th reply is estimated at `seconds(n)` */
+async function timed(seconds: (n: number) => number, feedback?: string) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ft-script-'));
+  fs.writeFileSync(path.join(dir, 'storyboard.json'), JSON.stringify({ title: 'T', pages: [{ id: 'p01', section: 'p01', say: '…', beats: [] }] }));
+  const sent: string[] = [];
+  const runtime: AgentRuntime = { id: 'pi', model: { provider: 'x', id: 'x' }, open: async () => ({ ref: 'r', close: async () => {}, send: async (i) => { sent.push(i.text); return { text: 'ok', stopReason: 'done', usage: {} } as never; } }) };
+  const d = new Director({ dir, style: 'chalkboard', brief: { durationSec: 60, lang: 'zh', replyLang: 'zh' }, runtime });
+  Object.assign(d.project, { scriptCheck: async () => ({ code: 0, out: 'ok', err: '' }), timeline: async () => ({ duration: seconds(sent.length), pages: [{ id: 'p01' }] }), commit: async () => undefined });
+  Object.assign(d as object, { serverMeta: () => {} });
+  await d.script(feedback);
+  return sent;
+}
+
+test('a narration that runs well over the chosen length is sent back once to be condensed', async () => {
+  const sent = await timed(() => 150);
+  assert.equal(sent.length, 2);
+  assert.match(sent[1], /estimated at 2\.5 minutes; the film is 1 minutes.*at most 1\.3/);
+  assert.match(sent[1], /keep every page and every main point/);
+});
+
+test('a narration within a third over is kept, and the user\'s own changes are not pushed back', async () => {
+  assert.equal((await timed(() => 80)).length, 1);
+  assert.equal((await timed(() => 150, 'add a page on the history')).length, 1);
+});
+
+test('a storyboard with more pages than the length holds is red; the length is the server\'s', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ft-sb-'));
+  const page = (id: string) => ({ id, section: id, say: '…', beats: [] });
+  const d = new Director({ dir, style: 'chalkboard', brief: { durationSec: 60, lang: 'zh', replyLang: 'zh' }, runtime: {} as AgentRuntime });
+  const issues = () => (d as unknown as { lengthIssues(): { msg: string }[] }).lengthIssues();
+  fs.writeFileSync(path.join(dir, 'storyboard.json'), JSON.stringify({ title: 'T', pages: Array.from({ length: 7 }, (_, i) => page(`p0${i + 1}`)) }));
+  assert.deepEqual(issues(), []);
+  fs.writeFileSync(path.join(dir, 'storyboard.json'), JSON.stringify({ title: 'T', pages: Array.from({ length: 8 }, (_, i) => page(`p0${i + 1}`)) }));
+  assert.match(issues()[0].msg, /8 pages for a 1-minute film: at most 7/);
+});
