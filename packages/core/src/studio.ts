@@ -74,6 +74,8 @@ export interface StudioOptions {
    * parks its runs while they wait (a sandbox) goes on for them, metered as the user's own go-ahead
    */
   firstPageWaitMs?: number;
+  /** each page's own checks (DirectorOptions.pageChecks): 'hard' fixes only what a viewer sees broken, once */
+  pageChecks?: 'full' | 'hard';
   goOnHere?: boolean;
   /**
    * take a brand brief and its files with a new project (`NewProjectInput.brand`, createProject's `brandFiles`): for a
@@ -92,7 +94,7 @@ export class Studio {
     this.dataDir = o.dataDir ?? DATA_DIR;
     this.config = o.config ?? configFile(this.dataDir);
     this.brands = o.brand === true;
-    this.store = new Projects(path.join(this.dataDir, 'projects'), this.config, o.renderer, o.review, o.onEvent, { localFiles: o.localFiles ?? true, web: o.web ?? true }, { waitMs: o.firstPageWaitMs ?? FIRST_PAGE_WAIT_MS, here: o.goOnHere ?? true });
+    this.store = new Projects(path.join(this.dataDir, 'projects'), this.config, o.renderer, o.review, o.onEvent, { localFiles: o.localFiles ?? true, web: o.web ?? true }, { waitMs: o.firstPageWaitMs ?? FIRST_PAGE_WAIT_MS, here: o.goOnHere ?? true, pageChecks: o.pageChecks });
     applyProxy(this.config.load().proxy);
     // every project reaches the engine through links; point them at this install (it may have moved, or been renamed)
     if (o.linkProjects !== false) try { for (const id of fs.readdirSync(this.store.root)) { try { linkProject(this.store.dir(id)); } catch {} } } catch {}

@@ -128,3 +128,27 @@ test('a change at the first page is made in the narration and the plan first, an
   assert.match(f.asked['page-p01'][2], /The user's directions for this film[\s\S]*不要开头的提问[\s\S]*所有内容都要有/);
   assert.match(f.asked['check-p01'].at(-1) ?? '', /outrank the storyboard[\s\S]*不要开头的提问/);
 });
+
+test('\'hard\' page checks: no reviewer, one round of fixes, and only for what a viewer sees broken', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ft-hard-'));
+  fs.mkdirSync(path.join(dir, 'pages'));
+  fs.writeFileSync(path.join(dir, 'script.js'), "(function (root) {\n  const META = {\n    style: 'whiteboard',\n    extras: [],\n  };\n  root.SCRIPT = { META, PAGES: [] };\n})(globalThis);\n");
+  const asked: Record<string, string[]> = {}, opened: string[] = [];
+  const d = new Director({ dir, style: 'whiteboard', brief: { durationSec: 60, lang: 'zh', replyLang: 'zh' }, runtime: artist(asked), reviewer: { runtime: { ...artist(asked), open: async (s) => { opened.push(s.name); return artist(asked).open(s); } } }, pageChecks: 'hard', firstPage: false });
+  const sb = { title: 'T', summary: 'S', pages: [{ id: 'p01', section: 's', say: '…', beats: [] }] };
+  const timing = { duration: 5, pages: [{ id: 'p01', start: 0, end: 5, speechEnd: 4, cues: [] }] };
+  // every check finds advice (text-heavy) and a broken thing (text off the frame)
+  let checks = 0;
+  const found = [{ kind: 'text-heavy', level: 'error', local: 1, msg: 'text covers 60% of the page' }, { kind: 'off-canvas', level: 'error', local: 2, msg: 'off-canvas: "1000" box 1716,204–1994,322' }];
+  Object.assign(d.project, { check: async () => { checks++; return { issues: found, sheet: 'sheet.jpg' }; }, lint: async () => found, snap: async () => 'sheet.jpg', commit: async () => undefined, storyboard: () => sb, timeline: async () => timing });
+  const f = d as unknown as Pick<Director, 'pages'> & { state: { stage: string; pages: Record<string, { status: string; issues: { msg: string }[] }> } };
+  f.state.stage = 'pages';
+  await f.pages();
+  assert.equal(checks, 2, 'the draft and one round of fixes');
+  assert.deepEqual(opened.filter((n) => n.startsWith('check-')), [], 'no reviewer');
+  const fixAsk = asked['page-p01'][1];
+  assert.match(fixAsk, /off-canvas/);
+  assert.doesNotMatch(fixAsk, /text covers 60%/);
+  assert.equal(f.state.pages.p01.status, 'flagged');
+  assert.deepEqual(f.state.pages.p01.issues.map((i) => i.msg), [found[1].msg]);
+});

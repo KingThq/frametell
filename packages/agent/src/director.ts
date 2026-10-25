@@ -58,6 +58,13 @@ export interface DirectorOptions {
    */
   review?: 'full' | 'defects';
   /**
+   * each page's own checks: 'full' (the default) is lint and the reviewer, up to two rounds of fixes; 'hard' is lint
+   * alone, and one round of fixes for what a viewer would see broken (HARD), never for advice. Measured 2026-10-25 on
+   * production (2,138 pages): the rounds after the first draft were 53% of a page's time and 29% of its cost, and most
+   * of them moved text a few pixels
+   */
+  pageChecks?: 'full' | 'hard';
+  /**
    * research before the storyboard, on its own (cheaper) model: what the request points at is read, and the web
    * searched when `search`; the brief becomes materials/research.md. Absent: no research
    */
@@ -206,6 +213,8 @@ const MAX = { pageLintMs: 90_000, pagesAtOnce: 10, storyboardFix: 2, scriptFix: 
 const REVIEWER_THINKING: Thinking = 'low';
 /** what breaks a film whatever it looks like: the whole-film check's 'defects' mode takes only these */
 const DEFECTS: LintKind[] = ['runtime', 'api', 'nondeterministic', 'palette'];
+/** what a viewer sees broken on a page: its 'hard' checks fix only these (not advice such as text-heavy or sparse) */
+const HARD: LintKind[] = ['runtime', 'api', 'nondeterministic', 'empty-opening', 'empty-ending', 'off-canvas', 'subtitle-band', 'overlap', 'small-text'];
 /** findings that mean the page's code does not run as written: such a page is not drawn */
 const BROKEN: LintKind[] = ['runtime', 'api'];
 const errorsOf = (issues: LintIssue[]) => issues.filter((i) => i.level === 'error');
@@ -1140,7 +1149,10 @@ export class Director {
       const code = () => this.project.read(`pages/${id}.js`);
       let issues: LintIssue[] = [], verdict: { pass: boolean; problems: Problem[] } | undefined, checked: string | undefined;
       let reviewer: AgentSession | undefined;
-      const checks = fix ? MAX.revisionChecks : MAX.pageChecks;
+      const hard = this.o.pageChecks === 'hard';
+      // 'hard': the draft and one round of fixes, of what a viewer would see broken
+      const checks = hard ? 2 : fix ? MAX.revisionChecks : MAX.pageChecks;
+      const mustFix = (all: LintIssue[]) => errorsOf(all).filter((i) => !hard || HARD.includes(i.kind));
       try {
         for (let round = was?.rounds ?? 1; !declined && round <= checks; round++) {
           st.status = 'checking'; st.rounds = round; this.setPage(id, st);
@@ -1160,9 +1172,11 @@ export class Director {
           }
           this.setPage(id, { ...st, issues: issues.map(fromLint) }, { sheet: c.sheet });
           const change = unchanged() ? fix : undefined;
-          reviewer ??= await this.session(`check-${id}`, reviewerSystem(this.o.style, this.o.brief.styleNotes, this.designed()?.card) + kitReviewNote(this.kitItems()), MAX.reviewerTurns, undefined, undefined, { tools: 'none', answers: [VERDICT] });
-          verdict = await this.verdict(reviewer, reviewerPrompt(sb, id, t, round, issues, times, change, this.o.brief.brand, this.assetsOn(sb, id), pictureReviewNote(this.picturesOn(sb, id)), this.directions()), c.sheet);
-          const errors = errorsOf(issues), problems = verdict?.pass === false ? verdict.problems : [];
+          if (!hard) {
+            reviewer ??= await this.session(`check-${id}`, reviewerSystem(this.o.style, this.o.brief.styleNotes, this.designed()?.card) + kitReviewNote(this.kitItems()), MAX.reviewerTurns, undefined, undefined, { tools: 'none', answers: [VERDICT] });
+            verdict = await this.verdict(reviewer, reviewerPrompt(sb, id, t, round, issues, times, change, this.o.brief.brand, this.assetsOn(sb, id), pictureReviewNote(this.picturesOn(sb, id)), this.directions()), c.sheet);
+          }
+          const errors = mustFix(issues), problems = verdict?.pass === false ? verdict.problems : [];
           if (!errors.length && !problems.length) { st.status = 'ok'; st.issues = []; break; }
           if (round === checks) break;
           r = await this.send(s, fixPrompt(round, errors, problems, times, change) + this.unseen(`page-${id}`), [c.sheet], PAGE_THINKING);
@@ -1185,7 +1199,7 @@ export class Director {
       const broken = issues.filter((i) => BROKEN.includes(i.kind));
       if (broken.length) throw new Error(broken.map((i) => i.msg).join('\n'));
       if (st.status !== 'ok' && st.status !== 'flagged') {
-        const errors = errorsOf(issues), problems = verdict?.pass === false ? verdict.problems : [];
+        const errors = mustFix(issues), problems = verdict?.pass === false ? verdict.problems : [];
         st.status = errors.length || problems.length ? 'flagged' : 'ok';
         st.issues = [...errors.map(fromLint), ...problems.map(fromReview)];
       }

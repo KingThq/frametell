@@ -122,7 +122,7 @@ export const FULL_REACH: ResearchReach = { localFiles: true, web: true };
 /** how long the first page waits for the user before the rest is drawn in its look */
 export const FIRST_PAGE_WAIT_MS = 15 * 60_000;
 /** the first page's wait: how long, and whether this process goes on by itself when it runs out */
-export interface FirstPageWait { waitMs: number; here: boolean }
+export interface FirstPageWait { waitMs: number; here: boolean; /** each page's own checks (DirectorOptions.pageChecks) */ pageChecks?: 'full' | 'hard' }
 
 /**
  * What research the film gets before its storyboard, if any: links, repositories and (on this machine) folders named in
@@ -472,7 +472,7 @@ class Runner {
       director = new Director({
         dir, runtime, pages, reviewer, research: plan && research ? { ...research, ...plan } satisfies DirectorOptions['research'] : undefined,
         style: meta.style, look: meta.look, prices, tts, voice, concurrency: cfg.defaults.concurrency, images: imagesFor(cfg),
-        ...(this.wait.waitMs ? { firstPageWaitMs: this.wait.waitMs } : {}),
+        ...(this.wait.waitMs ? { firstPageWaitMs: this.wait.waitMs } : {}), ...(this.wait.pageChecks ? { pageChecks: this.wait.pageChecks } : {}),
         brief: { durationSec: meta.durationSec, topic: meta.topic, notes: meta.notes, styleNotes: meta.styleNotes, brand: meta.brand, lang: meta.lang ?? 'zh', replyLang: this.replyIn(meta), voice: provider, preferences: cfg.preferences },
         emit: this.emit, signal: this.abort.signal, renderer: this.renderer, review: this.review, exportDir: this.renderer ? undefined : cfg.exportDir,
       });
