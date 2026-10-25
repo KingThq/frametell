@@ -355,3 +355,87 @@ ${flagged.length ? '\nThese pages still had problems after their own checks: ' +
 
 Fix locally with edit; never rewrite a whole page file. Fix only problems across pages and obvious defects (styles that don't match, a page that is clearly empty, text off the page or overlapping), at most 2 pages; leave small blemishes. When done, stop and tell the user in one plain sentence which page you changed and how it looks different (e.g. "The timer on page 5 flickered in its second half; that's fixed"), without terms like lint, determinism or p05. If nothing needs changing, change nothing and stop. ${replyNote(replyLang)}`;
 }
+
+// ── a message while the film is being made: a change to follow, a question to answer, or both ──
+
+/**
+ * What a hosted service knows about the account's credits, sent with a message (the engine itself knows only what the
+ * model turns cost in money): the balance, what this film has spent, what a minute of film is quoted at, and what
+ * exporting it would take.
+ */
+export interface CreditFacts { available: number; spent: number; perMinute: number; exportQuote?: number }
+/** credit facts as they came over the wire, checked field by field: undefined unless the three numbers it needs are there */
+export function cleanCredits(v: unknown): CreditFacts | undefined {
+  const o = v as Record<string, unknown> | null | undefined;
+  const num = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) ? x : undefined);
+  const available = num(o?.available), spent = num(o?.spent), perMinute = num(o?.perMinute), exportQuote = num(o?.exportQuote);
+  if (available === undefined || spent === undefined || perMinute === undefined) return undefined;
+  return { available, spent, perMinute, ...(exportQuote !== undefined ? { exportQuote } : {}) };
+}
+/** what the director knows of the film when a message comes in: where it is, how far the pages are, how long it is */
+export interface FilmFacts {
+  stage: string;
+  pagesDone: number;
+  pagesTotal?: number;
+  /** the narration's length once the script is written (`planned`), else the length asked for */
+  durationSec?: number;
+  planned?: boolean;
+  /** what the model turns have cost so far, in the director's currency */
+  cost?: { amount: number; currency: string };
+}
+
+/**
+ * Credits still needed to finish the film, worked out here and not by the model: the film's minutes at the quoted rate,
+ * less what it has spent already, plus the export. Undefined when the film's length is not known.
+ */
+export function creditsToFinish(durationSec: number | undefined, c: CreditFacts): { needed: number; covered: boolean } | undefined {
+  if (!durationSec || durationSec <= 0 || !Number.isFinite(c.perMinute)) return undefined;
+  const needed = Math.max(0, Math.ceil(durationSec / 60 * c.perMinute) - c.spent) + (c.exportQuote ?? 0);
+  return { needed, covered: c.available >= needed };
+}
+
+/**
+ * The director's answer to a message mid-run: whether it asks for a change to the film, needs a reply, or both. Two
+ * booleans rather than one word to pick: a schema of plain types is one every model service takes.
+ */
+export const ROUTE: AnswerTool = {
+  name: 'route',
+  description: "What the user's message is: a change or instruction for the film, a question or remark that needs a reply, or both; and the reply to show them.",
+  parameters: Type.Object({
+    change: Type.Boolean({ description: 'true when the message asks for something in the film to be made or done differently' }),
+    question: Type.Boolean({ description: 'true when the message asks something, or says something that needs an answer rather than a change' }),
+    reply: Type.String({ description: 'what to tell the user: the answer to their question, short (one to three sentences), in the language they wrote in. Empty when it is only a change' }),
+  }),
+};
+/** who reads a message the user sends while the film is being made */
+export const routeSystem = "You are the director of an explainer film that is being made right now, and you read what the user types into the film's message box. A change or instruction for the film is passed on to the artists drawing it; a question or a remark gets an answer from you. You answer only with the route tool. Answer from the facts you are given; never make up a figure you were not given.";
+
+/** what the router is shown: the message, and what is known about the film (and the account, on a hosted service) */
+export function routeAsk(text: string, film: FilmFacts, credits?: CreditFacts, replyLang?: Lang) {
+  const min = (s: number) => `${Math.round(s / 6) / 10} min`;
+  const known = [
+    `- Stage: ${film.stage}`,
+    `- Pages drawn: ${film.pagesDone}${film.pagesTotal ? ` of ${film.pagesTotal}` : ''}`,
+    film.durationSec ? `- Length: ${min(film.durationSec)} (${film.planned ? 'the narration as written' : 'as asked for; the narration is not written yet'})` : '',
+    // money is the open-source studio's measure; a hosted service's users pay in credits and are told those instead
+    film.cost && !credits ? `- Spent on the model so far: ${film.cost.amount.toFixed(2)} ${film.cost.currency}` : '',
+  ].filter(Boolean);
+  const left = credits && creditsToFinish(film.durationSec, credits);
+  const account = credits ? [
+    `- Credits in the account: ${credits.available}`,
+    `- Credits this film has spent: ${credits.spent}`,
+    `- A minute of film is quoted at ${credits.perMinute} credits${credits.exportQuote ? `; exporting it, ${credits.exportQuote} credits` : ''}`,
+    left
+      ? `- Credits still needed to finish it${credits.exportQuote ? ' and export it' : ''}: about ${left.needed} (worked out from the above; quote this figure). The account ${left.covered ? 'has enough' : `is ${left.needed - credits.available} short`}.`
+      : "- The credits still needed can't be worked out yet: the film's length is not known.",
+  ] : [];
+  return `The user wrote, while the film is being made:
+"""
+${text}
+"""
+
+The film now:
+${known.join('\n')}
+${account.length ? `\nThe account (credits pay for making the film):\n${account.join('\n')}\n` : ''}
+Is this a change or instruction for the film (how it looks, what it says, what to add or leave out), a question or a remark that needs a reply, or both? A change is passed on to the artists as the user wrote it; don't repeat it. For a question, answer it in the reply from the facts above: short, plain, without internal terms (stage names, page ids); when the facts don't say, say so plainly. For a change alone, leave the reply empty. Reply in the language the user wrote in${replyLang ? ` (most likely ${LANG_NAME[replyLang]})` : ''}. Call route.`;
+}

@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createCatalog, PROVIDERS, type ProviderSpec } from '@frametell/models';
 import { bundledSample, ELEVENLABS_DEFAULT_VOICES, ElevenLabsError, elevenLabsTts, listElevenLabsVoices, volcengineTts, VoiceNotFound, VOLCENGINE_VOICES } from '@frametell/voice';
-import { BRAND_DIR, Project, STYLES, cleanBrand, cleanLook, openProjectFile, writeIn, type OpenFile, type Renderer, type Timeline } from '@frametell/agent';
+import { BRAND_DIR, Project, STYLES, cleanBrand, cleanCredits, cleanLook, openProjectFile, writeIn, type OpenFile, type Renderer, type Timeline } from '@frametell/agent';
 import { linkProject } from '@frametell/engine/tools/project.mjs';
 import { DATA_DIR, configFile, patchConfig, publicConfig, type ConfigStore } from './config.js';
 import { FIRST_PAGE_WAIT_MS, Projects } from './runner.js';
@@ -313,8 +313,9 @@ export class Studio {
   deleteProject(id: string) { this.store.remove(id); this.timelines.delete(id); }
   /** file a project under a group on the home page; '' takes it out of any */
   moveProject(id: string, group: string) { this.store.setGroup(id, String(group ?? '')); }
-  /** talk to the director: storyboard feedback, a note mid-run, or a change to the finished film */
-  say(id: string, text: string, refs?: unknown) { return this.store.runner(id).say(text, cleanRefs(refs)); }
+  /** talk to the director: storyboard feedback, a note or a question mid-run, or a change to the finished film.
+   *  `credits`: a hosted service's credit facts (CreditFacts), checked here, for a question about what is left to pay */
+  say(id: string, text: string, refs?: unknown, credits?: unknown) { return this.store.runner(id).say(text, cleanRefs(refs), cleanCredits(credits)); }
   /** save a file the user attached to a message; returns the reference to send with it */
   attach(id: string, name: string, data: Uint8Array): Promise<UserRef> { const meta = this.store.read(id); return attach(this.store.dir(id), name, data, meta.lang ?? 'zh'); }
 

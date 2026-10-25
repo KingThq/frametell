@@ -9,8 +9,9 @@ import type { StudioEvent } from './events.js';
 
 const PAGE = (id: string) => `ENGINE.visual('${id}', (P) => {\n  P.text('${id}', { x: 960, y: 540 });\n});\n`;
 
-/** the page model writes its page; `asked` keeps each page session's prompts */
-function artist(asked: Record<string, string[]>): AgentRuntime {
+/** the page model writes its page; `asked` keeps each page session's prompts; `routes`: the router's answers, in turn
+ *  (none: it answers nothing, and every message is a change) */
+function artist(asked: Record<string, string[]>, routes: unknown[] = []): AgentRuntime {
   return {
     id: 'pi', model: { provider: 'x', id: 'flash' },
     async open(s) {
@@ -20,18 +21,19 @@ function artist(asked: Record<string, string[]>): AgentRuntime {
           const id = s.name.slice(5), f = path.join(s.cwd, `pages/${id}.js`);
           fs.writeFileSync(f, fs.existsSync(f) ? fs.readFileSync(f, 'utf8') + '// changed\n' : PAGE(id));
         }
+        if (s.name === 'route') { const a = routes.shift(); return { text: '', stopReason: 'done', usage: {}, answers: a ? [{ name: 'route', args: a }] : [] } as never; }
         return { text: 'done', stopReason: 'done', usage: {}, answers: s.name.startsWith('check-') ? [{ name: 'verdict', args: { pass: true, problems: [] } }] : [] } as never;
       } };
     },
   };
 }
 
-function film(o: { pages?: number; firstPage?: boolean } = {}) {
+function film(o: { pages?: number; firstPage?: boolean; routes?: unknown[] } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ft-firstpage-'));
   fs.mkdirSync(path.join(dir, 'pages'));
   fs.writeFileSync(path.join(dir, 'script.js'), "(function (root) {\n  const META = {\n    style: 'whiteboard',\n    extras: [],\n  };\n  root.SCRIPT = { META, PAGES: [] };\n})(globalThis);\n");
   const asked: Record<string, string[]> = {}, events: StudioEvent[] = [];
-  const art = artist(asked);
+  const art = artist(asked, o.routes);
   const d = new Director({ dir, style: 'whiteboard', brief: { durationSec: 60, lang: 'zh', replyLang: 'zh' }, runtime: art, reviewer: { runtime: art }, emit: (e) => events.push(e), ...(o.firstPage === false ? { firstPage: false } : {}) });
   const n = o.pages ?? 3;
   const sb = { title: 'T', summary: 'S', pages: Array.from({ length: n }, (_, i) => ({ id: `p0${i + 1}`, section: 's', say: '…', beats: [] })) };
@@ -85,5 +87,21 @@ test('a run picked up again while the first page waits does not say so a second 
   // the run continues (the user goes ahead after a restart): the wait is not announced again
   await f.d.firstPage(async () => undefined);
   assert.equal(f.events.filter((e) => e.type === 'first_page').length, 1);
+  assert.equal(f.d.state.firstPage, 'done');
+});
+
+test('a question at the first page is answered and the page waits on, not redrawn; a change with a question is both', async () => {
+  const f = film({ routes: [{ change: false, question: true, reply: 'Each page takes about a minute.' }, { change: true, question: true, reply: 'Sure.' }] });
+  f.d.state.stage = 'pages';
+  const answers = ['how long does each page take?', '线条再粗一点，可以吗？', undefined];
+  await f.d.firstPage(async () => answers.shift());
+  const notes = f.events.filter((e): e is Extract<StudioEvent, { type: 'note' }> => e.type === 'note').map((e) => e.text);
+  assert.equal(notes[0], 'Each page takes about a minute.');
+  assert.ok(notes.includes('Sure.'));
+  // the question drew nothing and was not said again as a wait; the change redrew the first page once and waited again
+  assert.equal(f.asked['page-p01'].length, 2);
+  assert.doesNotMatch(f.asked['page-p01'].join('\n'), /how long does each page take/);
+  assert.match(f.asked['page-p01'][1], /线条再粗一点/);
+  assert.equal(f.events.filter((e) => e.type === 'first_page').length, 2);
   assert.equal(f.d.state.firstPage, 'done');
 });

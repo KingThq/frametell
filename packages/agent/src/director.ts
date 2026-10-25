@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { narrate, type TtsProvider } from '@frametell/voice';
 import { Project, childCmd, projectFiles, type LintIssue, type LintKind, type PageTiming, type Storyboard, type Renderer } from './project.js';
-import { FLAG, KIT_CHANGE, VERDICT, fixPrompt, kitChangeAsk, kitChangePrompt, kitChangeSystem, kitFixPrompt, kitPrompt, kitReviewNote, kitReviewerPrompt, kitSystem, langNote, voiceNote, pagePrompt, pageSystem, plannerSystem, replyNote, reviewPrompt, reviewerPrompt, reviewerSystem, scriptPrompt, storyboardFixPrompt, storyboardPrompt, verdictAgain, type Brief, type Problem } from './prompts.js';
+import { FLAG, KIT_CHANGE, ROUTE, VERDICT, fixPrompt, kitChangeAsk, kitChangePrompt, kitChangeSystem, kitFixPrompt, kitPrompt, kitReviewNote, kitReviewerPrompt, kitSystem, langNote, voiceNote, pagePrompt, pageSystem, plannerSystem, replyNote, reviewPrompt, reviewerPrompt, reviewerSystem, routeAsk, routeSystem, scriptPrompt, storyboardFixPrompt, storyboardPrompt, verdictAgain, type Brief, type CreditFacts, type FilmFacts, type Problem } from './prompts.js';
 import { KIT_CHECK_FILE, KIT_FILE, KIT_KEPT, kitCell, kitCheckPage, kitIssues, kitPart, kitPartCheck, kitPlan, kitStage, kitTimes, kitWanted, type KitItem } from './kit.js';
 import { addUsage, emptyUsage, type AgentRuntime, type AgentSession, type SessionOptions, type Thinking, type TokenUsage, type TurnResult } from './runtime/types.js';
 import type { PageIssue, PageStatus, Stage, StudioEvent } from './events.js';
@@ -200,6 +200,10 @@ const BROKEN: LintKind[] = ['runtime', 'api'];
 const errorsOf = (issues: LintIssue[]) => issues.filter((i) => i.level === 'error');
 const fromLint = (i: LintIssue): PageIssue => ({ from: 'lint', kind: i.kind, at: i.local, msg: i.msg, data: i.data });
 const fromReview = (p: Problem): PageIssue => ({ from: 'review', at: p.at, msg: p.what });
+/** the session that reads a message the user sends mid-run (route) */
+const ROUTE_SESSION = 'route';
+/** what a message mid-run is: a change for the film (noted for the sessions), a question (answered with `reply`), or both */
+export type MessageRoute = { kind: 'change' | 'question' | 'both'; reply?: string };
 /** what the page agent said with its flag tool, if it used it */
 const flagOf = (r: TurnResult) => r.answers.find((a) => a.name === FLAG.name)?.args.reason as string | undefined;
 
@@ -266,6 +270,42 @@ export class Director {
     (this.state.notes ??= []).push(text.trim());
     this.save();
   }
+  /**
+   * What a message the user sends mid-run is, as the model's route call says: a change for the film, a question that
+   * needs only a reply, or both (with the reply). One short session on the reviewer's model, with no tools. Anything
+   * that goes wrong (no call, a failed turn, a stop, a question with no reply) reads it as a change, as every message
+   * was before: an instruction is never lost. `credits`: what a hosted service knows of the account, for a question
+   * about what is left to pay.
+   */
+  async route(text: string, credits?: CreditFacts): Promise<MessageRoute> {
+    let s: AgentSession | undefined;
+    try {
+      s = await this.session(ROUTE_SESSION, routeSystem, MAX.reviewerTurns, undefined, undefined, { tools: 'none', answers: [ROUTE] });
+      const r = await this.send(s, routeAsk(text, await this.facts(), credits, this.o.brief.replyLang), undefined, REVIEWER_THINKING);
+      const a = r.answers.find((x) => x.name === ROUTE.name)?.args as { change?: unknown; question?: unknown; reply?: unknown } | undefined;
+      const reply = typeof a?.reply === 'string' && a.reply.trim() ? a.reply.trim() : undefined;
+      if (a?.question === true && reply) return { kind: a.change === true ? 'both' : 'question', reply };
+    } catch { /* read as a change */ } finally { await s?.close().catch(() => {}); }
+    return { kind: 'change' };
+  }
+  /** what the director knows of the film right now, for a question about it: never throws, says what it can */
+  private async facts(): Promise<FilmFacts> {
+    let pagesTotal: number | undefined, durationSec: number | undefined;
+    try { pagesTotal = this.project.storyboard().pages.length; } catch { /* no storyboard yet */ }
+    // the narration's length once the script is written (one run of the engine's timeline tool), else the length asked for
+    if (!['research', 'storyboard', 'approval', 'script'].includes(this.state.stage)) {
+      try { durationSec = (await this.project.timeline()).duration || undefined; } catch { /* the asked-for length below */ }
+    }
+    const cost = this.cost();
+    return {
+      stage: this.state.stage,
+      pagesDone: Object.values(this.state.pages ?? {}).filter((p) => p.status === 'ok' || p.status === 'flagged').length,
+      pagesTotal,
+      durationSec: durationSec ?? (this.o.brief.durationSec || undefined),
+      planned: durationSec !== undefined,
+      ...(cost.amount > 0 ? { cost } : {}),
+    };
+  }
   /** the notes a session hasn't seen yet, as a block to append to its next message */
   private unseen(key: string): string {
     const all = this.state.notes ?? [], cur = (this.state.cursors ??= {})[key] ?? 0;
@@ -307,13 +347,15 @@ export class Director {
     // a page that failed before is drawn again by the film's own model: the same model, asked the same way, failed the
     // same pages again on every Continue
     if (name.startsWith('page-') && this.redraw.has(name.slice(5))) return { runtime: this.o.runtime, prices: this.o.prices };
-    if (name.startsWith('check-')) return this.o.reviewer ?? this.o.pages ?? { runtime: this.o.runtime, prices: this.o.prices };
+    // reading a message mid-run is one short answer, like a verdict: the reviewer's (cheapest) model
+    if (name.startsWith('check-') || name === ROUTE_SESSION) return this.o.reviewer ?? this.o.pages ?? { runtime: this.o.runtime, prices: this.o.prices };
     return this.o.pages && (name.startsWith('page-') || name === 'review' || name.startsWith('kit-')) ? this.o.pages : { runtime: this.o.runtime, prices: this.o.prices };
   }
   private async session(name: string, system: string, maxTurns: number, resume?: string, signal = this.o.signal, tools: Pick<SessionOptions, 'tools' | 'answers'> = {}): Promise<AgentSession> {
     const { runtime, prices } = this.model(name);
-    // a reviewer's words are for the page agent, not the people watching: only its turns go out, to be counted
-    const shown = !name.startsWith('check-');
+    // a reviewer's words are for the page agent, not the people watching: only its turns go out, to be counted (the
+    // router's too: its reply goes out as a note, from the runner)
+    const shown = !name.startsWith('check-') && name !== ROUTE_SESSION;
     return runtime.open({ name, system, cwd: this.o.dir, maxTurns, signal, ...tools, onEvent: (event) => {
       if (shown || event.type === 'turn') this.emit({ type: 'agent', session: name, event });
       if (event.type === 'turn') { this.countTurn(event.usage, prices, runtime.model); if (name.startsWith('page-')) this.firstTurn?.(); }
@@ -801,6 +843,11 @@ export class Director {
       said = false;
       const change = (await approve(this.project.storyboard()))?.trim();
       if (!change) break;
+      // a question about the film is answered and the first page waits on, as it was (its wait running on, not said
+      // again); a change, or a message that can't be read, is made as before, and with a question in it, answered too
+      const heard = await this.route(change);
+      if (heard.reply) this.emit({ type: 'note', text: heard.reply });
+      if (heard.kind === 'question') { said = true; continue; }
       // for the first page now, and for every page drawn after it (each reads the notes it hasn't seen); a change to a
       // thing the film draws with its own components is made in them first, or the other pages would still draw it the
       // old way (they are fixed for the pages' file tools)

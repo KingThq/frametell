@@ -7,7 +7,7 @@ import crypto from 'node:crypto';
 import { createProject, linkProject } from '@frametell/engine/tools/project.mjs';
 import { createCatalog } from '@frametell/models';
 import { elevenLabsTts, volcengineTts } from '@frametell/voice';
-import { createWeb, openaiImages, userAssets, Director, findSources, hasSources, offlineWeb, openProjectFile, piRuntime, Project, readFd, writeIn, type AgentRuntime, type DirectorOptions, type Renderer, type StudioEvent, type Storyboard, type UserRef } from '@frametell/agent';
+import { createWeb, openaiImages, userAssets, Director, findSources, hasSources, offlineWeb, openProjectFile, piRuntime, Project, readFd, writeIn, type AgentRuntime, type CreditFacts, type DirectorOptions, type MessageRoute, type Renderer, type StudioEvent, type Storyboard, type UserRef } from '@frametell/agent';
 import type { Config, ConfigStore } from './config.js';
 import { prepareMaterials } from './materials.js';
 import { applyProxy } from './net.js';
@@ -557,9 +557,11 @@ class Runner {
 
   /**
    * The user said something. At the storyboard it is the change request; while the director works it is a note the
-   * next step picks up; after the film it starts a revision; while paused it is kept for when the run continues.
+   * next step picks up, or a question it answers (heard); after the film it starts a revision; while paused it is kept
+   * for when the run continues. `credits`: what a hosted service knows of the account's credits, for a question about
+   * what the film will cost (the engine knows only money).
    */
-  say(said: string, refs: UserRef[] = []): boolean {
+  say(said: string, refs: UserRef[] = [], credits?: CreditFacts): boolean {
     said = said.trim();
     if (!said && !refs.length) return false;
     this.emit({ type: 'user', text: said, ...(refs.length ? { refs } : {}) });
@@ -577,11 +579,7 @@ class Runner {
       this.emit({ type: 'note', text: this.tr('记下了，导出完就接着改', 'Noted. I’ll make the change once the export finishes.') });
       return true;
     }
-    if (this.status === 'running' && this.director) {
-      this.director.message(text);
-      this.emit({ type: 'note', text: this.tr('收到，接下来的步骤会照这个来', 'Got it. The next steps will follow this.') });
-      return true;
-    }
+    if (this.status === 'running' && this.director) { void this.heard(this.director, text, credits); return true; }
     if (this.status === 'done' || this.stateStage() === 'done') { void this.revise(text); return true; }
     // after an error, what the user writes is how to go on: they typed 「继续」 again and again, and nothing moved. A run
     // the user paused goes on when asked to; anything else waits for it, as a note.
@@ -593,6 +591,18 @@ class Runner {
     this.parked.push(text);
     this.emit({ type: 'note', text: this.tr('记下了，继续制作时会照这个来', 'Noted. I’ll follow this when work resumes.') });
     return true;
+  }
+
+  /**
+   * A message while the director works, read by the model (Director.route): a change is noted for the next steps, as
+   * every message once was; a question is answered and not noted ("how many credits do I need to finish" went to the
+   * artists, and nobody answered); both, both, with the answer said. A message that can't be read is a change: an
+   * instruction is never lost. Noted on the director that read it, whose state is the film's even if the run ended.
+   */
+  private async heard(d: Director, text: string, credits?: CreditFacts) {
+    const r = await d.route(text, credits).catch((): MessageRoute => ({ kind: 'change' }));
+    if (r.kind !== 'question') d.message(text);
+    this.emit({ type: 'note', text: r.reply ?? this.tr('收到，接下来的步骤会照这个来', 'Got it. The next steps will follow this.') });
   }
 
   /**
