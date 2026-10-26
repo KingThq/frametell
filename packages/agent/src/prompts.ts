@@ -380,6 +380,8 @@ export interface FilmFacts {
   /** the narration's length once the script is written (`planned`), else the length asked for */
   durationSec?: number;
   planned?: boolean;
+  /** what the film waits for the user on: 'first_page', its first page drawn alone for them to go ahead or ask for a change */
+  waiting?: 'first_page';
   /** what the model turns have cost so far, in the director's currency */
   cost?: { amount: number; currency: string };
 }
@@ -404,6 +406,7 @@ export const ROUTE: AnswerTool = {
   parameters: Type.Object({
     change: Type.Boolean({ description: 'true when the message asks for something in the film to be made or done differently' }),
     question: Type.Boolean({ description: 'true when the message asks something, or says something that needs an answer rather than a change' }),
+    go: Type.Optional(Type.Boolean({ description: 'true when the film is waiting for the user and the message only tells it to go on (continue, start, go ahead, looks good), with nothing to change' })),
     reply: Type.String({ description: 'what to tell the user: the answer to their question, short (one to three sentences), in the language they wrote in. Empty when it is only a change' }),
   }),
 };
@@ -416,6 +419,7 @@ export function routeAsk(text: string, film: FilmFacts, credits?: CreditFacts, r
   const known = [
     `- Stage: ${film.stage}`,
     `- Pages drawn: ${film.pagesDone}${film.pagesTotal ? ` of ${film.pagesTotal}` : ''}`,
+    film.waiting === 'first_page' ? '- Waiting for the user: the first page is drawn alone for them to see the look; nothing else is drawn until they go ahead or ask for a change' : '',
     film.durationSec ? `- Length: ${min(film.durationSec)} (${film.planned ? 'the narration as written' : 'as asked for; the narration is not written yet'})` : '',
     // money is the open-source studio's measure; a hosted service's users pay in credits and are told those instead
     film.cost && !credits ? `- Spent on the model so far: ${film.cost.amount.toFixed(2)} ${film.cost.currency}` : '',
@@ -437,5 +441,5 @@ ${text}
 The film now:
 ${known.join('\n')}
 ${account.length ? `\nThe account (credits pay for making the film):\n${account.join('\n')}\n` : ''}
-Is this a change or instruction for the film (how it looks, what it says, what to add or leave out), a question or a remark that needs a reply, or both? A change is passed on to the artists as the user wrote it; don't repeat it. For a question, answer it in the reply from the facts above: short, plain, without internal terms (stage names, page ids); when the facts don't say, say so plainly. For a change alone, leave the reply empty. Reply in the language the user wrote in${replyLang ? ` (most likely ${LANG_NAME[replyLang]})` : ''}. Call route.`;
+Is this a change or instruction for the film (how it looks, what it says, what to add or leave out), a question or a remark that needs a reply, or both? A change is passed on to the artists as the user wrote it; don't repeat it. For a question, answer it in the reply from the facts above: short, plain, without internal terms (stage names, page ids); when the facts don't say, say so plainly. For a change alone, leave the reply empty.${film.waiting ? ' The film is waiting for the user: a message that only tells it to go on (continue, start, go ahead, fine as it is) is go, not a question; never tell them it is being made while it waits.' : ''} Reply in the language the user wrote in${replyLang ? ` (most likely ${LANG_NAME[replyLang]})` : ''}. Call route.`;
 }

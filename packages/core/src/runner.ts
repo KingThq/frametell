@@ -104,6 +104,13 @@ export class Projects {
 
 type Prices = { input: number; output: number; cacheRead: number; cacheWrite: number; currency: 'CNY' | 'USD' };
 
+/**
+ * The log's last step: what the run was doing when it stopped. A wait (the storyboard's, the first page's) is still the
+ * wait with a picture drawn again or the conversation after it (a question answered, a voice switched): the box that
+ * held it was parked as idle, and a host reading such a log as cut short paused a film that was only waiting (2026-10-26)
+ */
+export const lastStep = <E extends { type: string }>(events: readonly E[]) => events.findLast((e) => !['picture', 'user', 'note', 'voice'].includes(e.type));
+
 /** a message that only says to go on */
 const GO_ON = /^(继续|接着|继续制作|接着做|继续做|继续吧|go on|continue|resume|keep going)[\s.!。！~～]*$/i;
 
@@ -212,6 +219,17 @@ class Runner {
   private gate?: (feedback: string | undefined) => void;
   /** goes on past the first page when its wait runs out */
   private goOn?: ReturnType<typeof setTimeout>;
+  /** the log ends at the first page's wait (with nothing but conversation after it) */
+  private logEndsAtWait() {
+    try { return lastStep(fs.readFileSync(this.log, 'utf8').trim().split('\n').flatMap((l) => { try { return [JSON.parse(l) as Logged]; } catch { return []; } }))?.type === 'first_page'; }
+    catch { return false; }
+  }
+  /** the narration spoken again at the first page's wait: a go-ahead waits for it, so the pages are not drawn while
+   *  it writes the film's voice */
+  private waitWork: Promise<unknown> = Promise.resolve();
+  private atWait(fn: () => Promise<unknown>) {
+    this.waitWork = this.waitWork.then(fn).catch((e: Error) => this.emit({ type: 'error', message: e.message }));
+  }
   private stateFirstPageWaiting() { try { return JSON.parse(fs.readFileSync(studioFile(this.dir, 'state.json'), 'utf8')).firstPage === 'waiting'; } catch { return false; } }
   /** an approval that arrived before the run reached the gate (e.g. right after a server restart) */
   private pending?: { feedback?: string };
@@ -247,9 +265,8 @@ class Runner {
       // a line the process died in the middle of writing does not parse: skip it, and the last that does is the last event
       const events = lines.flatMap((l) => { try { return [JSON.parse(l) as Logged]; } catch { return []; } });
       const last = events.at(-1);
-      // a picture drawn again while the run waits comes after the wait in the log
-      const lastStep = events.findLast((e) => e.type !== 'picture');
-      this.status = lastStep?.type === 'approval' || lastStep?.type === 'first_page' ? 'awaiting_approval' : this.stateStage() === 'done' ? 'done' : lines.length ? 'stopped' : 'idle';
+      const step = lastStep(events);
+      this.status = step?.type === 'approval' || step?.type === 'first_page' ? 'awaiting_approval' : this.stateStage() === 'done' ? 'done' : lines.length ? 'stopped' : 'idle';
       // an export cut short by the app closing: the film is still there to preview, the export can simply run again
       // (the last export began and never ended: any render line may come after its start)
       const renders = events.filter((e) => e.type === 'stage' && e.stage === 'render');
@@ -472,7 +489,7 @@ class Runner {
       director = new Director({
         dir, runtime, pages, reviewer, research: plan && research ? { ...research, ...plan } satisfies DirectorOptions['research'] : undefined,
         style: meta.style, look: meta.look, prices, tts, voice, concurrency: cfg.defaults.concurrency, images: imagesFor(cfg),
-        ...(this.wait.waitMs ? { firstPageWaitMs: this.wait.waitMs } : {}), ...(this.wait.pageChecks ? { pageChecks: this.wait.pageChecks } : {}),
+        ...(this.wait.waitMs ? { firstPageWaitMs: this.wait.waitMs } : {}), firstPageSaid: this.logEndsAtWait(), ...(this.wait.pageChecks ? { pageChecks: this.wait.pageChecks } : {}),
         brief: { durationSec: meta.durationSec, topic: meta.topic, notes: meta.notes, styleNotes: meta.styleNotes, brand: meta.brand, lang: meta.lang ?? 'zh', replyLang: this.replyIn(meta), voice: provider, preferences: cfg.preferences },
         emit: this.emit, signal: this.abort.signal, renderer: this.renderer, review: this.review, exportDir: this.renderer ? undefined : cfg.exportDir,
       });
@@ -518,7 +535,12 @@ class Runner {
   approve(feedback?: string, o: { said?: boolean } = {}) {
     // a change to the first page asked from its card (not said in the conversation) is kept in the conversation too
     if (feedback?.trim() && !o.said && this.stateStage() === 'pages') this.emit({ type: 'user', text: feedback.trim() });
-    if (this.gate) { const g = this.gate; this.gate = undefined; this.status = 'running'; g(feedback?.trim() || undefined); return true; }
+    if (this.gate) {
+      const g = this.gate, working = this.waitWork;
+      this.gate = undefined; this.status = 'running';
+      void working.then(() => g(feedback?.trim() || undefined));
+      return true;
+    }
     if (this.status === 'awaiting_approval' || this.status === 'stopped') { this.pending = { feedback: feedback?.trim() || undefined }; void this.start(); return true; }
     return false;
   }
@@ -601,7 +623,7 @@ class Runner {
    */
   private async heard(d: Director, text: string, credits?: CreditFacts) {
     const r = await d.route(text, credits).catch((): MessageRoute => ({ kind: 'change' }));
-    if (r.kind !== 'question') d.message(text);
+    if (r.kind === 'change' || r.kind === 'both') d.message(text);
     this.emit({ type: 'note', text: r.reply ?? this.tr('收到，接下来的步骤会照这个来', 'Got it. The next steps will follow this.') });
   }
 
@@ -630,12 +652,27 @@ class Runner {
     const { tts, voice, provider } = voiceFor(meta, cfg);
     const stage = this.director?.stage ?? this.stateStage();
     const early = !stage || ['storyboard', 'approval', 'script'].includes(stage);
+    // at the first page's wait the run is still, and "once this step is done" would be once the user goes ahead: the
+    // narration is spoken again now, and the wait said again after it (a go-ahead meanwhile waits for it)
+    if (this.director && this.gate && this.stateFirstPageWaiting()) {
+      const d = this.director;
+      d.setVoice(tts, voice, provider);
+      this.emit({ type: 'note', text: this.tr(`好，现在就用「${name}」重新配音`, `OK, narrating it again with ${name} now.`) });
+      this.atWait(() => d.revoice());
+      return false;
+    }
     if (this.director) {
       this.director.setVoice(tts, voice, provider);
       if (!early) this.revoiceAfter = true;
       this.emit({ type: 'note', text: early ? this.tr(`好，配音会用「${name}」`, `OK, the narration will use ${name}.`)
         : this.exporting ? this.tr(`好，导出完就用「${name}」重新配音`, `OK. Once the export is done, I’ll narrate it again with ${name}.`)
         : this.tr(`好，这一步做完就用「${name}」重新配音`, `OK. Once this step is done, I’ll narrate it again with ${name}.`) });
+      return false;
+    }
+    // the first page waits, with no run open (the process started since): opened at its wait, which narrates first
+    if (this.status === 'awaiting_approval' && this.stateFirstPageWaiting()) {
+      this.emit({ type: 'note', text: this.tr(`好，现在就用「${name}」重新配音`, `OK, narrating it again with ${name} now.`) });
+      void this.start();
       return false;
     }
     if (this.status === 'done' || stage === 'done') {

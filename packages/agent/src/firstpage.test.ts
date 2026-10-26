@@ -29,13 +29,13 @@ function artist(asked: Record<string, string[]>, routes: unknown[] = [], planner
   };
 }
 
-function film(o: { pages?: number; firstPage?: boolean; routes?: unknown[]; planner?: (text: string, cwd: string) => void } = {}) {
+function film(o: { pages?: number; firstPage?: boolean; routes?: unknown[]; planner?: (text: string, cwd: string) => void; said?: boolean } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ft-firstpage-'));
   fs.mkdirSync(path.join(dir, 'pages'));
   fs.writeFileSync(path.join(dir, 'script.js'), "(function (root) {\n  const META = {\n    style: 'whiteboard',\n    extras: [],\n  };\n  root.SCRIPT = { META, PAGES: [] };\n})(globalThis);\n");
   const asked: Record<string, string[]> = {}, events: StudioEvent[] = [];
   const art = artist(asked, o.routes, o.planner);
-  const d = new Director({ dir, style: 'whiteboard', brief: { durationSec: 60, lang: 'zh', replyLang: 'zh' }, runtime: art, reviewer: { runtime: art }, emit: (e) => events.push(e), ...(o.firstPage === false ? { firstPage: false } : {}) });
+  const d = new Director({ dir, style: 'whiteboard', brief: { durationSec: 60, lang: 'zh', replyLang: 'zh' }, runtime: art, reviewer: { runtime: art }, emit: (e) => events.push(e), ...(o.firstPage === false ? { firstPage: false } : {}), ...(o.said !== undefined ? { firstPageSaid: o.said } : {}) });
   const n = o.pages ?? 3;
   const sb = { title: 'T', summary: 'S', pages: Array.from({ length: n }, (_, i) => ({ id: `p0${i + 1}`, section: 's', say: '…', beats: [] })) };
   const timing = { duration: n * 5, pages: sb.pages.map((p, i) => ({ id: p.id, start: i * 5, end: i * 5 + 5, speechEnd: i * 5 + 4, cues: [] })) };
@@ -91,6 +91,30 @@ test('a run picked up again while the first page waits does not say so a second 
   await f.d.firstPage(async () => undefined);
   assert.equal(f.events.filter((e) => e.type === 'first_page').length, 1);
   assert.equal(f.d.state.firstPage, 'done');
+});
+
+test('a run picked up at the wait says it again when the log moved past it (a pause, a new voice), not when it ends there', async () => {
+  for (const said of [false, true]) {
+    const f = film({ said });
+    f.d.state.stage = 'pages';
+    f.d.state.pages.p01 = { status: 'ok' } as never;
+    f.d.state.firstPage = 'waiting';
+    await f.d.firstPage(async () => undefined);
+    assert.equal(f.events.filter((e) => e.type === 'first_page').length, said ? 0 : 1);
+    assert.equal(f.d.state.firstPage, 'done');
+  }
+});
+
+test('「继续」 at the first page is a go-ahead, not a question answered while nothing is drawn', async () => {
+  const f = film({ routes: [{ change: false, question: false, go: true, reply: '' }] });
+  f.d.state.stage = 'pages';
+  let waits = 0;
+  await f.d.firstPage(async () => (++waits === 1 ? '继续制作啊' : '线条再粗一点'));
+  assert.equal(waits, 1, 'it went ahead at once');
+  assert.equal(f.asked['page-p01'].length, 1, 'nothing redrawn');
+  assert.equal(f.d.state.firstPage, 'done');
+  // the router was told the film waits for the user
+  assert.match(f.asked.route[0], /继续制作啊[\s\S]*Waiting for the user: the first page/);
 });
 
 test('a question at the first page is answered and the page waits on, not redrawn; a change with a question is both', async () => {

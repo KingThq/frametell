@@ -78,6 +78,9 @@ export interface DirectorOptions {
   /** how long the first page waits for the user before the rest is drawn in its look (said with the wait: goOnAt);
    *  whoever holds the run does the going on (a runner's timer, a host's sweep). Absent: it waits */
   firstPageWaitMs?: number;
+  /** the run's log ends at the first page's wait (a run picked up again there): it is not said a second time. Absent:
+   *  a run picked up while the first page waits says so again, as the log has moved on (a pause, a new voice) */
+  firstPageSaid?: boolean;
 }
 
 interface PageState { status: PageStatus; rounds: number; issues: PageIssue[]; ref?: string; /** runs this page has failed in */ failures?: number }
@@ -223,7 +226,7 @@ const fromReview = (p: Problem): PageIssue => ({ from: 'review', at: p.at, msg: 
 /** the session that reads a message the user sends mid-run (route) */
 const ROUTE_SESSION = 'route';
 /** what a message mid-run is: a change for the film (noted for the sessions), a question (answered with `reply`), or both */
-export type MessageRoute = { kind: 'change' | 'question' | 'both'; reply?: string };
+export type MessageRoute = { kind: 'change' | 'question' | 'both' | 'go'; reply?: string };
 /** what the page agent said with its flag tool, if it used it */
 const flagOf = (r: TurnResult) => r.answers.find((a) => a.name === FLAG.name)?.args.reason as string | undefined;
 
@@ -272,6 +275,7 @@ export class Director {
 
   constructor(private o: DirectorOptions) {
     this.project = new Project(o.dir, o.renderer, o.signal);
+    this.waitSaid = o.firstPageSaid ?? false;
     const f = this.project.file('.studio/state.json');
     this.state = fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : { stage: 'storyboard', pages: {}, usage: emptyUsage() };
     // a film from before issues had fields kept them as lines of text: kept as notes, which no panel words
@@ -302,8 +306,10 @@ export class Director {
     try {
       s = await this.session(ROUTE_SESSION, routeSystem, MAX.reviewerTurns, undefined, undefined, { tools: 'none', answers: [ROUTE] });
       const r = await this.send(s, routeAsk(text, await this.facts(), credits, this.o.brief.replyLang), undefined, REVIEWER_THINKING);
-      const a = r.answers.find((x) => x.name === ROUTE.name)?.args as { change?: unknown; question?: unknown; reply?: unknown } | undefined;
+      const a = r.answers.find((x) => x.name === ROUTE.name)?.args as { change?: unknown; question?: unknown; go?: unknown; reply?: unknown } | undefined;
       const reply = typeof a?.reply === 'string' && a.reply.trim() ? a.reply.trim() : undefined;
+      // only telling the film to go on (「继续」 at the first page's wait): a go-ahead, with nothing to change
+      if (a?.go === true && a.change !== true) return { kind: 'go', ...(reply ? { reply } : {}) };
       if (a?.question === true && reply) return { kind: a.change === true ? 'both' : 'question', reply };
     } catch { /* read as a change */ } finally { await s?.close().catch(() => {}); }
     return { kind: 'change' };
@@ -323,6 +329,7 @@ export class Director {
       pagesTotal,
       durationSec: durationSec ?? (this.o.brief.durationSec || undefined),
       planned: durationSec !== undefined,
+      ...(this.state.stage === 'pages' && this.state.firstPage === 'waiting' ? { waiting: 'first_page' as const } : {}),
       ...(cost.amount > 0 ? { cost } : {}),
     };
   }
@@ -347,7 +354,15 @@ export class Director {
   /** what the user reads (notes, failures, the film's history), in the user's language */
   private say(zh: string, en: string) { return this.o.brief.replyLang === 'en' ? en : zh; }
 
-  private emit(e: StudioEvent) { this.o.emit?.(e); }
+  private emit(e: StudioEvent) {
+    // whether the log ends at the first page's wait: a step after it (a page, a stage, a pause) moves it on, and a run
+    // picked up there says the wait again, else the panel shows no card and nothing goes on by itself; a picture drawn
+    // again or a note leaves it where it was
+    if (e.type === 'first_page') this.waitSaid = true;
+    else if (['stage', 'page', 'paused', 'resumed', 'ready', 'approval'].includes(e.type)) this.waitSaid = false;
+    this.o.emit?.(e);
+  }
+  private waitSaid: boolean;
   private save() {
     fs.mkdirSync(this.project.file('.studio'), { recursive: true });
     fs.writeFileSync(this.project.file('.studio/state.json'), JSON.stringify(this.state, null, 2));
@@ -871,9 +886,14 @@ export class Director {
     this.state.exported = false; this.save();
     this.emit({ type: 'stage', stage: 'narrate', status: 'done', detail: `${r.duration.toFixed(1)}s${r.warnings.length ? '；' + r.warnings.join('；') : ''}` });
     if (this.state.stage === 'done') this.emit({ type: 'ready', duration: (await this.project.timeline()).duration });
+    // narrated again while the first page waits: the wait is said again, with its card (and its time to go on)
+    else if (this.state.firstPage === 'waiting') this.sayWait((await this.project.timeline()).pages[0].id);
   }
 
   // ── ④ pages ──────────────────────────────────────────────────────────────────────────────────
+  /** the first page's wait, said (its card in the panel, and when it goes on by itself) */
+  private sayWait(page: string) { this.emit({ type: 'first_page', page, ...(this.o.firstPageWaitMs ? { goOnAt: Date.now() + this.o.firstPageWaitMs } : {}) }); }
+
   /**
    * The film's first page, drawn and checked alone, and shown to the user before the rest: they confirm the look (the
    * style, the pictures, how the page is built), or say what to change. A change is made to the first page and noted
@@ -885,15 +905,16 @@ export class Director {
     const tl = await this.project.timeline();
     const drawn = (id: string) => ['ok', 'flagged'].includes(this.state.pages[id]?.status ?? '');
     if (this.o.firstPage === false || tl.pages.length < 2 || tl.pages.slice(1).some((p) => drawn(p.id))) { this.state.firstPage = 'done'; this.save(); return; }
-    // a run picked up again while it waits (the app restarted, the user answered after a pause) has said so already:
-    // the wait is said once, and again only for a first page drawn anew
-    let said = this.state.firstPage === 'waiting';
+    // a run picked up again while it waits (the app restarted) has said so already, unless the log has moved on since
+    // (a pause, a new voice: seen 2026-10-26, a film narrated again at its wait then sat silent, the user's 「继续」
+    // answered as a question): the wait is said once, and again for a first page drawn anew or a log moved past it
+    let said = this.state.firstPage === 'waiting' && this.waitSaid;
     for (;;) {
       // the first page as the storyboard has it now (a change may have rewritten the film's plan)
       const id = (await this.project.timeline()).pages[0].id;
       if (!drawn(id)) { await this.pages([id], { hold: true }); said = false; }
       this.state.firstPage = 'waiting'; this.save();
-      if (!said) this.emit({ type: 'first_page', page: id, ...(this.o.firstPageWaitMs ? { goOnAt: Date.now() + this.o.firstPageWaitMs } : {}) });
+      if (!said) this.sayWait(id);
       said = false;
       const change = (await approve(this.project.storyboard()))?.trim();
       if (!change) break;
@@ -902,6 +923,8 @@ export class Director {
       const heard = await this.route(change);
       if (heard.reply) this.emit({ type: 'note', text: heard.reply });
       if (heard.kind === 'question') { said = true; continue; }
+      // 「继续」「开始吧」: the user goes ahead, as from the card
+      if (heard.kind === 'go') break;
       await this.firstPageChange(id, change);
     }
     this.state.revision = undefined; this.state.firstPage = 'done'; this.save();
