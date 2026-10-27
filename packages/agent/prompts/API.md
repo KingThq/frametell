@@ -23,11 +23,11 @@ ENGINE.visual('p22', (P) => {
 | `P.title(str, { accent })` | Page title, top left, with a wavy underline |
 | `P.box(x,y,w,h,{ fill, color, r, sw, dur, texture:false, rough })` / `rect` / `circle(cx,cy,d)` / `ellipse` / `line` / `path(d)` / `curve(pts)` | Shapes drawn stroke by stroke |
 | `P.arrow(x1,y1,x2,y2,{ bend, head, dashed, single })` | Hand-drawn arrow |
-| `P.ring(cx,cy,w,h)` / `P.underline(x,y,w)` / `P.mark(x,y,w,h)` / `P.check(x,y)` / `P.cross(x,y)` | Circling, underline, highlighter, tick, cross |
+| `P.ring(cx,cy,w,h)` / `P.underline(x,y,w)` / `P.mark(x,y,w,h)` / `P.check(x,y,size?,o?)` / `P.cross(x,y,size?,o?)` | Circling, underline, highlighter, tick, cross |
 | `P.markSpan(t,i0,i1)` / `ringSpan` / `underSpan` | Highlight / circle / underline characters i0–i1 of text already written |
 | `P.code(lines, { x, y, w, size, at, cps, label })` → `.hl(row, at, { n, color })` | Code card (auto-highlighted); rows can be highlighted |
 | `P.icon(name, cx, cy, size, { at, fill, color, rot })` | Icons: person robot wheel file terminal gear magnifier bulb wrench eye clock hourglass scissors warn door flag sun stack bird plug puzzle brain shield rocket fuse spinner chat cpu stop books sparkle |
-| `P.liveRough((lt, R) => [R.box(…), R.path(…), R.circle(…), R.line(…)])` | Hand-drawn shapes whose geometry changes over time (redrawn every frame with a fixed seed, so they don't jitter): growing bars, a beam that thickens, a moving block |
+| `P.liveRough((lt, R) => [R.box(…), R.rect(…), R.path(…), R.circle(…), R.ellipse(…), R.line(…), R.curve(…)])` | Hand-drawn shapes whose geometry changes over time (redrawn every frame with a fixed seed, so they don't jitter): growing bars, a beam that thickens, a moving block |
 | `P.follow(lt => ({ text, x, y, opacity }), o)` | Text whose content and position follow time (value labels, counters) |
 | `P.bars(items, (i, lt) => v, { x, base, bw, gap, scale, fmt })` | Live bar chart, negative values supported |
 | `P.slider(x, y, w, min, max, lt => v, { ticks, label })` / `P.tex(latex, o)` / `P.canvas(x, y, w, h, (ctx, lt) => …)` | Slider / KaTeX formula (add katex to `META.libs`) / a canvas redrawn every frame (heat maps, dense dot grids) |

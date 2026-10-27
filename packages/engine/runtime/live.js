@@ -79,7 +79,10 @@
 
   /**
    * Rough shapes whose geometry is a function of time: fn(lt, R) → [drawables] | null.
-   * R.box(x, y, w, h, o) / R.path(d, o) / R.circle(cx, cy, d, o) / R.line(x1, y1, x2, y2, o) — seeds stay fixed so the wobble does not boil.
+   * R.box(x, y, w, h, o) / R.rect(x, y, w, h, o) / R.path(d, o) / R.circle(cx, cy, d, o) / R.ellipse(cx, cy, w, h, o) /
+   * R.line(x1, y1, x2, y2, o) / R.curve(points, o) — the page's own shapes by the same names; seeds stay fixed so the
+   * wobble does not boil. A name R does not have says which it has (R.rect was missing, and a page that used it failed
+   * with "R.rect is not a function", which its fix round did not mend: 2026-10-27).
    */
   B.liveRough = function (fn, o = {}) {
     const g = s('g', {}, this.svg);
@@ -93,11 +96,19 @@
       path: (d, oo = {}) => gen.path(d, ro(oo, 2)),
       circle: (cx, cy, d, oo = {}) => gen.circle(cx, cy, d, ro(oo, 3)),
       line: (x1, y1, x2, y2, oo = {}) => gen.line(x1, y1, x2, y2, ro(oo, 4)),
+      rect: (x, y, w, hh, oo = {}) => gen.rectangle(x, y, w, hh, ro(oo, 5)),
+      ellipse: (cx, cy, w, hh, oo = {}) => gen.ellipse(cx, cy, w, hh, ro(oo, 6)),
+      curve: (pts, oo = {}) => gen.curve(pts, ro(oo, 7)),
     };
+    const known = Object.keys(R).join(', ');
+    const Rp = new Proxy(R, { get: (t, k) => {
+      if (typeof k !== 'string' || k in t) return t[k];
+      throw new Error(`liveRough's R has no ${k}: it has ${known}`);
+    } });
     const id = this.page.id;
     this.tick((lt) => {
       let items;
-      try { items = fn(lt, R); } catch (e) { e.message = `liveRough @${id} lt=${lt.toFixed(3)}: ${e.message}`; throw e; }   // keep the stack: it points into the page
+      try { items = fn(lt, Rp); } catch (e) { e.message = `liveRough @${id} lt=${lt.toFixed(3)}: ${e.message}`; throw e; }   // keep the stack: it points into the page
       g.textContent = '';
       if (items) paint(g, items);
     });

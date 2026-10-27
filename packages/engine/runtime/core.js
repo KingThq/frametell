@@ -293,10 +293,14 @@
         apply: (k) => { cr.setAttribute('width', ((w + 24) * ease.out(k)).toFixed(1)); } });
       return this.handle(a, g);
     }
+    // the options may come third (P.check(x, y, { at })): the size is left as it is. A page that wrote that crashed deep
+    // in the shape code (an object times a number), and its fix round could not see why (2026-10-27)
     check(x, y, sz = 40, o = {}) {
+      if (sz && typeof sz === 'object') { o = sz; sz = 40; }
       return this.path(`M${x - sz * 0.45} ${y} L${x - sz * 0.1} ${y + sz * 0.38} L${x + sz * 0.5} ${y - sz * 0.45}`, Object.assign({ color: 'green', sw: 4, single: true, rough: 0.6, dur: 0.35 }, o));
     }
     cross(x, y, sz = 36, o = {}) {
+      if (sz && typeof sz === 'object') { o = sz; sz = 36; }
       const r = sz / 2;
       return this.draw([
         gen.line(x - r, y - r, x + r, y + r, this.ro(Object.assign({ color: 'red', sw: 4, single: true, rough: 0.6 }, o))),
