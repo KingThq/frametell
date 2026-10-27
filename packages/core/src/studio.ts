@@ -74,6 +74,10 @@ export interface StudioOptions {
    * parks its runs while they wait (a sandbox) goes on for them, metered as the user's own go-ahead
    */
   firstPageWaitMs?: number;
+  /** the storyboard's wait for the user, said with it (`approval`, goOnAt) for the panel to count down: a panel left
+   *  open on it that long (counted while it is shown) goes ahead from it, as approved (`approve` with `waited`). Nothing
+   *  goes on where nobody is looking: a closed panel leaves it waiting. Default 0: no countdown */
+  storyboardWaitMs?: number;
   /** each page's own checks (DirectorOptions.pageChecks): 'hard' fixes only what a viewer sees broken, once */
   pageChecks?: 'full' | 'hard';
   goOnHere?: boolean;
@@ -94,7 +98,7 @@ export class Studio {
     this.dataDir = o.dataDir ?? DATA_DIR;
     this.config = o.config ?? configFile(this.dataDir);
     this.brands = o.brand === true;
-    this.store = new Projects(path.join(this.dataDir, 'projects'), this.config, o.renderer, o.review, o.onEvent, { localFiles: o.localFiles ?? true, web: o.web ?? true }, { waitMs: o.firstPageWaitMs ?? FIRST_PAGE_WAIT_MS, here: o.goOnHere ?? true, pageChecks: o.pageChecks });
+    this.store = new Projects(path.join(this.dataDir, 'projects'), this.config, o.renderer, o.review, o.onEvent, { localFiles: o.localFiles ?? true, web: o.web ?? true }, { waitMs: o.firstPageWaitMs ?? FIRST_PAGE_WAIT_MS, here: o.goOnHere ?? true, pageChecks: o.pageChecks, storyboardMs: o.storyboardWaitMs });
     applyProxy(this.config.load().proxy);
     // every project reaches the engine through links; point them at this install (it may have moved, or been renamed)
     if (o.linkProjects !== false) try { for (const id of fs.readdirSync(this.store.root)) { try { linkProject(this.store.dir(id)); } catch {} } } catch {}
@@ -303,7 +307,9 @@ export class Studio {
   setCover(id: string, page: string | null, o?: { log?: boolean }) { this.store.read(id); return this.store.runner(id).setCover(page, o); }
   /** a picture of the user's own as the cover (JPEG, PNG or WebP): its name in the project, undefined when refused */
   setCoverImage(id: string, data: Uint8Array, o?: { log?: boolean }) { this.store.read(id); return this.store.runner(id).setCoverImage(data, o); }
-  approve(id: string, feedback?: string) { return this.store.runner(id).approve(feedback); }
+  /** `waited`: a wait that ran out with nobody answering (the first page's on a host, the storyboard's in a panel left
+   *  open): logged as went_on, so the card says the film went on by itself */
+  approve(id: string, feedback?: string, o: { waited?: 'storyboard' | 'first_page' } = {}) { return this.store.runner(id).approve(feedback, o.waited ? { waited: o.waited } : {}); }
   /** one of the film's generated pictures drawn again (`note`: what to change); false when the film can't now */
   redrawPicture(id: string, picture: string, note?: string) { this.store.read(id); return this.store.runner(id).picture(picture, note?.slice(0, 300)); }
   /** `why`: the host stopped it for want of credits, so the film says that instead of "paused" */

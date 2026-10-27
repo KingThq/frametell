@@ -129,7 +129,7 @@ export const FULL_REACH: ResearchReach = { localFiles: true, web: true };
 /** how long the first page waits for the user before the rest is drawn in its look */
 export const FIRST_PAGE_WAIT_MS = 15 * 60_000;
 /** the first page's wait: how long, and whether this process goes on by itself when it runs out */
-export interface FirstPageWait { waitMs: number; here: boolean; /** each page's own checks (DirectorOptions.pageChecks) */ pageChecks?: 'full' | 'hard' }
+export interface FirstPageWait { waitMs: number; here: boolean; /** each page's own checks (DirectorOptions.pageChecks) */ pageChecks?: 'full' | 'hard'; /** the storyboard's wait, said with it for the panel to count down (StudioOptions.storyboardWaitMs) */ storyboardMs?: number }
 
 /**
  * What research the film gets before its storyboard, if any: links, repositories and (on this machine) folders named in
@@ -389,10 +389,11 @@ class Runner {
     this.tick = 0;
     // the first page waits for the user: here, when nobody answers in time, the rest is drawn in its look (a host that
     // parks its runs goes on for them instead). The run moving on (a page drawn, a stop) ends the wait, the first page
-    // shown again starts it anew; a picture drawn again or a note on the way leaves it as it is
+    // shown again starts it anew; a picture drawn again or a note on the way leaves it as it is. The storyboard's wait
+    // never runs out here: only a panel the user has open goes on from it (StudioOptions.storyboardWaitMs)
     if (['first_page', 'page', 'stage', 'paused', 'resumed', 'ready'].includes(e.type)) clearTimeout(this.goOn);
     if (e.type === 'first_page' && this.wait.here && e.goOnAt) {
-      this.goOn = setTimeout(() => { if (this.gate && this.stateFirstPageWaiting()) this.approve(); }, Math.max(0, e.goOnAt - Date.now()));
+      this.goOn = setTimeout(() => { if (this.gate && this.stateFirstPageWaiting()) this.approve(undefined, { waited: 'first_page' }); }, Math.max(0, e.goOnAt - Date.now()));
       this.goOn.unref?.();
     }
     const logged = { ...e, seq: ++this.seq, at: Date.now() } as Logged;
@@ -489,7 +490,7 @@ class Runner {
       director = new Director({
         dir, runtime, pages, reviewer, research: plan && research ? { ...research, ...plan } satisfies DirectorOptions['research'] : undefined,
         style: meta.style, look: meta.look, prices, tts, voice, concurrency: cfg.defaults.concurrency, images: imagesFor(cfg),
-        ...(this.wait.waitMs ? { firstPageWaitMs: this.wait.waitMs } : {}), firstPageSaid: this.logEndsAtWait(), ...(this.wait.pageChecks ? { pageChecks: this.wait.pageChecks } : {}),
+        ...(this.wait.waitMs ? { firstPageWaitMs: this.wait.waitMs } : {}), ...(this.wait.storyboardMs ? { storyboardWaitMs: this.wait.storyboardMs } : {}), firstPageSaid: this.logEndsAtWait(), ...(this.wait.pageChecks ? { pageChecks: this.wait.pageChecks } : {}),
         brief: { durationSec: meta.durationSec, topic: meta.topic, notes: meta.notes, styleNotes: meta.styleNotes, brand: meta.brand, lang: meta.lang ?? 'zh', replyLang: this.replyIn(meta), voice: provider, preferences: cfg.preferences },
         emit: this.emit, signal: this.abort.signal, renderer: this.renderer, review: this.review, exportDir: this.renderer ? undefined : cfg.exportDir,
       });
@@ -531,10 +532,13 @@ class Runner {
       .finally(finished);
   }
 
-  /** the user confirmed the storyboard (optionally with change requests) */
-  approve(feedback?: string, o: { said?: boolean } = {}) {
+  /** the user confirmed the storyboard or the first page (optionally with change requests). `waited`: nobody did, and
+   *  the wait said with it ran out: the film goes on as it is, and says so (went_on) */
+  approve(feedback?: string, o: { said?: boolean; waited?: 'storyboard' | 'first_page' } = {}) {
+    clearTimeout(this.goOn);   // answered (or gone on): the wait is over
     // a change to the first page asked from its card (not said in the conversation) is kept in the conversation too
     if (feedback?.trim() && !o.said && this.stateStage() === 'pages') this.emit({ type: 'user', text: feedback.trim() });
+    if (o.waited && !feedback?.trim() && (this.gate || this.status === 'awaiting_approval')) this.emit({ type: 'went_on', wait: o.waited });
     if (this.gate) {
       const g = this.gate, working = this.waitWork;
       this.gate = undefined; this.status = 'running';

@@ -32,7 +32,8 @@ export interface StudioClient {
   /** `assets`: pictures to be seen in the film (素材), each with its small copy, apart from the documents in `files` */
   createProject(input: NewProjectInput, files: File[], assets?: NewAsset[]): Promise<ProjectView>;
   start(id: string): Promise<void>;
-  approve(id: string, feedback?: string): Promise<boolean>;
+  /** `waited`: the card's countdown ran out with the panel open, not a press of the button */
+  approve(id: string, feedback?: string, o?: { waited?: 'storyboard' }): Promise<boolean>;
   /** one of the film's generated pictures drawn again, `note` what to change: any of them while the first page waits
    *  (it is shown again with the new one), or on a finished film. False while the film is busy. Absent
    *  where a host can't draw pictures (the desktop bridge) */
@@ -159,7 +160,7 @@ export const httpClient: StudioClient = {
     return call('POST', '/api/projects', form);
   },
   start: async (id) => { await call('POST', `/api/projects/${id}/start`); },
-  approve: async (id, feedback) => (await call<{ ok: boolean }>('POST', `/api/projects/${id}/approve`, { feedback })).ok,
+  approve: async (id, feedback, o) => (await call<{ ok: boolean }>('POST', `/api/projects/${id}/approve`, { feedback, ...(o?.waited ? { waited: o.waited } : {}) })).ok,
   redrawPicture: async (id, picture, note) => (await call<{ ok: boolean }>('POST', `/api/projects/${id}/picture`, { picture, note })).ok,
   stop: async (id) => { await call('POST', `/api/projects/${id}/stop`); },
   deleteProject: async (id) => { await call('DELETE', `/api/projects/${id}`); },

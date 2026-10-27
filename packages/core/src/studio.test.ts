@@ -612,3 +612,32 @@ test('the first page goes on by itself when its wait runs out, here; a host that
     }
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('the storyboard never goes on by itself here; a panel that went ahead for a wait run out says so (went_on)', async () => {
+  const { Projects } = await import('./runner.js');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ft-sbwait-'));
+  try {
+    const store = new Projects(dir, memoryConfig(), undefined, undefined, undefined, undefined, { waitMs: 0, here: true, storyboardMs: 60 });
+    const p = store.create({ title: 'T', topic: 't', style: 'whiteboard', durationSec: 60, model: 'anthropic/x', lang: 'zh' } as never, []);
+    const r = store.runner(p.id) as unknown as { gate?: (f?: string) => void; status: string; emit(e: unknown): void; approve(f?: string, o?: { waited?: 'storyboard' }): boolean };
+    fs.writeFileSync(path.join(store.dir(p.id), '.studio', 'state.json'), JSON.stringify({ stage: 'approval', pages: {} }));
+    const log = () => fs.readFileSync(path.join(store.dir(p.id), '.studio', 'events.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l).type as string);
+    let answered: string | undefined | 'none' = 'none';
+    r.gate = (f) => { answered = f; };
+    r.status = 'awaiting_approval';
+    r.emit({ type: 'approval', storyboard: { pages: [] }, goOnAt: Date.now() + 60 });
+    await new Promise((ok) => setTimeout(ok, 150));
+    assert.equal(answered, 'none', 'nobody looking: it waits');
+    // the person's own go-ahead: no went_on
+    r.approve();
+    await new Promise((ok) => setTimeout(ok, 10));
+    assert.equal(answered, undefined);
+    assert.deepEqual(log().slice(-1), ['approval']);
+    // the panel's countdown ran out: logged before the film goes on
+    answered = 'none'; r.gate = (f) => { answered = f; };
+    r.approve(undefined, { waited: 'storyboard' });
+    await new Promise((ok) => setTimeout(ok, 10));
+    assert.equal(answered, undefined);
+    assert.deepEqual(log().slice(-1), ['went_on']);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});

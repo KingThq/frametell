@@ -102,7 +102,42 @@ async function redraw(project: ProjectView, picture: string, note: string): Prom
   catch (e) { return (e as Error).message; }
 }
 
-function Approval({ sb, project, run, active }: { sb: Storyboard; project: ProjectView; run: RunView; active: boolean }) {
+const mmss = (ms: number) => { const s = Math.ceil(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+
+/** the first page's wait, which the host goes on from at `at`: the time left, ticking on its own (the card around it
+ *  doesn't re-render) */
+function GoOn({ at }: { at: number }) {
+  useT();
+  const left = Math.max(0, at - useNow(true));
+  return <p className="mt-1.5 text-[12px] text-ink-3" role="timer">{left > 0 ? t('conversation.firstPage.goOn', { left: mmss(left) }) : t('conversation.firstPage.goingOn')}</p>;
+}
+
+/** the storyboard's wait: `ms` of the person looking at it (a hidden page holds the count, a page opened again starts it
+ *  anew), then `onDone` goes ahead for them. Nothing goes on where nobody is looking */
+function StoryboardGoOn({ ms, onDone }: { ms: number; onDone: () => void }) {
+  useT();
+  const [left, setLeft] = useState(ms);
+  const done = useRef(onDone);
+  done.current = onDone;
+  useEffect(() => {
+    let last = Date.now();
+    const tick = () => {
+      const now = Date.now(), dt = now - last;
+      last = now;
+      if (document.visibilityState === 'visible') setLeft((l) => Math.max(0, l - dt));
+    };
+    // the time hidden is never counted: shown again, the count goes on from where it was
+    const shown = () => { last = Date.now(); };
+    const id = setInterval(tick, 1000);
+    document.addEventListener('visibilitychange', shown);
+    return () => { clearInterval(id); document.removeEventListener('visibilitychange', shown); };
+  }, []);
+  const fired = useRef(false);
+  useEffect(() => { if (left <= 0 && !fired.current) { fired.current = true; done.current(); } }, [left]);
+  return <p className="text-[12px] text-ink-3" role="timer">{left > 0 ? t('conversation.approval.goOn', { left: mmss(left) }) : t('conversation.approval.goingOn')}</p>;
+}
+
+function Approval({ sb, project, run, active, waitMs, auto }: { sb: Storyboard; project: ProjectView; run: RunView; active: boolean; waitMs?: number; auto?: boolean }) {
   useT();
   const [sent, setSent] = useState(false);
   const [failed, setFailed] = useState<string>();
@@ -111,9 +146,10 @@ function Approval({ sb, project, run, active }: { sb: Storyboard; project: Proje
   // short of credits for the go-ahead: the notice above the composer says so, and the button waits for the balance
   const short = useShort(project.id, run);
   // a go-ahead that was refused (credits, or anything else) leaves the card as it was, to press again
-  const approve = async () => {
+  // `waited`: the countdown ran out with the card in view (the film logs it went on unanswered)
+  const approve = async (waited?: boolean) => {
     setSent(true); setFailed(undefined);
-    try { await client.approve(project.id); } catch (e) { setSent(false); if (!reportShort(project.id, e)) setFailed((e as Error).message); }
+    try { await client.approve(project.id, undefined, waited ? { waited: 'storyboard' } : undefined); } catch (e) { setSent(false); if (!reportShort(project.id, e)) setFailed((e as Error).message); }
   };
   return (
     <div className={`rounded-2xl border bg-surface transition-shadow duration-300 ${live ? 'border-accent/50 shadow-[0_0_0_4px_rgb(var(--fs-accent)/0.07)]' : 'border-line'}`}>
@@ -142,9 +178,11 @@ function Approval({ sb, project, run, active }: { sb: Storyboard; project: Proje
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-4 py-3">
           <span className={`text-[12.5px] ${short || failed ? 'text-seal' : 'text-ink-3'}`} role={failed ? 'alert' : undefined}>{short ? t('common.short.approveHint') : failed ?? t('conversation.approval.hint')}</span>
           <button className="fs-btn fs-btn-accent" disabled={!!short} onClick={() => void approve()}>{t('conversation.approval.approve')}</button>
+          {/* short of credits it can't go on by itself either, and a refused go-ahead is pressed again by hand */}
+          {!!waitMs && !short && !failed && <div className="basis-full"><StoryboardGoOn ms={waitMs} onDone={() => void approve(true)} /></div>}
         </div>
       ) : (
-        <p className="flex items-center gap-1.5 border-t border-line px-4 py-3 text-[12.5px] text-jade"><Check size={14} aria-hidden /> {t('conversation.approval.approved')}</p>
+        <p className="flex items-center gap-1.5 border-t border-line px-4 py-3 text-[12.5px] text-jade"><Check size={14} aria-hidden /> {t(auto ? 'conversation.approval.wentOn' : 'conversation.approval.approved')}</p>
       )}
     </div>
   );
@@ -178,7 +216,7 @@ function FirstPage({ it, run, project, active, onOpen }: { it: Extract<FeedItem,
   if (!active) return (
     <p className="flex items-start gap-1.5 text-[12.5px] leading-relaxed text-ink-3">
       {outcome === 'go' ? <Check size={13} className="mt-0.5 shrink-0 text-jade" aria-hidden /> : <RefreshCw size={12} className="mt-[3px] shrink-0" aria-hidden />}
-      <span>{t(outcome === 'go' ? 'conversation.firstPage.wentAhead' : outcome === 'change' ? 'conversation.firstPage.changed' : 'conversation.firstPage.shown')}{said && <span className="text-ink-2">「{said}」</span>}</span>
+      <span>{t(it.auto ? 'conversation.firstPage.wentOn' : outcome === 'go' ? 'conversation.firstPage.wentAhead' : outcome === 'change' ? 'conversation.firstPage.changed' : 'conversation.firstPage.shown')}{said && <span className="text-ink-2">「{said}」</span>}</span>
     </p>
   );
   return (
@@ -208,7 +246,7 @@ function FirstPage({ it, run, project, active, onOpen }: { it: Extract<FeedItem,
             </button>
           </form>
           {run.pictures.length > 0 && client.redrawPicture && <p className="mt-1.5 text-[12px] text-ink-3">{t('conversation.firstPage.pictures')}</p>}
-          {it.goOnAt && <p className="mt-1.5 text-[12px] text-ink-3">{t('conversation.firstPage.goOn', { min: Math.max(1, Math.ceil((it.goOnAt - Date.now()) / 60_000)) })}</p>}
+          {it.goOnAt && <GoOn at={it.goOnAt} />}
           {failed && <p className="mt-1.5 text-[12px] text-seal" role="alert">{failed}</p>}
         </div>
       ) : (
@@ -578,7 +616,7 @@ function Chapter({ b, run, project, onSelectPage, onPlayPage, selected }: { b: E
           if (it.kind === 'check') return it.reds + it.yellows === 0
             ? <p key={it.key} className="flex items-center gap-1.5 text-[12.5px] text-jade"><Check size={13} aria-hidden /> {t('conversation.chapter.checkPassed')}</p>
             : <p key={it.key} className="text-[12.5px] leading-relaxed text-ink-3">{t('conversation.chapter.checkIssues', { reds: it.reds, yellows: it.yellows })}</p>;
-          if (it.kind === 'approval') return <Approval key={it.key} sb={it.storyboard} project={project} run={run} active={run.awaitingApproval && !run.firstPage && approvals.at(-1) === it} />;
+          if (it.kind === 'approval') return <Approval key={it.key} sb={it.storyboard} project={project} run={run} active={run.awaitingApproval && !run.firstPage && approvals.at(-1) === it} waitMs={it.goOnAt && it.goOnAt - it.at} auto={it.auto} />;
           if (it.kind === 'first_page') return <FirstPage key={it.key} it={it} run={run} project={project} active={!!run.firstPage && lastFirst === it} onOpen={onSelectPage} />;
           if (it.kind === 'pages' && !b.latest) return <p key={it.key} className="text-[12.5px] text-ink-3">{t('conversation.chapter.pagesDone', { n: run.pageOrder.length })}</p>;
           if (it.kind === 'pages') return <Pages key={it.key} run={run} onSelect={onSelectPage} onPlay={onPlayPage} selected={selected} />;

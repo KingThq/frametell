@@ -78,6 +78,9 @@ export interface DirectorOptions {
   /** how long the first page waits for the user before the rest is drawn in its look (said with the wait: goOnAt);
    *  whoever holds the run does the going on (a runner's timer, a host's sweep). Absent: it waits */
   firstPageWaitMs?: number;
+  /** how long the storyboard waits for the user before a panel they left open on it goes ahead (said with the wait:
+   *  goOnAt). Absent: no countdown */
+  storyboardWaitMs?: number;
   /** the run's log ends at the first page's wait (a run picked up again there): it is not said a second time. Absent:
    *  a run picked up while the first page waits says so again, as the log has moved on (a pause, a new voice) */
   firstPageSaid?: boolean;
@@ -482,7 +485,7 @@ export class Director {
     const sb = this.project.storyboard();
     this.state.stage = 'approval'; this.save();
     this.emit({ type: 'stage', stage: 'storyboard', status: 'done' });
-    this.emit({ type: 'approval', storyboard: sb });
+    this.emit({ type: 'approval', storyboard: sb, ...(this.o.storyboardWaitMs ? { goOnAt: Date.now() + this.o.storyboardWaitMs } : {}) });
     return sb;
   }
 

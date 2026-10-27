@@ -27,10 +27,10 @@ export type FeedItem = In & (
   | { kind: 'pictures'; key: string; at: number }
   /** the first page drawn alone, for the person to confirm the look before the rest (one per time it is shown: only the
    *  latest can be answered); `answer`: what they said, once the film moved on from it */
-  | { kind: 'first_page'; key: string; page: string; answer?: 'go' | 'change'; at: number; /** when it goes on by itself */ goOnAt?: number }
+  | { kind: 'first_page'; key: string; page: string; answer?: 'go' | 'change'; at: number; /** when it goes on by itself */ goOnAt?: number; /** it did: nobody answered in time */ auto?: boolean }
   | { kind: 'paused'; key: string; reason: 'user' | 'interrupted' | 'error' | 'credits'; message?: string; at: number }
   | { kind: 'check'; key: string; round: number; reds: number; yellows: number; messages: string[]; at: number }
-  | { kind: 'approval'; key: string; storyboard: Storyboard; at: number }
+  | { kind: 'approval'; key: string; storyboard: Storyboard; at: number; /** when it goes on by itself */ goOnAt?: number; /** it did: nobody answered in time */ auto?: boolean }
   | { kind: 'pages'; key: string; at: number }
   | { kind: 'error'; key: string; message: string; at: number }
   /** the film is finished and plays in the preview (newer runs; older logs go straight to `done`) */
@@ -248,8 +248,17 @@ function step(v: RunView, e: LoggedEvent): RunView {
     }
     case 'approval':
       r.storyboard = e.storyboard; r.awaitingApproval = true;
-      push({ kind: 'approval', key, storyboard: e.storyboard, at, stage: 'storyboard' });
+      push({ kind: 'approval', key, storyboard: e.storyboard, at, stage: 'storyboard', ...(e.goOnAt ? { goOnAt: e.goOnAt } : {}) });
       return r;
+    // nobody answered the wait in time: the film went on by itself, and its card says so
+    case 'went_on': {
+      const kind = e.wait === 'storyboard' ? 'approval' : 'first_page';
+      const i = r.feed.map((f) => f.kind === kind).lastIndexOf(true);
+      if (i >= 0) r.feed = r.feed.map((f, j) => (j === i ? { ...f, auto: true } as FeedItem : f));
+      if (e.wait === 'first_page') leaveFirst('go');
+      else r.awaitingApproval = false;
+      return r;
+    }
     case 'page': {
       // after the first page: drawn again is a change to it, another page drawn is the go-ahead
       if (r.firstPage) leaveFirst(e.id === r.firstPage.page ? 'change' : 'go');

@@ -86,8 +86,8 @@ export function createServer(studio = new Studio(), opts: { token?: string } = {
   app.get('/api/projects/:id/frames', async (c) => c.json({ paths: await studio.frames(c.req.param('id'), String(c.req.query('t') || '').split(',').map(Number)) }));
   app.post('/api/projects/:id/start', async (c) => { await studio.start(c.req.param('id')); return c.json({ ok: true }); });
   app.post('/api/projects/:id/approve', async (c) => {
-    const { feedback } = (await c.req.json().catch(() => ({}))) as { feedback?: string };
-    return c.json({ ok: studio.approve(c.req.param('id'), feedback) });
+    const { feedback, waited } = (await c.req.json().catch(() => ({}))) as { feedback?: string; waited?: unknown };
+    return c.json({ ok: studio.approve(c.req.param('id'), feedback, waited === 'storyboard' ? { waited } : {}) });
   });
   // one of the film's generated pictures drawn again: { picture, note? }
   app.post('/api/projects/:id/picture', async (c) => {

@@ -41,13 +41,16 @@ export type StudioEvent =
   | { type: 'agent'; session: string; event: RuntimeEvent }
   | { type: 'storyboard_check'; round: number; issues: { level: string; page?: string; beat?: number; msg: string }[] }
   /** the storyboard passed its checks and waits for the user (in CLI runs it is approved automatically) */
-  | { type: 'approval'; storyboard: Storyboard }
+  | { type: 'approval'; storyboard: Storyboard; /** when the film goes on by itself if the user says nothing (ms since the epoch) */ goOnAt?: number }
   /** this film's own components (kit.ts), written before its pages: `components` the ones the pages get, `sheet` the
    *  check's contact sheet */
   | { type: 'kit'; status: 'start' | 'checking' | 'done' | 'failed'; components?: string[]; round?: number; sheet?: string; detail?: string }
   /** the film's first page is drawn and checked: the run waits (as at the storyboard) for the user to confirm the look,
    *  or say what to change in it, before the other pages are drawn */
   | { type: 'first_page'; page: string; /** when the film goes on by itself if the user says nothing (ms since the epoch) */ goOnAt?: number }
+  /** nobody answered a wait (the first page's by its goOnAt, the storyboard's in a panel left open on it): the film
+   *  goes on as if approved */
+  | { type: 'went_on'; wait: 'storyboard' | 'first_page' }
   /** one of the film's generated pictures (pictures.ts): being drawn, drawn (`file` in the project, its size), or not
    *  had. `sample`: the film's first, which the others are drawn from; `note`: what the user asked of it */
   | { type: 'picture'; id: string; status: 'drawing' | 'done' | 'failed'; what?: string; kind?: string; sample?: boolean; file?: string; w?: number; h?: number; note?: string; detail?: string }
