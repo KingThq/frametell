@@ -641,3 +641,9 @@ test('the storyboard never goes on by itself here; a panel that went ahead for a
     assert.deepEqual(log().slice(-1), ['went_on']);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('a wait gone on unanswered is still the wait in the log: a run picked up from it does not say the wait again', async () => {
+  const { lastStep } = await import('./runner.js');
+  assert.equal(lastStep([{ type: 'first_page' }, { type: 'went_on' }])?.type, 'first_page');
+  assert.equal(lastStep([{ type: 'approval' }, { type: 'went_on' }, { type: 'note' }])?.type, 'approval');
+});

@@ -107,9 +107,11 @@ type Prices = { input: number; output: number; cacheRead: number; cacheWrite: nu
 /**
  * The log's last step: what the run was doing when it stopped. A wait (the storyboard's, the first page's) is still the
  * wait with a picture drawn again or the conversation after it (a question answered, a voice switched): the box that
- * held it was parked as idle, and a host reading such a log as cut short paused a film that was only waiting (2026-10-26)
+ * held it was parked as idle, and a host reading such a log as cut short paused a film that was only waiting (2026-10-26).
+ * So is the note that it went on unanswered (went_on): a run picked up from it said the wait again, and the host took
+ * that for the end of the go-ahead it had just opened (2026-10-27)
  */
-export const lastStep = <E extends { type: string }>(events: readonly E[]) => events.findLast((e) => !['picture', 'user', 'note', 'voice'].includes(e.type));
+export const lastStep = <E extends { type: string }>(events: readonly E[]) => events.findLast((e) => !['picture', 'user', 'note', 'voice', 'went_on'].includes(e.type));
 
 /** a message that only says to go on */
 const GO_ON = /^(继续|接着|继续制作|接着做|继续做|继续吧|go on|continue|resume|keep going)[\s.!。！~～]*$/i;
