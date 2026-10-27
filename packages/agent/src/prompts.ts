@@ -339,10 +339,13 @@ export function kitReviewNote(items: KitItem[]) {
 }
 
 /** what the page agent is asked to fix after a check: the checker's must-fix findings and the reviewer's problems */
+/** a page that throws: the error is often raised inside the engine (engine/…), by a call the page made wrongly */
+const RUNTIME_NOTE = "A runtime error means the page's code throws, and the page is not drawn at all: fix it first. When the error is raised inside the engine (engine/… in the stack), the cause is still the page: the first pages/… line in the stack is the call that passed it something it does not take. Compare that call with the API reference above (each argument, in its order; options are the last argument) and fix the call itself, not the numbers around it.";
+
 export function fixPrompt(round: number, errors: LintIssue[], problems: Problem[], times: { local: number }[], change?: string) {
   return `Check round ${round}: the page needs changes.
 
-${errors.length ? `The checker, must fix:\n${lintLines(errors)}\n\n` : ''}${problems.length ? `The reviewer, looking at the attached sheet:\n${problems.map((p) => `- ${p.at.toFixed(1)}s: ${p.what} → ${p.fix}`).join('\n')}\n\n` : ''}${change ? `The user asked for this change to the page: ${change}\nIf the pictures don't show it yet, make it now.\n\n` : ''}${sheetLine(times)}
+${errors.length ? `The checker, must fix:\n${lintLines(errors)}\n\n` : ''}${errors.some((i) => i.kind === 'runtime' || i.kind === 'api') ? `${RUNTIME_NOTE}\n\n` : ''}${problems.length ? `The reviewer, looking at the attached sheet:\n${problems.map((p) => `- ${p.at.toFixed(1)}s: ${p.what} → ${p.fix}`).join('\n')}\n\n` : ''}${change ? `The user asked for this change to the page: ${change}\nIf the pictures don't show it yet, make it now.\n\n` : ''}${sheetLine(times)}
 Fix each problem with edit, only where it is (a size, a position, a moment). **Never rewrite the whole file with write**: a full rewrite takes minutes, one edit takes seconds. No need to read the file again afterwards.
 **Put all of this round's edits in one reply** (one reply can call edit several times), each with finish: true: the round ends once they apply, no reply needed, and the page is checked again.
 If the problems should stay as they are (intended, or a false alarm), call flag with the reason instead of changing the page.`;

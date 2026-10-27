@@ -211,7 +211,7 @@ const PICTURES_AT_ONCE = 4;
  *  narration comes out 20–25% shorter). A 10-minute film of three textbook chapters ran to 70 pages and 22 minutes
  *  when length was only a guide. */
 export const lengthBudget = (durationSec: number) => ({ pages: Math.ceil((durationSec / 60) * 6) + 1, estimateSec: Math.round(durationSec * 4 / 3) });
-const MAX = { pageLintMs: 90_000, pagesAtOnce: 10, storyboardFix: 2, scriptFix: 2, planTurns: 30, pageTurns: 40, reviewerTurns: 3, pageChecks: 3, kitChecks: 3, kitTurns: 30, revisionChecks: 2, reviewRounds: 2, reviewDefectsMs: 180_000 };
+const MAX = { pageLintMs: 90_000, pagesAtOnce: 10, storyboardFix: 2, scriptFix: 2, planTurns: 30, pageTurns: 40, reviewerTurns: 3, pageChecks: 3, kitChecks: 3, kitTurns: 30, revisionChecks: 2, brokenChecks: 2, reviewRounds: 2, reviewDefectsMs: 180_000 };
 /** the reviewer looks at one sheet and answers: little thinking, quickly */
 const REVIEWER_THINKING: Thinking = 'low';
 /** what breaks a film whatever it looks like: the whole-film check's 'defects' mode takes only these */
@@ -1176,8 +1176,13 @@ export class Director {
       // 'hard': the draft and one round of fixes, of what a viewer would see broken
       const checks = hard ? 2 : fix ? MAX.revisionChecks : MAX.pageChecks;
       const mustFix = (all: LintIssue[]) => errorsOf(all).filter((i) => !hard || HARD.includes(i.kind));
+      // a page whose code still throws (or calls what the engine does not have) after its rounds is not drawn, and its
+      // film pauses with an error: it gets up to brokenChecks more, for that alone (2026-10-27: two films paused so in a
+      // morning, each page's one fix round spent on an error raised deep in the engine by a call with its options third)
+      const brokenNow = () => issues.some((i) => BROKEN.includes(i.kind));
+      const last = (round: number) => round >= checks && !(brokenNow() && round < checks + MAX.brokenChecks);
       try {
-        for (let round = was?.rounds ?? 1; !declined && round <= checks; round++) {
+        for (let round = was?.rounds ?? 1; !declined && round <= checks + MAX.brokenChecks; round++) {
           st.status = 'checking'; st.rounds = round; this.setPage(id, st);
           this.keepKit();
           const times = this.sheetTimes(sb, t);
@@ -1201,8 +1206,10 @@ export class Director {
           }
           const errors = mustFix(issues), problems = verdict?.pass === false ? verdict.problems : [];
           if (!errors.length && !problems.length) { st.status = 'ok'; st.issues = []; break; }
-          if (round === checks) break;
-          r = await this.send(s, fixPrompt(round, errors, problems, times, change) + this.unseen(`page-${id}`), [c.sheet], PAGE_THINKING);
+          if (last(round)) break;
+          // past its own rounds, only what keeps the page from being drawn is asked for
+          const extra = round >= checks;
+          r = await this.send(s, fixPrompt(round, extra ? errors.filter((i) => BROKEN.includes(i.kind)) : errors, extra ? [] : problems, times, change) + this.unseen(`page-${id}`), [c.sheet], PAGE_THINKING);
           await this.commit(this.say(`${id}：第 ${round} 轮修改`, `${id}: check round ${round}`));
           const reason = flagOf(r);
           if (reason !== undefined) { st.status = 'flagged'; st.issues = [{ from: 'agent', msg: reason }]; break; }

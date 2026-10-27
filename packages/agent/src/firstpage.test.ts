@@ -176,3 +176,27 @@ test('\'hard\' page checks: no reviewer, one round of fixes, and only for what a
   assert.equal(f.state.pages.p01.status, 'flagged');
   assert.deepEqual(f.state.pages.p01.issues.map((i) => i.msg), [found[1].msg]);
 });
+
+test('a page that still throws after its rounds gets more, for that alone, instead of failing its film (2026-10-27)', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ft-broken-'));
+  fs.mkdirSync(path.join(dir, 'pages'));
+  fs.writeFileSync(path.join(dir, 'script.js'), "(function (root) {\n  const META = {\n    style: 'whiteboard',\n    extras: [],\n  };\n  root.SCRIPT = { META, PAGES: [] };\n})(globalThis);\n");
+  const asked: Record<string, string[]> = {};
+  const d = new Director({ dir, style: 'whiteboard', brief: { durationSec: 60, lang: 'zh', replyLang: 'zh' }, runtime: artist(asked), reviewer: { runtime: artist(asked) }, pageChecks: 'hard', firstPage: false });
+  const sb = { title: 'T', summary: 'S', pages: [{ id: 'p01', section: 's', say: '…', beats: [] }] };
+  const timing = { duration: 5, pages: [{ id: 'p01', start: 0, end: 5, speechEnd: 4, cues: [] }] };
+  // the first three checks find the page throwing inside the engine (and text off the frame), the fourth finds it drawn
+  let checks = 0;
+  const thrown = { kind: 'runtime', level: 'error', local: 0, msg: "runtime error (build): Cannot read properties of undefined (reading 'type') — at engine/runtime/core.js:203:18, pages/p01.js:59:5" };
+  const off = { kind: 'off-canvas', level: 'error', local: 2, msg: 'off-canvas: "1000" box 1716,204–1994,322' };
+  Object.assign(d.project, { check: async () => (++checks <= 3 ? { issues: [thrown, off], sheet: 'sheet.jpg' } : { issues: [], sheet: 'sheet.jpg' }), lint: async () => [], snap: async () => 'sheet.jpg', commit: async () => undefined, storyboard: () => sb, timeline: async () => timing });
+  const f = d as unknown as Pick<Director, 'pages'> & { state: { stage: string; pages: Record<string, { status: string }> } };
+  f.state.stage = 'pages';
+  await f.pages();
+  assert.equal(checks, 4, 'the draft, its one round, and two more for the error alone');
+  assert.equal(f.state.pages.p01.status, 'ok');
+  // told where to look; the extra rounds ask for the error only
+  assert.match(asked['page-p01'][1], /first pages\/… line in the stack is the call/);
+  assert.match(asked['page-p01'][2], /runtime error/);
+  assert.doesNotMatch(asked['page-p01'][2], /off-canvas/);
+});
