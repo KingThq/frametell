@@ -84,7 +84,7 @@ function film(o: { fail?: RegExp } = {}) {
   const calls: { prompt: string; refs: number; transparent: boolean }[] = [], events: StudioEvent[] = [];
   const none: AgentRuntime = { id: 'pi', model: { provider: 'x', id: 'y' }, open: async () => { throw new Error('no model here'); } };
   const d = new Director({ dir, style: 'vector', brief: { durationSec: 60, lang: 'zh', replyLang: 'zh' }, runtime: none, images: service(calls, o), emit: (e) => events.push(e) });
-  const sb = { title: 'T', summary: 'S', look: { pictures: PLAN }, pages: ids.map((id) => ({ id, section: 's', say: '…', beats: [] })) };
+  const sb: { title: string; summary: string; look: { pictures?: object[] }; pages: object[] } = { title: 'T', summary: 'S', look: { pictures: PLAN }, pages: ids.map((id) => ({ id, section: 's', say: '…', beats: [] })) };
   Object.assign(d.project, { commit: async () => undefined, storyboard: () => sb, timeline: async () => ({ duration: 15, pages: [] }) });
   Object.assign(d, { pictureStyle: () => STYLE });
   return { d: d as unknown as Pick<Director, 'pictures' | 'redrawPicture'> & { state: { stage: string; exported?: boolean; pictures?: string } }, dir, calls, events, sb };
@@ -165,4 +165,59 @@ test('a finished film\'s picture drawn again: from the picture as it is, and its
   const n = f.calls.length;
   await f.d.pictures();
   assert.equal(f.calls.length, n);
+});
+
+test('a picture of the person\'s own subject is drawn from their file; an SVG of theirs needs no picture', () => {
+  const own = ['assets/brand/buzz-1a2b3c.png', 'assets/user/logo-0123456789.svg'];
+  const look = { pictures: [
+    { id: 'buzz', kind: 'character', what: 'Buzz the horsefly, smiling, waving', pages: ['p01'], from: 'assets/brand/buzz-1a2b3c.png' },
+    { id: 'buzz-cheer', kind: 'character', what: 'Buzz cheering', pages: ['p02'], like: 'buzz', from: 'assets/brand/buzz-1a2b3c.png' },
+    { id: 'logo', kind: 'object', what: 'the company logo', pages: ['p02'], from: 'assets/user/logo-0123456789.svg' },
+    { id: 'cat', kind: 'character', what: 'a grey cat sitting', pages: ['p03'], from: 'assets/brand/nope.png' },
+  ] };
+  assert.deepEqual(picturePlan(look, STYLE, own).map((p) => [p.id, p.from, p.like]), [['buzz', 'assets/brand/buzz-1a2b3c.png', undefined], ['buzz-cheer', undefined, 'buzz'], ['logo', undefined, undefined], ['cat', undefined, undefined]]);
+  const issues = pictureIssues(look, ids, STYLE, own).join('\n');
+  assert.match(issues, /buzz-cheer has both `like` and `from`/);
+  assert.match(issues, /logo is `from` assets\/user\/logo-0123456789\.svg, an SVG: place the person's SVG itself/);
+  assert.match(issues, /cat is `from` "assets\/brand\/nope\.png", which is not one of the person's pictures/);
+  assert.doesNotMatch(issues, /buzz is/);
+  const [p] = picturePlan(look, STYLE, own);
+  assert.match(picturePrompt(STYLE, p, [], 'own'), /the person's own picture of this subject/);
+});
+
+test('the sample drawn from the person\'s own file, and the rest from the sample', async () => {
+  const f = film();
+  const brand = 'assets/brand/buzz-1a2b3c.png';
+  fs.mkdirSync(path.join(f.dir, 'assets/brand'), { recursive: true });
+  fs.writeFileSync(path.join(f.dir, brand), png(400, 400, 99));
+  f.sb.look = { pictures: [{ ...PLAN[0], from: brand }, ...PLAN.slice(1)] };
+  Object.assign(f.d, { own: () => [brand] });
+  await f.d.pictures();
+  const bird = f.calls.find((c) => /round bird/.test(c.prompt))!;
+  assert.equal(bird.refs, 1);
+  assert.match(bird.prompt, /the person's own picture of this subject/);
+  assert.match(f.calls.find((c) => /humpback/.test(c.prompt))!.prompt, /shows the look of this film/);
+});
+
+test('a change that adds pictures has them drawn before its pages', async () => {
+  const f = film();
+  f.sb.look = {};
+  fs.writeFileSync(path.join(f.dir, 'script.js'), '');
+  fs.writeFileSync(path.join(f.dir, 'storyboard.json'), '{}');
+  const order: string[] = [];
+  // each read is the storyboard as it is on disk now, as the real one is
+  Object.assign((f.d as unknown as Director).project, { storyboard: () => structuredClone(f.sb) });
+  Object.assign(f.d, {
+    planRevision: async () => { f.sb.look = { pictures: PLAN }; order.push('plan'); return { plan: [{ id: 'p01', note: 'picture bird: the seller as a person' }] }; },
+    pictures: async () => { order.push('pictures'); },
+    pages: async () => { order.push('pages'); },
+    review: async () => {},
+    serverMeta: () => {},
+  });
+  await (f.d as unknown as Director).revise('make the people look like people');
+  assert.deepEqual(order, ['plan', 'pictures', 'pages']);
+  // a change that leaves the pictures as they are draws none
+  order.length = 0;
+  await (f.d as unknown as Director).revise('make the title bigger');
+  assert.deepEqual(order, ['plan', 'pages']);
 });

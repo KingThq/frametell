@@ -1,7 +1,7 @@
 /* Mascot Explainer kit: a kawaii flat cartoon on warm cream paper. Thick soft-brown outlines, flat pastel fills, rounded
  * everything, things that pop in with an overshoot, sticker pills, stamps, money pouches, coins, receipts, price tags,
- * calendars, phones and rounded bar charts, and one cute host (a cat, a bear, a bunny or a fox) who stays on screen for
- * the whole film, points at the numbers as they land and reacts to them.
+ * calendars, phones and rounded bar charts, and one cute host (a cat, a bear, a bunny or a fox, or the person's own
+ * character from a picture) who stays on screen for the whole film, points at the numbers as they land and reacts to them.
  * Every component is a pure function of page time lt. Options marked "fn" take a value, a function of lt, or a keyframe
  * list [[t0, v0], [t1, v1], …] (the last entry whose time has passed wins).
  * Adapted from the author's own series kit (toon / cast / props / host / outro), re-written for this engine. */
@@ -56,7 +56,8 @@
   // ── SVG strings ──
   const n = (v) => (Math.round(v * 10) / 10).toString();
   const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
-  const attrs = (a) => Object.entries(a).filter(([, v]) => v != null).map(([k, v]) => `${k}="${typeof v === 'number' ? n(v) : C(v)}"`).join(' ');
+  // only a paint is a colour name (a linecap's 'round' is not: looked up, it was flagged on every page)
+  const attrs = (a) => Object.entries(a).filter(([, v]) => v != null).map(([k, v]) => `${k}="${typeof v === 'number' ? n(v) : k === 'fill' || k === 'stroke' ? C(v) : v}"`).join(' ');
   const st = (o = {}) => ({ fill: o.fill ?? 'white', stroke: o.stroke ?? 'ink', 'stroke-width': o.sw ?? OUT, 'stroke-linejoin': 'round', 'stroke-linecap': 'round', opacity: o.op });
   const rrect = (x, y, w, hh, r) => {
     r = Math.max(0, Math.min(r, w / 2, hh / 2));
@@ -297,10 +298,22 @@
    *  with poses idle happy point pointL pointR cheer think shock wave book calc nod shrug glasses sad; 'point' aims the
    *  paw at a target: [t, 'point', [x, y]]. say: [[t, '一句话'], [t2, null]] puts a short speech bubble by its head.
    *  P.bignum, P.pouch, P.calc and P.stamp already make it point and nod on their own. o: { who, place, x, y, size,
-   *  acts, say, from (page time it pops in), until (page time it leaves), hide } */
+   *  acts, say, from (page time it pops in), until (page time it leaves), hide }
+   *  The person's own character: who: 'custom', src: 'assets/brand/buzz.png' (a PNG with a transparent background, or an
+   *  SVG), moods: { happy, shock, think, sad, worry, cheer, point, wave, … : picture path } (optional). The picture fits a
+   *  box size tall and 1.2 × size wide, feet on (x, y), never stretched. It enters, hops between pages, breathes, bobs
+   *  while talking and hops, nods and leans like the built-in hosts; on 'point' it leans towards the target and a small
+   *  drawn glove reaches out (hand: false leaves the glove off, hand: 'yellow' colours it). When an act's name or mood has
+   *  a picture in moods (an act may be any mood name: [t, 'worry']), that picture swaps in with a squash-pop; otherwise
+   *  src stays. 'book' and 'calc' hold the notebook or the calculator in front of it. Like `who`, the first page sets it
+   *  for the film; later pages may only add moods. */
   B.mascot = function (o = {}) {
     const e = entry(this);
     e.conf = { ...o };
+    if (PV.preload && typeof o.src === 'string' && o.src) {
+      PV.preload(o.src);
+      for (const v of Object.values(o.moods || {})) if (typeof v === 'string' && v) PV.preload(v);
+    }
   };
 
   // the host lives on the frame, above every page and outside the camera
@@ -312,7 +325,23 @@
     document.getElementById('frame').appendChild(hostSvg);
     return hostSvg;
   };
-  const filmWho = (L) => { for (const p of L.pages) { const c = REG[p.id]?.conf; if (c && c.who && HOSTS[c.who]) return c.who; } return 'cat'; };
+  const isCustom = (c) => !!c && typeof c.src === 'string' && !!c.src && (c.who == null || c.who === 'custom' || !HOSTS[c.who]);
+  /** the film's host: the first page that names one decides (a built-in `who`, or a custom picture); later pages may add moods */
+  function filmHost(L) {
+    let host = null;
+    for (const p of L.pages) {
+      const c = REG[p.id]?.conf;
+      if (!c) continue;
+      if (!host) {
+        if (isCustom(c)) host = { who: 'custom', src: c.src, moods: {}, hand: c.hand };
+        else if (c.who && HOSTS[c.who]) return { who: c.who };
+      }
+      if (host && c.moods && typeof c.moods === 'object' && (c.who == null || c.who === 'custom' || c.src)) {
+        for (const [k, v] of Object.entries(c.moods)) if (typeof v === 'string' && v && !(k in host.moods)) host.moods[k] = v;
+      }
+    }
+    return host || { who: 'cat' };
+  }
   function confOf(pg) {
     const e = REG[pg.id], c = e?.conf || {};
     if (c.hide) return null;
@@ -334,7 +363,7 @@
     let cur = {}, prev = { armL: 10, armR: 10, tilt: 0 }, now = { armL: 10, armR: 10, tilt: 0 }, at = -1e9;
     const resolve = (a) => {
       const p = typeof a.name === 'string' ? (ACTS[a.name] || {}) : (a.name || {});
-      const r = { armL: 10, armR: 10, tilt: 0, ...p };
+      const r = { armL: 10, armR: 10, tilt: 0, ...p, act: typeof a.name === 'string' ? a.name : null };
       if (p.point != null) {
         // aim one paw at the target (or towards the middle of the picture)
         const [tx, ty] = Array.isArray(a.target) ? a.target : [p.point === 0 ? W / 2 : hx + p.point * 600, p.point === 0 ? H * 0.45 : hy - sc * 200];
@@ -343,7 +372,7 @@
         const ang = clamp((Math.atan2(side * (tx - sxw), ty - syw) * 180) / Math.PI, 40, 170);
         r[side < 0 ? 'armL' : 'armR'] = ang; r[side < 0 ? 'reachL' : 'reachR'] = 1.25;
         r.look = [side * 0.9, clamp((ty - syw) / 400, -1, 1) * 0.6];
-        r.tilt = side * 5; r.mood = r.mood || 'happy';
+        r.tilt = side * 5; r.mood = r.mood || 'happy'; r.aim = [tx, ty]; r.side = side;
       }
       return r;
     };
@@ -357,6 +386,7 @@
     if (cur.nod) out.tilt = 7 * Math.sin(d * 8) * Math.exp(-d * 1.2);
     out.squash = d < 1.2 ? 1 - 0.08 * Math.exp(-d * 7) * Math.cos(d * 16) : 1;
     out.hop = cur.hop ? -60 * cur.hop * Math.sin(Math.PI * clamp(d / 0.4)) : 0;
+    out.since = d; out.before = prev; out.k = k;
     return out;
   }
   function placeAt(pg, c, lt) {
@@ -378,9 +408,113 @@
       `<path d="M${n(ax - 19)} ${n(ay - 5)} H${n(ax + 19)}" stroke="white" stroke-width="7"/>` +
       S.text(bx + w / 2, by + hh / 2 + 2, str, { size: fs });
   }
+  // ── the person's own character: a picture (PNG cut-out or SVG) instead of the drawn rig ──
+  // The pictures sit in an HTML layer just under the host's SVG layer (the props and the bubble draw over them); the
+  // glove's arm is drawn behind the picture, so it reaches out from the character's body.
+  let picLayer = null, picShadow = null, picBack = null;
+  const pics = new Map();
+  const picEl = (src) => {
+    if (!picLayer || !picLayer.isConnected) {
+      picLayer = document.createElement('div');
+      picLayer.className = 'mascot-pic';
+      Object.assign(picLayer.style, { position: 'absolute', left: 0, top: 0, width: W + 'px', height: H + 'px', zIndex: 30, pointerEvents: 'none', overflow: 'visible' });
+      hostLayer().before(picLayer);
+      picShadow = document.createElement('div');
+      Object.assign(picShadow.style, { position: 'absolute', left: 0, top: 0, borderRadius: '50%', background: 'rgba(120,80,40,0.16)' });
+      picLayer.appendChild(picShadow);
+      picBack = PV.s('svg', { viewBox: `0 0 ${W} ${H}`, width: W, height: H }, picLayer);
+      Object.assign(picBack.style, { position: 'absolute', left: 0, top: 0, overflow: 'visible' });
+      pics.clear();
+    }
+    let im = pics.get(src);
+    if (!im) {
+      const base = PV.preload ? PV.preload(src) : Object.assign(new Image(), { src });
+      im = base.cloneNode();
+      im.alt = '';
+      Object.assign(im.style, { position: 'absolute', left: 0, top: 0, objectFit: 'contain', objectPosition: '50% 100%', transformOrigin: '50% 100%', display: 'none', maxWidth: 'none' });
+      im._base = base;
+      picLayer.appendChild(im);
+      pics.set(src, im);
+    }
+    return im;
+  };
+  /** the picture's drawn box for a host px tall: fits size tall × 1.2 size wide, keeps its aspect */
+  const picBox = (im, px) => {
+    const b = im._base || im, a = b.naturalWidth > 0 && b.naturalHeight > 0 ? b.naturalWidth / b.naturalHeight : 1;
+    const hh = Math.min(px, (px * 1.2) / a);
+    return { w: hh * a, h: hh };
+  };
+  const MOOD_ALIAS = { pointL: 'point', pointR: 'point', nod: 'happy', wave: 'happy', cheer: 'happy', book: 'think', calc: 'think', shrug: 'think', glasses: 'think', shock: 'worry', sad: 'worry' };
+  /** which picture an act shows: its own name, its mood, then a near mood; else the main picture */
+  const picKey = (host, p) => {
+    for (const k of [p && p.act, p && p.mood, p && p.act && MOOD_ALIAS[p.act], p && p.mood && MOOD_ALIAS[p.mood]]) if (k && host.moods[k]) return k;
+    return null;
+  };
+  /** a small cartoon glove on a short arm from (x0, y0), pointing at angle ang (deg, screen), u = px per host unit */
+  const glove = (x0, y0, ang, u, len, color) => {
+    const a = (ang * Math.PI) / 180, x1 = x0 + Math.cos(a) * len * u, y1 = y0 + Math.sin(a) * len * u;
+    const fill = C(color || 'white');
+    return S.path(`M${n(x0)} ${n(y0)} L${n(x1)} ${n(y1)}`, { fill: 'none', sw: 30 * u, stroke: 'ink' }) +
+      S.path(`M${n(x0)} ${n(y0)} L${n(x1)} ${n(y1)}`, { fill: 'none', sw: 30 * u - 2 * OUT, stroke: fill }) +
+      `<g transform="translate(${n(x1)} ${n(y1)}) rotate(${n(ang)}) scale(${n(u)})">` +
+      S.path('M-6 -20 Q20 -24 26 -10 L52 -12 Q62 -6 52 0 L26 2 Q22 22 -6 20 Q-20 0 -6 -20 Z', { fill }) +
+      S.path('M8 -12 Q4 0 8 12', { fill: 'none', sw: 3.5, stroke: 'soft' }) + '</g>';
+  };
+  function customHost(host, here, pose, state, s2, bob, t) {
+    const px = s2 * 300, u = px / 300;
+    const cur = picKey(host, pose), before = picKey(host, pose.before);
+    const since = pose.since ?? 9;
+    // the picture swap: the old one squashes down, the new one pops up with an overshoot
+    let show = cur, sy = state.squash ?? 1, sx = 1 + (1 - sy) * 0.6;
+    if (cur !== before && since < 0.45) {
+      if (since < 0.07) { const q = since / 0.07; show = before; sy *= 1 - 0.16 * q; sx *= 1 + 0.08 * q; }
+      else { const q = back(clamp((since - 0.07) / 0.32)); sy *= 0.84 + 0.16 * q; sx *= 1.08 - 0.08 * q; }
+    }
+    sy *= 1 + 0.012 * (state.talk || 0);
+    const src = show ? host.moods[show] : host.src;
+    const im = picEl(src);
+    for (const [k, other] of pics) if (k !== src && other.style.display !== 'none') other.style.display = 'none';
+    const box = picBox(im, px), full = picBox(im, here.size);
+    // lean towards a target, a nod, a slow idle sway; the built-in rig's tilt is gentler, a picture leans further
+    const lean = (pose.tilt || 0) * (pose.aim ? 1.6 : 1) + wave(t, 3.3, 1.2);
+    const x = clamp(here.x, box.w / 2 + 10, W - box.w / 2 - 10), y = here.y + (pose.hop || 0) * u + bob;
+    picLayer.style.display = '';
+    Object.assign(im.style, {
+      display: 'block', width: n(box.w) + 'px', height: n(box.h) + 'px', opacity: here.vis.toFixed(3),
+      transform: `translate(${n(x - box.w / 2)}px, ${n(y - box.h)}px) rotate(${n(lean)}deg) scale(${sx.toFixed(4)}, ${sy.toFixed(4)})`,
+    });
+    const shW = box.w * 0.62 * (1 + (pose.hop || 0) / 600);
+    Object.assign(picShadow.style, { width: n(shW) + 'px', height: n(shW * 0.18) + 'px', opacity: here.vis.toFixed(3),
+      transform: `translate(${n(here.x - shW / 2)}px, ${n(here.y + 4 * u - shW * 0.09)}px)` });
+    // what the picture cannot do itself is drawn beside it: the pointing glove, the wave, the sweat drop, the held prop
+    let svg = '', backSvg = '';
+    const hand = host.hand === false ? null : typeof host.hand === 'string' ? host.hand : 'white';
+    // a point on the picture (dx from its centre line, up from its feet) after the lean
+    const rl = (lean * Math.PI) / 180, on = (dx, up) => [x + dx * Math.cos(rl) + up * Math.sin(rl), y + dx * Math.sin(rl) - up * Math.cos(rl)];
+    if (hand && pose.aim && !(cur && cur.startsWith('point'))) {
+      const side = pose.side || 1, g = back(clamp(since / 0.28));
+      const [x0, y0] = on(side * box.w * 0.3, box.h * 0.5 * sy);
+      const ang = (Math.atan2(pose.aim[1] - y0, pose.aim[0] - x0) * 180) / Math.PI;
+      if (g > 0.02) backSvg += glove(x0, y0, ang, u * Math.min(1, g + 0.2), (box.w * 0.2) / u + 60 * g, hand);
+    } else if (hand && pose.act === 'wave' && !host.moods.wave) {
+      const side = x < W / 2 ? 1 : -1, [x0, y0] = on(side * box.w * 0.3, box.h * 0.6 * sy);
+      backSvg += glove(x0, y0, -90 + side * (35 + 22 * Math.sin(since * 9)), u, (box.w * 0.2) / u + 56, hand);
+    }
+    const [swx, swy] = on(box.w * 0.4, box.h * 0.88 * sy);
+    if (state.sweat && !host.moods[pose.act]) svg += `<g transform="translate(${n(swx)} ${n(swy)}) scale(${n(u * 1.4)})">` + S.path('M0 -14 q12 18 0 26 q-12 -8 0 -26 Z', { fill: 'blueF', sw: 3.5, stroke: 'blue' }) + '</g>';
+    if (state.hold && !host.moods[pose.act]) {
+      const hold = state.hold === 'calc' ? CALC : NOTEBOOK, sc0 = state.hold === 'calc' ? 0.78 : 1;
+      svg += `<g transform="translate(${n(x)} ${n(y - 70 * u)}) rotate(-4) scale(${n(u * sc0)})">${hold}</g>`;
+    }
+    const behind = backSvg ? `<g opacity="${here.vis.toFixed(3)}">${backSvg}</g>` : '';
+    if (picBack._last !== behind) { picBack._last = behind; picBack.innerHTML = behind; }
+    return { svg: `<g opacity="${here.vis.toFixed(3)}">${svg}</g>`, h: Math.max(full.h, here.size * 0.5) };
+  }
+
   window.FRAME_HOOKS = (window.FRAME_HOOKS || []).concat([(t, L) => {
     const el = hostLayer(), pages = L.pages;
-    const who = filmWho(L);
+    const host = filmHost(L), who = host.who;
+    if (who !== 'custom' && picLayer && picLayer.isConnected) picLayer.style.display = 'none';
     let i = 0;
     for (const p of pages) if (t >= p.start - 0.35) i = p.index;
     const pg = pages[i], c = confOf(pg), prev = pages[i - 1], pc = prev ? confOf(prev) : null;
@@ -398,7 +532,7 @@
     } else if (!pc && c && i === 0 && c.from == null) {
       const q = clamp((t - 0.15) / 0.5); here.vis *= q > 0 ? 1 : 0; here.y -= (1 - back(q)) * 200;
     }
-    if (!here || here.vis <= 0.001) { if (el.innerHTML) el.innerHTML = ''; return; }
+    if (!here || here.vis <= 0.001) { if (el.innerHTML) el.innerHTML = ''; if (picLayer) picLayer.style.display = 'none'; return; }
     const sc = here.size / 300, lt = t - pg.start;
     const pose = c ? poseIn(c, lt, here.x, here.y, sc) : {};
     let sp = 0;
@@ -407,11 +541,15 @@
     const bob = sp ? -3 * Math.abs(Math.sin(t * 7.5)) : 0;
     const state = { blink: blink(t, 3.6, 0.5), ...pose, talk: pose.mood === 'shock' ? 0 : talk, squash: (pose.squash ?? 1) * (1 + wave(t, 2.6, 0.012)) };
     const s2 = sc * (here.vis < 1 ? 0.6 + 0.4 * here.vis : 1);
-    let svg = `<g opacity="${here.vis.toFixed(3)}" transform="translate(${n(here.x)} ${n(here.y + (pose.hop || 0) * sc + bob)}) scale(${s2.toFixed(4)})">${hostSVG(who, state, t)}</g>`;
+    let svg, headH = here.size;
+    if (who === 'custom') {
+      const r = customHost(host, here, pose, state, s2, bob, t);
+      svg = r.svg; headH = r.h;
+    } else svg = `<g opacity="${here.vis.toFixed(3)}" transform="translate(${n(here.x)} ${n(here.y + (pose.hop || 0) * sc + bob)}) scale(${s2.toFixed(4)})">${hostSVG(who, state, t)}</g>`;
     if (c && c.say.length && here.vis > 0.9) {
       let line = null, at = 0;
       for (const [st0, str] of c.say) if (lt >= st0) { line = str; at = st0; }
-      if (line) { const q = back(clamp((lt - at) / 0.35)); const bs = bubbleSVG(String(line), here.x, here.y, here.size); svg += `<g transform="translate(${n(here.x)} ${n(here.y - here.size)}) scale(${q.toFixed(3)}) translate(${n(-here.x)} ${n(-(here.y - here.size))})">${bs}</g>`; }
+      if (line) { const q = back(clamp((lt - at) / 0.35)); const bs = bubbleSVG(String(line), here.x, here.y, headH); svg += `<g transform="translate(${n(here.x)} ${n(here.y - headH)}) scale(${q.toFixed(3)}) translate(${n(-here.x)} ${n(-(here.y - headH))})">${bs}</g>`; }
     }
     if (el._last !== svg) { el._last = svg; el.innerHTML = svg; }
   }]);

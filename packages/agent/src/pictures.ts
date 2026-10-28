@@ -22,8 +22,14 @@ const SHAPES: Record<PictureShape, string> = { wide: '1536x1024', tall: '1024x15
 export const cutOut = (k: PictureKind) => k === 'object' || k === 'character';
 
 /** one picture as the storyboard asks for it. `like`: another picture of the film that shows the same thing (the same
- *  character in another pose): it is drawn from that one, so the two match */
-export interface PicturePlan { id: string; kind: PictureKind; what: string; shape: PictureShape; pages: string[]; like?: string }
+ *  character in another pose): it is drawn from that one, so the two match. `from`: the person's own picture of this
+ *  subject (their mascot, product or person, a PNG, JPEG or WebP in assets/brand/ or assets/user/): it is drawn from
+ *  that, so it stays theirs, in the film's look */
+export interface PicturePlan { id: string; kind: PictureKind; what: string; shape: PictureShape; pages: string[]; like?: string; from?: string }
+
+/** a file of the person's that a picture may be drawn from: a raster in the brand's or the uploads' folder */
+const OWN = /^assets\/(brand|user)\/[A-Za-z0-9][A-Za-z0-9._-]{0,120}\.(png|jpe?g|webp)$/i;
+const OWN_SVG = /^assets\/(brand|user)\/[A-Za-z0-9][A-Za-z0-9._-]{0,120}\.svg$/i;
 
 /** what a style tells the image model, from its folder's pictures.json; no file: the style draws everything in code */
 export interface PictureStyle { kinds: PictureKind[]; max: number; quality: 'low' | 'medium'; prefix: string; avoid: string }
@@ -64,7 +70,7 @@ export function pictureStyle(style: string): PictureStyle | undefined {
 const listOf = (look: unknown) => (look && typeof look === 'object' ? (look as Record<string, unknown>).pictures : undefined);
 
 /** the pictures the storyboard asks for, as far as they are well formed (the sample first) */
-export function picturePlan(look: unknown, style?: PictureStyle): PicturePlan[] {
+export function picturePlan(look: unknown, style?: PictureStyle, own: string[] = []): PicturePlan[] {
   const list = listOf(look);
   if (!Array.isArray(list) || !style) return [];
   const out: PicturePlan[] = [];
@@ -78,14 +84,16 @@ export function picturePlan(look: unknown, style?: PictureStyle): PicturePlan[] 
     const pages = Array.isArray(o.pages) ? o.pages.filter((p): p is string => typeof p === 'string') : [];
     if (!ID.test(id) || !kind || !what || out.some((p) => p.id === id)) continue;
     const like = typeof o.like === 'string' && out.some((p) => p.id === o.like && !p.like) ? o.like : undefined;
-    out.push({ id, kind, what, shape, pages, ...(like && out.length ? { like } : {}) });
+    const from = !like && typeof o.from === 'string' && OWN.test(o.from) && own.includes(o.from) ? o.from : undefined;
+    out.push({ id, kind, what, shape, pages, ...(like && out.length ? { like } : {}), ...(from ? { from } : {}) });
     if (out.length === style.max) break;
   }
   return out;
 }
 
-/** what is wrong with `look.pictures`, for the storyboard check (nothing when there are none: pictures are optional) */
-export function pictureIssues(look: unknown, pageIds: string[], style: PictureStyle): string[] {
+/** what is wrong with `look.pictures`, for the storyboard check (nothing when there are none: pictures are optional).
+ *  `own`: the person's files in the film (assets/brand/…, assets/user/…), which `from` may name */
+export function pictureIssues(look: unknown, pageIds: string[], style: PictureStyle, own: string[] = []): string[] {
   const list = listOf(look);
   if (list === undefined) return [];
   if (!Array.isArray(list)) return ['`look.pictures` must be a list of { id, kind, what, shape, pages }'];
@@ -113,6 +121,12 @@ export function pictureIssues(look: unknown, pageIds: string[], style: PictureSt
       else if (!base || base === o) out.push(`\`look.pictures\`: ${id} is \`like\` "${String(o.like)}", which is not a picture listed before it`);
       else if (base.like !== undefined) out.push(`\`look.pictures\`: ${id} is \`like\` ${String(o.like)}, which is itself \`like\` another: name the first one`);
     }
+    if (o.from !== undefined) {
+      const f = String(o.from);
+      if (o.like !== undefined) out.push(`\`look.pictures\`: ${id} has both \`like\` and \`from\`: a pose of another picture is drawn from that picture; keep \`like\` only`);
+      else if (OWN_SVG.test(f) && own.includes(f)) out.push(`\`look.pictures\`: ${id} is \`from\` ${f}, an SVG: place the person's SVG itself on the pages (P.img), it needs no generated picture; leave ${id} out`);
+      else if (!OWN.test(f) || !own.includes(f)) out.push(`\`look.pictures\`: ${id} is \`from\` "${f}", which is not one of the person's pictures in this film${own.length ? ` (${own.join(', ')})` : ''}`);
+    }
   });
   return out;
 }
@@ -126,7 +140,7 @@ const KIND_LINE: Record<PictureKind, string> = {
 
 /** the prompt a picture is drawn from: the style's words, what the picture is, the person's adjustments, and what the
  *  pictures it is drawn from are for */
-export function picturePrompt(style: PictureStyle, p: PicturePlan, notes: string[], refs: 'none' | 'look' | 'same' | 'adjust', note?: string): string {
+export function picturePrompt(style: PictureStyle, p: PicturePlan, notes: string[], refs: 'none' | 'look' | 'same' | 'adjust' | 'own', note?: string): string {
   return [
     `${style.prefix.replace(/[.\s]+$/, '')}.`,
     KIND_LINE[p.kind],
@@ -134,6 +148,7 @@ export function picturePrompt(style: PictureStyle, p: PicturePlan, notes: string
     refs === 'look' ? 'The reference image shows the look of this film: match its style, palette, shading and level of detail exactly, but draw the subject above, not what the reference shows.' : '',
     refs === 'same' ? 'The reference image shows this very subject: keep it exactly the same (shape, proportions, colours, details); change only what the subject above says.' : '',
     refs === 'adjust' ? 'The reference image is this picture as it is now: keep its subject, pose, composition and look, and change only what the latest adjustment below asks.' : '',
+    refs === 'own' ? "The reference image is the person's own picture of this subject (their character, mascot, product or person): keep it recognisably the same one (its shape, proportions, colours, markings and character), but draw it in the look described above, in the pose the subject says. Leave out any words, letters or logo text in the reference." : '',
     notes.length ? `Adjustments to the look: ${notes.join('; ')}.` : '',
     note ? `For this picture: ${note}.` : '',
     style.avoid || 'No text, no letters, no numbers, no signature, no watermark.',
@@ -142,7 +157,7 @@ export function picturePrompt(style: PictureStyle, p: PicturePlan, notes: string
 
 export const pictureSize = (p: PicturePlan) => SHAPES[p.shape];
 /** what a picture is drawn for: what the storyboard asks, and the look's adjustments it follows */
-export const pictureKey = (p: PicturePlan, notes: string[]) => createHash('sha256').update(JSON.stringify([p.kind, p.shape, p.what, p.like ?? '', notes])).digest('hex').slice(0, 16);
+export const pictureKey = (p: PicturePlan, notes: string[]) => createHash('sha256').update(JSON.stringify([p.kind, p.shape, p.what, p.like ?? '', notes, ...(p.from ? [p.from] : [])])).digest('hex').slice(0, 16);
 export const picturePath = (p: Pick<Picture, 'file'>) => `${PICTURES_DIR}/${p.file}`;
 export const pictureFile = (id: string, data: Uint8Array, type: 'png' | 'jpg' | 'webp') => `${id}-${createHash('sha256').update(data).digest('hex').slice(0, 10)}.${type}`;
 
@@ -204,16 +219,20 @@ export const pictureCall = (p: Picture & PicturePlan) => {
     : `P.img('${picturePath(p)}', x, y, w, ${h}, { fit: 'contain', border: false, shadow: false, r: 0, at })`;
 };
 
-/** For the director at the storyboard: what pictures it may ask for. '' when the style draws everything in code. */
-export function picturePlanNote(style: PictureStyle | undefined): string {
+/** For the director at the storyboard (and at a change): what pictures it may ask for. '' when the style draws everything
+ *  in code. `own`: the person's files in the film (assets/brand/…, assets/user/…) */
+export function picturePlanNote(style: PictureStyle | undefined, own: string[] = []): string {
   if (!style) return '';
+  const raster = own.filter((f) => OWN.test(f)), svg = own.filter((f) => OWN_SVG.test(f));
   return `This style may also use up to ${style.max} generated pictures, listed in \`look.pictures\`: an image model draws them in the style's own look, and the pages place them and draw everything else on top in code.
 \`"pictures": [{ "id": "whale", "kind": "object", "what": "a humpback whale gliding to the left, mouth closed, long white flippers", "shape": "wide", "pages": ["p02", "p05"] }]\`
 - Ask for one only where code would look poor: ${style.kinds.map((k) => ({ scene: 'an illustrated place (`scene`, full frame)', object: 'a real thing such as an animal, a machine or a plant (`object`, cut out on a transparent ground)', character: 'a person or a creature (`character`, cut out)', texture: 'a ground of paper or grain (`texture`)' })[k]).join(', ')}. Never for text, numbers, labels, charts, diagrams, arrows or anything whose parts must move one by one: a picture only moves as a whole (it slides, grows, fades, is revealed), so what the narration points at part by part stays in code.
 - \`what\` describes the subject only (what it is, its pose, what it does), never the style, colours of the look or a camera: the style's own words are added for you. Never ask for writing in a picture.
 - The first picture is drawn at once as the film's sample: the user sees it with the storyboard and confirms the look before the go-ahead, and every other picture is drawn to match it. Put first the one that shows the film's look best.
 - The same character or object in another pose is a picture of its own with \`"like": "<id of the first>"\`, so it is drawn from that one and matches it.
-- 3–${Math.min(6, style.max)} pictures usually; a film whose pages need none has no \`pictures\`. A beat that shows one says so in its object (\`picture whale\`), so the page agent places it there. A picture on several pages is the same picture every time; a thing that recurs and must move part by part goes in \`kit\` instead.`;
+- 3–${Math.min(6, style.max)} pictures usually; a film whose pages need none has no \`pictures\`. A beat that shows one says so in its object (\`picture whale\`), so the page agent places it there. A picture on several pages is the same picture every time; a thing that recurs and must move part by part goes in \`kit\` instead.${style.kinds.includes('character') ? `
+- People and creatures with faces are drawn as \`character\` pictures, never in code: this is how the film shows people who look like people (a seller, a customer, a team), in the style's own look, even where the style's card keeps faces out of code-drawn figures. One picture per person, a \`like\` picture for the same person in another pose or mood.` : ''}
+- When the person has their own character, mascot, product or person in mind (the brief or the brand names one), it is theirs on screen, never a stand-in: ${raster.length ? `when one of their pictures shows it (${raster.join(', ')}), the picture of it gets \`"from": "<that file>"\`, so it is drawn from theirs and stays recognisably theirs in the film's look (its other poses are \`like\` it)` : 'describe it in `what` as they describe it'}.${svg.length ? ` Their SVGs (${svg.join(', ')}) are placed as they are with P.img and need no picture.` : ''}`;
 }
 
 /** For the page agent: the generated pictures on this page, each with its call. '' when none. */
@@ -225,6 +244,7 @@ export function picturePageNote(on: (Picture & PicturePlan)[]): string {
 Drawn for this film by an image model in the film's look (open one with read to see it):
 ${on.map((p) => `- \`${picturePath(p)}\` (picture ${p.id}): ${p.kind}, ${p.w}×${p.h}, ${p.alpha ? 'transparent background' : 'opaque'}: ${p.what}\n  \`${pictureCall(p)}\``).join('\n')}
 - Place each where the storyboard's beats show it. A \`scene\` or \`texture\` is a backdrop: under everything, filling its area (\`fit: 'cover'\`); a cut-out stands on the page as it is.
+- Where the style's card places a picture with a call of its own (a host drawn from pictures, \`P.mascot({ who: 'custom', src, moods })\`), use that call with the picture's path instead of \`P.img\`.
 - A picture moves as a whole only: slide, grow slowly, fade, reveal with a wipe, drift for parallax. Never stretch, squash, crop away its subject, recolour, filter or draw over its face.
 - Everything the narration points at part by part, every label, number and word, is drawn in code on top, at the moment it is spoken, with room around it to read. Keep text off a busy part of a scene, or set it on a quiet patch of it.`;
 }
