@@ -12,7 +12,7 @@ import type { PageIssue, PageStatus, Stage, StudioEvent } from './events.js';
 import { designedFonts, designedIssues, designedLook, type Look } from './look.js';
 import { BRAND_DIR, SIGN_OFF_HOLD, cornerMark, signsOff } from './brand.js';
 import { assetPath, assetsOn, userAssets } from './assets.js';
-import { PICTURES_DIR, PICTURES_MANIFEST, cutOut, pictureFile, pictureIssues, pictureKey, picturePageNote, picturePath, picturePlan, picturePlanNote, picturePrompt, pictureReviewNote, pictureSize, pictureStyle, picturesOn, readPictures, sniffPicture, type ImageProvider, type Picture, type PicturePlan, type Pictures } from './pictures.js';
+import { PICTURES_DIR, PICTURES_MANIFEST, cutOut, lookPrefix, pictureFile, pictureIssues, pictureKey, picturePageNote, picturePath, picturePlan, picturePlanNote, picturePrompt, pictureReviewNote, pictureSize, pictureStyle, picturesOn, readPictures, sniffPicture, type ImageProvider, type Picture, type PicturePlan, type Pictures } from './pictures.js';
 import { ENGINE_DIR } from '@frametell/engine/tools/project.mjs';
 import { freeze, openIn, readIn, writeIn } from './projectfs.js';
 import { briefFile, runResearch, type ResearchLimits } from './research/research.js';
@@ -769,7 +769,13 @@ export class Director {
 
   // ── this film's generated pictures (pictures.ts) ─────────────────────────────────────────────
   /** the style's words for the image model, when the style allows pictures and there is a service to draw them */
-  private pictureStyle() { return this.o.images ? pictureStyle(this.o.style) : undefined; }
+  private pictureStyle() {
+    const s = this.o.images ? pictureStyle(this.o.style) : undefined;
+    if (!s?.fromLook) return s;
+    // a designed style's film: its pictures are drawn in the look the director designed (none yet while it is planned)
+    const d = this.designed();
+    return { ...s, prefix: d ? lookPrefix(d.card, d.look?.palette) : '' };
+  }
   private planned(): PicturePlan[] { try { return picturePlan(this.project.storyboard().look, this.pictureStyle(), this.own()); } catch { return []; } }
   /** the person's own files in the film, which a picture may be drawn from (pictures.ts `from`): the brand's and the uploads */
   private own() { return [...(this.o.brief.brand?.assets ?? []).map((a) => `${BRAND_DIR}/${a.file}`), ...userAssets(this.project.dir).map(assetPath)]; }

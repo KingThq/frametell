@@ -31,8 +31,10 @@ export interface PicturePlan { id: string; kind: PictureKind; what: string; shap
 const OWN = /^assets\/(brand|user)\/[A-Za-z0-9][A-Za-z0-9._-]{0,120}\.(png|jpe?g|webp)$/i;
 const OWN_SVG = /^assets\/(brand|user)\/[A-Za-z0-9][A-Za-z0-9._-]{0,120}\.svg$/i;
 
-/** what a style tells the image model, from its folder's pictures.json; no file: the style draws everything in code */
-export interface PictureStyle { kinds: PictureKind[]; max: number; quality: 'low' | 'medium'; prefix: string; avoid: string }
+/** what a style tells the image model, from its folder's pictures.json; no file: the style draws everything in code.
+ *  `fromLook`: a style with no look of its own (free) has no words of its own either: each film's are its designed
+ *  look's (lookPrefix) */
+export interface PictureStyle { kinds: PictureKind[]; max: number; quality: 'low' | 'medium'; prefix: string; avoid: string; fromLook?: boolean }
 
 /** one picture as drawn: the file (its name carries the content's hash, so a picture drawn again is a new file and the
  *  render's segment cache never shows a stale one) and the prompt it was drawn from */
@@ -61,10 +63,18 @@ export function pictureStyle(style: string): PictureStyle | undefined {
   try { raw = JSON.parse(fs.readFileSync(path.join(ENGINE_DIR, 'styles', style, 'pictures.json'), 'utf8')); } catch { return undefined; }
   const kinds = Array.isArray(raw.kinds) ? KINDS.filter((k) => (raw.kinds as unknown[]).includes(k)) : [];
   const prefix = typeof raw.prefix === 'string' ? raw.prefix.trim() : '';
-  if (!kinds.length || !prefix) return undefined;
+  const fromLook = raw.fromLook === true;
+  if (!kinds.length || (!prefix && !fromLook)) return undefined;
   const max = typeof raw.max === 'number' && raw.max >= 1 ? Math.min(PICTURES_MAX, Math.floor(raw.max)) : 6;
   const quality = raw.quality === 'low' ? 'low' : 'medium';
-  return { kinds, max, quality, prefix, avoid: typeof raw.avoid === 'string' ? raw.avoid.trim() : '' };
+  return { kinds, max, quality, prefix, avoid: typeof raw.avoid === 'string' ? raw.avoid.trim() : '', ...(fromLook ? { fromLook } : {}) };
+}
+
+/** a designed look's words for the image model: its style card (what it says of the picture, not of type or motion)
+ *  and its colours */
+export function lookPrefix(card: string, palette?: Record<string, string>): string {
+  const colours = Object.entries(palette ?? {}).filter(([k]) => !k.endsWith('F')).map(([k, v]) => `${k} ${v}`).join(', ');
+  return `An illustration in this film's own look, exactly as its style card below describes it: its medium, line, fills, texture, colours and the way things and people are drawn (leave out what the card says about type, text, layout and motion).\n<style-card>\n${card.trim()}\n</style-card>${colours ? `\nThe film's colours: ${colours}` : ''}`;
 }
 
 const listOf = (look: unknown) => (look && typeof look === 'object' ? (look as Record<string, unknown>).pictures : undefined);

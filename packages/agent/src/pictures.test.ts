@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { Director } from './director.js';
 import { writeIn } from './projectfs.js';
-import { picturePageNote, picturePlan, pictureIssues, picturePrompt, picturesOn, readPictures, sniffPicture, type ImageProvider, type PictureStyle } from './pictures.js';
+import { lookPrefix, picturePageNote, picturePlan, pictureIssues, picturePrompt, pictureStyle, picturesOn, readPictures, sniffPicture, type ImageProvider, type PictureStyle } from './pictures.js';
 import type { AgentRuntime } from './runtime/types.js';
 import type { StudioEvent } from './events.js';
 
@@ -220,4 +220,23 @@ test('a change that adds pictures has them drawn before its pages', async () => 
   order.length = 0;
   await (f.d as unknown as Director).revise('make the title bigger');
   assert.deepEqual(order, ['plan', 'pages']);
+});
+
+test('a designed style\'s pictures are drawn in the look the director designed for the film', () => {
+  const free = pictureStyle('free')!;
+  assert.equal(free.fromLook, true);
+  assert.equal(free.prefix, '');
+  assert.ok(free.kinds.includes('character'));
+  const prefix = lookPrefix('A risograph zine in pink and teal.\n\n**Picture**: flat ink shapes, halftone shading.', { paper: '#F4EFE6', ink: '#1A1A1A', red: '#E4407B', redF: '#EFA0BB' });
+  assert.match(prefix, /<style-card>\nA risograph zine in pink and teal\.[\s\S]*halftone shading\.\n<\/style-card>/);
+  assert.match(prefix, /The film's colours: paper #F4EFE6, ink #1A1A1A, red #E4407B$/);
+  // the director's: the card of the film's look, once it is designed
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ft-free-'));
+  const none: AgentRuntime = { id: 'pi', model: { provider: 'x', id: 'y' }, open: async () => { throw new Error('no model here'); } };
+  const d = new Director({ dir, style: 'free', brief: { durationSec: 60 }, runtime: none, images: service([]) });
+  const style = () => (d as unknown as { pictureStyle(): { prefix: string } | undefined }).pictureStyle();
+  Object.assign(d.project, { storyboard: () => ({ title: 'T', summary: 'S', pages: [] }) });
+  assert.equal(style()!.prefix, '', 'nothing designed yet: the storyboard is being planned');
+  Object.assign(d.project, { storyboard: () => ({ title: 'T', summary: 'S', pages: [], look: { card: 'A linocut print in two inks.', palette: { paper: '#EFE6D2', ink: '#222222' }, font: 'serif', line: 'pen' } }) });
+  assert.match(style()!.prefix, /A linocut print in two inks\.[\s\S]*paper #EFE6D2, ink #222222/);
 });

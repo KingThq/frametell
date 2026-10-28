@@ -6,7 +6,7 @@ This style has no look of its own. It is for the few people who come with a pict
 
 - **The user's description is the brief.** They chose this style because they have a picture in mind, and described it: it is in the notes on this film's look, after this card (and anything more in the topic or the notes). A medium (risograph, linocut, a newspaper, a blackboard, a children's book), an era, a reference, colours, type, a mood, what they don't want: honour every part of it as asked, even where you would choose otherwise. Where it says nothing, choose what fits the rest of it, the subject and the audience.
 - **One world, nameable in a few words.** "A 1930s newspaper in two inks", "a museum label on linen", "a lab notebook on squared paper", "a risograph zine in pink and teal". Not a mix of worlds, and not "modern and clean": that is no look at all.
-- **It must be drawable here.** Pages are drawn with strokes (rough or ruled), flat fills, type, the component library and a canvas. No photographs, no 3D, no textures that would need a picture to be made. Grain, halftone dots, ruled lines and paper tints can be drawn.
+- **It must be drawable here.** Pages are drawn with strokes (rough or ruled), flat fills, type, the component library and a canvas. Grain, halftone dots, ruled lines and paper tints can be drawn. What code draws poorly (people, creatures, real things, an illustrated place, a paper texture) can be generated pictures, drawn by an image model from this card (see the pictures note): so the card's **Picture** part must also say how an illustration in this look is made (medium, line, fills, shading, texture) and how people and creatures look in it, concretely enough for an illustrator to match. No photographs or 3D unless the user asked for exactly that.
 - Add `look` to storyboard.json:
 
 ```json
@@ -48,4 +48,4 @@ This style has no look of its own. It is for the few people who come with a pict
 
 - Text is readable: body text at least 36 px, never on a busy ground.
 - No blue-purple "AI product" gradients, neon glows or glassmorphism unless the user asked for exactly that.
-- No faces: when a person is needed, show hands, a back or a silhouette (the storyboard's cast rule holds).
+- No faces drawn in code: a person with a face is a generated `character` picture in the card's look (the storyboard's cast rule holds).
