@@ -12,7 +12,7 @@ import type { PageIssue, PageStatus, Stage, StudioEvent } from './events.js';
 import { designedFonts, designedIssues, designedLook, type Look } from './look.js';
 import { BRAND_DIR, SIGN_OFF_HOLD, cornerMark, signsOff } from './brand.js';
 import { assetPath, assetsOn, userAssets } from './assets.js';
-import { PICTURES_DIR, PICTURES_MANIFEST, cutOut, lookPrefix, pictureFile, pictureIssues, pictureKey, picturePageNote, picturePath, picturePlan, picturePlanNote, picturePrompt, pictureReviewNote, pictureSize, pictureStyle, picturesOn, readPictures, sniffPicture, type ImageProvider, type Picture, type PicturePlan, type Pictures } from './pictures.js';
+import { PICTURES_DIR, PICTURES_MANIFEST, cutOut, cutOutTrouble, lookPrefix, pictureFile, pictureIssues, pictureKey, picturePageNote, picturePath, picturePlan, picturePlanNote, picturePrompt, pictureReviewNote, pictureSize, pictureStyle, picturesOn, readPictures, sniffPicture, type ImageProvider, type Picture, type PicturePlan, type Pictures } from './pictures.js';
 import { ENGINE_DIR } from '@frametell/engine/tools/project.mjs';
 import { freeze, openIn, readIn, writeIn } from './projectfs.js';
 import { briefFile, runResearch, type ResearchLimits } from './research/research.js';
@@ -787,10 +787,18 @@ export class Director {
     const style = this.pictureStyle()!;
     // a reference is a picture of the film's, or a file of the person's (a picture's `from`)
     const from = refs.flatMap((r) => { try { return [new Uint8Array(readIn(this.o.dir, typeof r === 'string' ? r : picturePath(r), { record: true }))]; } catch { return []; } });
-    let data: Uint8Array | undefined, last: unknown;
-    for (let i = 0; i < 2 && !data; i++) {
-      try { data = await this.o.images!.draw({ prompt, size: pictureSize(p), quality: style.quality, transparent: cutOut(p.kind), refs: from.length ? from : undefined, signal: this.o.signal }); }
-      catch (e) { if (stopped(e) || this.o.signal?.aborted) throw e; last = e; }
+    let data: Uint8Array | undefined, last: unknown, ask = prompt;
+    for (let i = 0; i < 2; i++) {
+      try {
+        const got = await this.o.images!.draw({ prompt: ask, size: pictureSize(p), quality: style.quality, transparent: cutOut(p.kind), refs: from.length ? from : undefined, signal: this.o.signal });
+        data = got;
+        // a cut-out that would look stuck on the page (a ground behind it, a sticker's rim) is drawn once more, told why;
+        // a second one like it is kept, as better than none
+        const trouble = cutOut(p.kind) && sniffPicture(got) ? cutOutTrouble(got) : undefined;
+        if (!trouble) break;
+        console.warn(`[pictures] ${p.id}: ${trouble}${i ? ', kept' : ', drawn again'}`);
+        ask = `${prompt}\nThe last attempt was wrong: ${trouble}. Draw the subject alone on full transparency, its own outline the outermost thing in the picture.`;
+      } catch (e) { if (stopped(e) || this.o.signal?.aborted) throw e; last = e; if (data) break; }
     }
     const got = data && sniffPicture(data);
     if (!data || !got) throw new Error(data ? 'the image service answered with something that is not a picture' : (last as Error)?.message ?? 'no picture');
@@ -873,6 +881,19 @@ export class Director {
     const style = this.pictureStyle(), plan = this.planned();
     const p = plan.find((x) => x.id === id);
     if (!style || !p) { this.emit({ type: 'note', text: this.say('这张配图已经不在分镜里了', 'That picture is no longer in the storyboard') }); return; }
+    const moved = await this.drawAgain(p, plan, note);
+    if (moved === undefined) return;
+    await this.commit(this.say(`重画配图 ${id}`, `Picture ${id} drawn again`));
+    if (this.state.stage === 'done') {
+      if (moved) { this.state.exported = false; this.save(); }
+      this.emit({ type: 'ready', duration: (await this.project.timeline()).duration });
+    } else if (this.state.firstPage === 'waiting') this.emit({ type: 'first_page', page: (await this.project.timeline()).pages[0].id });
+  }
+
+  /** one picture drawn again (`note`: what to change in it) and the pages that place it pointed at the new file. → how
+   *  many pages it moved, undefined when no picture could be had (the old one stays) */
+  private async drawAgain(p: PicturePlan, plan: PicturePlan[], note?: string): Promise<number | undefined> {
+    const style = this.pictureStyle()!, id = p.id;
     const pics = readPictures(this.o.dir);
     const old = pics.items.find((x) => x.id === id), change = note?.replace(/\s+/g, ' ').trim().slice(0, 300) || undefined;
     const base = p.like ? pics.items.find((x) => x.id === p.like) : undefined, sample = pics.items.find((x) => x.id === plan[0].id && x.id !== id);
@@ -883,7 +904,7 @@ export class Director {
     catch (e) {
       if (stopped(e) || this.o.signal?.aborted) throw e;
       this.pictureEvent(p, 'failed', { detail: (e as Error).message });
-      return;
+      return undefined;
     }
     this.keepPicture(pic);
     // the pages that place it, pointed at the new file (its name carries its content's hash)
@@ -895,11 +916,30 @@ export class Director {
       }
     }
     this.pictureEvent(p, 'done', { pic });
-    await this.commit(this.say(`重画配图 ${id}`, `Picture ${id} drawn again`));
-    if (this.state.stage === 'done') {
-      if (moved) { this.state.exported = false; this.save(); }
-      this.emit({ type: 'ready', duration: (await this.project.timeline()).duration });
-    } else if (this.state.firstPage === 'waiting') this.emit({ type: 'first_page', page: (await this.project.timeline()).pages[0].id });
+    return moved;
+  }
+
+  /**
+   * The pictures a change reaches, before its pages are drawn: those it added to or changed in the storyboard, and
+   * those the planner named in its plan to draw again (`"pictures": [{ "id", "note" }]`, when the user's words are about
+   * a picture itself: its look, a box around it, its pose). Code can't change a picture; drawing it again can.
+   */
+  private async changePictures(before: unknown) {
+    if (!this.pictureStyle()) return;
+    const asked = (look: unknown) => JSON.stringify(look && typeof look === 'object' ? (look as Record<string, unknown>).pictures ?? null : null);
+    let named: { id: string; note?: string }[] = [];
+    try {
+      const raw = JSON.parse(this.project.read(PLAN_FILE)).pictures;
+      if (Array.isArray(raw)) named = raw.filter((x) => x && typeof x.id === 'string').map((x) => ({ id: x.id, note: typeof x.note === 'string' ? x.note : undefined }));
+    } catch { /* no plan file, or none named */ }
+    const added = asked(this.project.storyboard().look) !== asked(before);
+    if (!added && !named.length) return;
+    this.emit({ type: 'note', text: this.say('先画这次要用的配图', 'Drawing the pictures this change needs first') });
+    if (added) await this.pictures();
+    const plan = this.planned();
+    for (const n of named) { const p = plan.find((x) => x.id === n.id); if (p) await this.drawAgain(p, plan, n.note); }
+    this.freezePictures();
+    await this.commit(this.say('照用户的意见重画配图', 'Pictures drawn again as the user asked'));
   }
 
   /** Server-owned META fields, rewritten in place in script.js (the planner must not change them). */
@@ -1012,9 +1052,10 @@ export class Director {
     // draw it the old way (they are fixed for the pages' file tools)
     await this.kitChange(change);
     const file = (f: string) => (this.project.exists(f) ? this.project.read(f) : '');
-    const script = file('script.js'), storyboard = file('storyboard.json');
+    const script = file('script.js'), storyboard = file('storyboard.json'), look = this.project.storyboard().look;
     this.emit({ type: 'note', text: this.say('收到，我先看看这条要改到哪些地方', 'Got it. Let me see what this changes in the film') });
     const got = await this.planRevision(change, [id], id);
+    await this.changePictures(look);
     const words = file('script.js') !== script, plan = file('storyboard.json') !== storyboard;
     // the first page as the plan has it now: when the planner wrote no note for it, the change itself is its brief
     const first = (await this.project.timeline()).pages[0].id;
@@ -1496,12 +1537,8 @@ export class Director {
       if ('why' in got) this.fail('pages', got.why);
       plan = got.plan;
     }
-    // pictures the change added or changed are drawn before the pages that place them
-    const asked = (look: unknown) => JSON.stringify(look && typeof look === 'object' ? (look as Record<string, unknown>).pictures ?? null : null);
-    if (plan.length && this.pictureStyle() && asked(this.project.storyboard().look) !== asked(sb.look)) {
-      this.emit({ type: 'note', text: this.say('先画这次要用的配图', 'Drawing the pictures this change needs first') });
-      await this.pictures();
-    }
+    // pictures the change added, changed or names to draw again are drawn before the pages that place them
+    if (plan.length && !direct) await this.changePictures(sb.look);   // (a direct change has no plan file of its own)
     const tPlan = Date.now();
     // a change to the narration can leave a page's code as it is (its timing follows the script): only a change to the
     // picture must show in the page's code
@@ -1649,7 +1686,9 @@ ${this.project.read('script.js')}
   private revisionPictureNote() {
     const style = this.pictureStyle();
     if (!style) return '';
-    return `\nThis film may use generated pictures, listed in storyboard.json's \`look.pictures\` (read storyboard.json to change it). When the change asks for what code draws poorly (people who look like people, a character or creature, the person's own mascot or product, a real thing, a place), add or change pictures there and say \`picture <id>\` in the note of each page that shows one: they are drawn before the pages. Leave every picture that stays exactly as it is (same id and words), or it is drawn and paid for again.\n${picturePlanNote(style, this.own())}`;
+    const drawn = this.planned().filter((p) => readPictures(this.o.dir).items.some((x) => x.id === p.id));
+    return `\nThis film may use generated pictures, listed in storyboard.json's \`look.pictures\` (read storyboard.json to change it). When the change asks for what code draws poorly (people who look like people, a character or creature, the person's own mascot or product, a real thing, a place), add or change pictures there and say \`picture <id>\` in the note of each page that shows one: they are drawn before the pages. Leave every picture that stays exactly as it is (same id and words), or it is drawn and paid for again.${drawn.length ? `
+The pictures drawn so far: ${drawn.map((p) => `${p.id} (${p.what})`).join('; ')}. A page's code can't change what is inside a picture. When the user's words are about a picture itself (how a person or thing in it looks, a box, border, rim or paper around it, its pose or expression), add \`"pictures": [{ "id": "<its id>", "note": "what to change in it" }]\` to ${PLAN_FILE} beside "pages": it is drawn again before the pages, and the pages that show it keep their places for it.` : ''}\n${picturePlanNote(style, this.own())}`;
   }
 
   /** what the planner is told of a change asked at the first page: it is about the whole film, whose other pages are not
@@ -1661,7 +1700,7 @@ ${request}
 Take this as a direction for the whole film, not only its first page, and make the film follow it:
 - When it is about what is said or how (an opening hook, a framing, what is linked or kept apart, what is left out or must be in, the order), change script.js and storyboard.json to match, on every page it reaches. The pages after the first are not drawn yet, so change their storyboard entries and their narration freely; a page's cues may be added or removed. Add pages (ids after the last one, each with its storyboard entry and its cues) only when the request needs more than the pages hold. Keep the ids of the pages that stay.
 - When it is about the picture alone, leave both files as they are.
-${[voiceNote('revise', this.o.brief.voice), langNote('revise', this.o.brief.lang, this.o.brief.replyLang).trim()].filter(Boolean).join('\n')}
+${[voiceNote('revise', this.o.brief.voice), langNote('revise', this.o.brief.lang, this.o.brief.replyLang).trim()].filter(Boolean).join('\n')}${this.revisionPictureNote()}
 Then write ${PLAN_FILE} with what the first page's agent must change, down to objects and actions: { "pages": [{ "id": "<the first page's id>", "note": "…" }] }. Then tell the user in one or two sentences what you changed: the narration, the plan of the pages, the first page.
 The storyboard and script.js are given below; don't read them again. Don't look into the engine, take screenshots or run tools other than to edit the files.
 

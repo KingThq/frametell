@@ -7,6 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import { inflateSync } from 'node:zlib';
 import { ENGINE_DIR } from '@frametell/engine/tools/project.mjs';
 import { readIn } from './projectfs.js';
 
@@ -74,7 +75,7 @@ export function pictureStyle(style: string): PictureStyle | undefined {
  *  and its colours */
 export function lookPrefix(card: string, palette?: Record<string, string>): string {
   const colours = Object.entries(palette ?? {}).filter(([k]) => !k.endsWith('F')).map(([k, v]) => `${k} ${v}`).join(', ');
-  return `An illustration in this film's own look, exactly as its style card below describes it: its medium, line, fills, texture, colours and the way things and people are drawn (leave out what the card says about type, text, layout and motion).\n<style-card>\n${card.trim()}\n</style-card>${colours ? `\nThe film's colours: ${colours}` : ''}`;
+  return `An illustration in this film's own look, exactly as its style card below describes it: its medium, line, fills, texture, colours and the way things and people are drawn (leave out what the card says about type, text, layout and motion). The card's ground (its paper, board, background, grain or vignette) is the page's, not this picture's: a cut-out has none of it behind the subject.\n<style-card>\n${card.trim()}\n</style-card>${colours ? `\nThe film's colours: ${colours}` : ''}`;
 }
 
 const listOf = (look: unknown) => (look && typeof look === 'object' ? (look as Record<string, unknown>).pictures : undefined);
@@ -300,4 +301,84 @@ export function openaiImages(key: string, o: { baseUrl?: string; model?: string 
       throw new Error('the image service answered without a picture');
     },
   };
+}
+
+/** a PNG's pixels as RGBA (8-bit, not interlaced: what image services send); undefined for any other kind */
+export function pngPixels(b: Uint8Array): { w: number; h: number; px: Uint8Array } | undefined {
+  const buf = Buffer.from(b.buffer, b.byteOffset, b.byteLength);
+  if (buf.length < 33 || buf.readUInt32BE(0) !== 0x89504e47) return undefined;
+  let w = 0, h = 0, depth = 0, color = 0, interlace = 0, palette: Buffer | undefined, trns: Buffer | undefined;
+  const idat: Buffer[] = [];
+  for (let i = 8; i + 8 <= buf.length;) {
+    const len = buf.readUInt32BE(i), type = buf.toString('latin1', i + 4, i + 8), data = buf.subarray(i + 8, i + 8 + len);
+    if (type === 'IHDR') { w = data.readUInt32BE(0); h = data.readUInt32BE(4); depth = data[8]; color = data[9]; interlace = data[12]; }
+    else if (type === 'PLTE') palette = data;
+    else if (type === 'tRNS') trns = data;
+    else if (type === 'IDAT') idat.push(data);
+    else if (type === 'IEND') break;
+    i += 12 + len;
+  }
+  const chans = ({ 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 } as Record<number, number>)[color];
+  if (depth !== 8 || interlace || !chans || !w || !h || w * h > 40_000_000) return undefined;
+  let raw: Buffer;
+  try { raw = inflateSync(Buffer.concat(idat)); } catch { return undefined; }
+  const stride = w * chans;
+  if (raw.length < h * (stride + 1)) return undefined;
+  const line = new Uint8Array(stride), prev = new Uint8Array(stride), px = new Uint8Array(w * h * 4);
+  for (let y = 0; y < h; y++) {
+    const f = raw[y * (stride + 1)], row = raw.subarray(y * (stride + 1) + 1, (y + 1) * (stride + 1));
+    for (let x = 0; x < stride; x++) {
+      const a = x >= chans ? line[x - chans] : 0, up = prev[x], c = x >= chans ? prev[x - chans] : 0;
+      const p = a + up - c, pa = Math.abs(p - a), pb = Math.abs(p - up), pc = Math.abs(p - c);
+      line[x] = (row[x] + (f === 1 ? a : f === 2 ? up : f === 3 ? (a + up) >> 1 : f === 4 ? (pa <= pb && pa <= pc ? a : pb <= pc ? up : c) : 0)) & 255;
+    }
+    for (let x = 0; x < w; x++) {
+      const o = (y * w + x) * 4, i = x * chans;
+      if (color === 6) { px[o] = line[i]; px[o + 1] = line[i + 1]; px[o + 2] = line[i + 2]; px[o + 3] = line[i + 3]; }
+      else if (color === 4) { px[o] = px[o + 1] = px[o + 2] = line[i]; px[o + 3] = line[i + 1]; }
+      else if (color === 2) { px[o] = line[i]; px[o + 1] = line[i + 1]; px[o + 2] = line[i + 2]; px[o + 3] = 255; }
+      else if (color === 0) { px[o] = px[o + 1] = px[o + 2] = line[i]; px[o + 3] = 255; }
+      else { const k = line[i]; px[o] = palette?.[k * 3] ?? 0; px[o + 1] = palette?.[k * 3 + 1] ?? 0; px[o + 2] = palette?.[k * 3 + 2] ?? 0; px[o + 3] = trns && k < trns.length ? trns[k] : 255; }
+    }
+    prev.set(line);
+  }
+  return { w, h, px };
+}
+
+/**
+ * What is wrong with a cut-out as drawn, in words for the image model; undefined when it stands on the page by itself.
+ * Two ways a cut-out looks stuck on (2026-10-28, "characters drawn on post-its"): a ground drawn behind it out to the
+ * picture's edges, and a sticker's white rim around its outline. A picture that can't be read is let through.
+ */
+export function cutOutTrouble(b: Uint8Array): string | undefined {
+  const sniff = sniffPicture(b);
+  if (sniff && sniff.type !== 'png') return sniff.alpha ? undefined : 'it was drawn on an opaque background';
+  const img = pngPixels(b);
+  if (!img) return undefined;
+  const { w, h, px } = img;
+  const alpha = (x: number, y: number) => px[(y * w + x) * 4 + 3];
+  // its edges: a band 2% wide all round, mostly see-through
+  const band = Math.max(2, Math.round(Math.min(w, h) * 0.02));
+  let edge = 0, solid = 0;
+  for (let y = 0; y < h; y += 2) for (let x = 0; x < w; x += 2) {
+    if (x >= band && x < w - band && y >= band && y < h - band) continue;
+    edge++; if (alpha(x, y) > 128) solid++;
+  }
+  if (edge && solid / edge > 0.2) return 'it was drawn with a background or paper behind the subject out to the edges';
+  // its outline: the solid pixels next to see-through ones. Nearly all white there, while the subject itself is not
+  // white, is a sticker's rim (a white subject, a snowman, is left alone)
+  let rim = 0, rimWhite = 0, body = 0, bodyWhite = 0;
+  // a rim is white or a pale grey (its own soft shadow); the body's white is counted strictly
+  const white = (o: number) => px[o] > 232 && px[o + 1] > 232 && px[o + 2] > 232;
+  const pale = (o: number) => px[o] > 200 && px[o + 1] > 200 && px[o + 2] > 200;
+  // see-through within 3 px: an anti-aliased edge fades over a few pixels
+  const near = (x: number, y: number) => { for (let d = 1; d <= 3; d++) if (alpha(x - d, y) < 32 || alpha(x + d, y) < 32 || alpha(x, y - d) < 32 || alpha(x, y + d) < 32) return true; return false; };
+  for (let y = 3; y < h - 3; y += 2) for (let x = 3; x < w - 3; x += 2) {
+    const o = (y * w + x) * 4;
+    if (px[o + 3] <= 128) continue;
+    body++; if (white(o)) bodyWhite++;
+    if (near(x, y)) { rim++; if (pale(o)) rimWhite++; }
+  }
+  if (rim > 200 && rimWhite / rim > 0.6 && bodyWhite / body < 0.35) return 'it was drawn with a white sticker outline around the subject';
+  return undefined;
 }

@@ -240,3 +240,56 @@ test('a designed style\'s pictures are drawn in the look the director designed f
   Object.assign(d.project, { storyboard: () => ({ title: 'T', summary: 'S', pages: [], look: { card: 'A linocut print in two inks.', palette: { paper: '#EFE6D2', ink: '#222222' }, font: 'serif', line: 'pen' } }) });
   assert.match(style()!.prefix, /A linocut print in two inks\.[\s\S]*paper #EFE6D2, ink #222222/);
 });
+
+test('a change that names a picture to draw again has it drawn again, from itself, before its pages', async () => {
+  const f = film();
+  await f.d.pictures();
+  const before = readPictures(f.dir).items.find((p) => p.id === 'whale')!;
+  fs.writeFileSync(path.join(f.dir, 'pages/p02.js'), `P.img('assets/gen/${before.file}', 0, 0, 100, 100)`);
+  fs.writeFileSync(path.join(f.dir, 'script.js'), '');
+  fs.writeFileSync(path.join(f.dir, 'storyboard.json'), '{}');
+  Object.assign((f.d as unknown as Director).project, { storyboard: () => structuredClone(f.sb) });
+  const order: string[] = [];
+  Object.assign(f.d, {
+    planRevision: async () => {
+      fs.mkdirSync(path.join(f.dir, '.studio'), { recursive: true });
+      fs.writeFileSync(path.join(f.dir, '.studio/revision.json'), JSON.stringify({ pages: [{ id: 'p02', note: 'the whale sits on the page' }], pictures: [{ id: 'whale', note: 'no white border around it' }, { id: 'nope' }] }));
+      order.push('plan'); return { plan: [{ id: 'p02', note: 'the whale sits on the page' }] };
+    },
+    pages: async () => { order.push('pages'); },
+    review: async () => {},
+    serverMeta: () => {},
+  });
+  const calls = f.calls.length;
+  await (f.d as unknown as Director).revise('the whale looks stuck on with a white box');
+  assert.deepEqual(order, ['plan', 'pages']);
+  assert.equal(f.calls.length, calls + 1, 'the whale alone, drawn once');
+  const again = f.calls.at(-1)!;
+  assert.equal(again.refs, 1);
+  assert.match(again.prompt, /For this picture: no white border around it\./);
+  const after = readPictures(f.dir).items.find((p) => p.id === 'whale')!;
+  assert.notEqual(after.file, before.file);
+  assert.match(fs.readFileSync(path.join(f.dir, 'pages/p02.js'), 'utf8'), new RegExp(after.file));
+});
+
+test('a cut-out with a ground behind it, or a sticker\'s white rim, is told apart from a clean one', async () => {
+  const { deflateSync } = await import('node:zlib');
+  /** an RGBA PNG of w×h drawn by `at` */
+  const encode = (w: number, h: number, at: (x: number, y: number) => [number, number, number, number]) => {
+    const raw = Buffer.alloc(h * (w * 4 + 1));
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) Buffer.from(at(x, y)).copy(raw, y * (w * 4 + 1) + 1 + x * 4);
+    const chunk = (type: string, data: Buffer) => { const b = Buffer.alloc(12 + data.length); b.writeUInt32BE(data.length, 0); b.write(type, 4, 'latin1'); data.copy(b, 8); return b; };
+    const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 6;
+    return new Uint8Array(Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]));
+  };
+  const r = (x: number, y: number) => Math.hypot(x - 100, y - 100);
+  const clean = encode(200, 200, (x, y) => (r(x, y) < 60 ? [200, 120, 40, 255] : [0, 0, 0, 0]));
+  const rimmed = encode(200, 200, (x, y) => (r(x, y) < 50 ? [200, 120, 40, 255] : r(x, y) < 62 ? [255, 255, 255, 255] : [0, 0, 0, 0]));
+  const paper = encode(200, 200, (x, y) => (r(x, y) < 60 ? [200, 120, 40, 255] : [244, 238, 226, 255]));
+  const snowman = encode(200, 200, (x, y) => (r(x, y) < 60 ? [250, 250, 250, 255] : [0, 0, 0, 0]));
+  const { cutOutTrouble } = await import('./pictures.js');
+  assert.equal(cutOutTrouble(clean), undefined);
+  assert.match(cutOutTrouble(rimmed) ?? '', /white sticker outline/);
+  assert.match(cutOutTrouble(paper) ?? '', /background or paper behind the subject/);
+  assert.equal(cutOutTrouble(snowman), undefined, 'a white subject is not a rim');
+});
