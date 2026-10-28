@@ -211,10 +211,17 @@ export function kitGroups<T>(items: T[], n: number): T[][] {
   const count = Math.ceil(items.length / n);
   return Array.from({ length: count }, (_, g) => items.filter((_, i) => i % count === g));
 }
+/** a refusal of the run's credential by a hosted service's gateway (taskRoutes / gateway: "not a valid task credential",
+ *  "stale"; the egress: "no credential for this box"): the service's own trouble, never the user's key */
+const HOSTED_HICCUP = /not a valid task credential|no credential for this box|\b409\b[^\n]{0,40}"stale"/i;
+const HICCUP = { zh: '这是云端工作区的一次临时连接问题，和你的设置无关：点继续，会接着画这几页。', en: 'This was a brief connection problem inside the studio, not anything in your settings. Continue, and these pages are drawn again.' };
 /** a revised page whose code is as it was: the change never landed */
 const NOT_MADE = { zh: '这次没有改上：页面和改之前一样', en: 'The change was not made: the page is as it was' };
 /** a model service's trouble behind a failure, in words the user can act on (none: the trouble is the page's own) */
 export function serviceTrouble(text: string): { zh: string; en: string } | undefined {
+  // a hosted service's own credential for the run refused (its box's, not a key of the user's: they have none there),
+  // seen 2026-10-28 during a redeploy of the boxes. Passing: the next try gets the box's current credential
+  if (HOSTED_HICCUP.test(text)) return HICCUP;
   if (/\b402\b|insufficient|balance|quota|credit|billing|余额|额度|欠费/i.test(text)) return { zh: '模型账户的余额或额度用完了：充值，或在设置里换一个 key，再点继续。', en: 'The model account is out of balance or quota. Top it up or use another key in Settings, then continue.' };
   if (/\b40[13]\b|unauthori[sz]ed|invalid.{0,20}(api[ _-]?key|key|token)|authentication|forbidden/i.test(text)) return { zh: '模型的 key 无效或没有权限：在设置里检查 key，再点继续。', en: 'The model key is invalid or not allowed. Check it in Settings, then continue.' };
   if (/\b(429|529|503)\b|rate.?limit|too many requests|overloaded|capacity|限流/i.test(text)) return { zh: '模型服务这会儿太忙，限流了：等几分钟再点继续。', en: 'The model service is busy and limiting requests. Wait a few minutes, then continue.' };
@@ -1172,7 +1179,8 @@ export class Director {
   private notDrawn(bad: [string, PageState][]): string {
     const ids = bad.map(([id]) => id), byReason = new Map<string, string[]>();
     for (const [id, s] of bad) { const r = (s.issues[0]?.msg ?? '').split('\n')[0].slice(0, 240); byReason.set(r, [...(byReason.get(r) ?? []), id]); }
-    const reasons = [...byReason].map(([r, of]) => (byReason.size > 1 ? `${of.join(this.say('、', ', '))}: ` : '') + (r || this.say('原因不明', 'no reason given')));
+    // a hosted service's credential refused is said in words, not as its JSON
+    const reasons = [...byReason].map(([r, of]) => (byReason.size > 1 ? `${of.join(this.say('、', ', '))}: ` : '') + (HOSTED_HICCUP.test(r) ? this.say('连接中断', 'the connection dropped') : r || this.say('原因不明', 'no reason given')));
     const all = bad.map(([, s]) => s.issues.map((i) => i.msg).join(' ')).join(' ');
     const service = serviceTrouble(all);
     const again = bad.every(([, s]) => (s.failures ?? 0) >= 2);
