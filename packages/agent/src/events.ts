@@ -35,6 +35,9 @@ export type UserRef =
   /** the narrator to use from now on: the server switches the film's voice and narrates it again, nothing is redrawn */
   | { kind: 'voice'; label: string; provider: 'volcengine' | 'elevenlabs'; id: string; name: string };
 
+/** a pause's cause a host names (paused.code) */
+export type PauseCode = 'workspace' | 'workspace-lost';
+
 export type StudioEvent =
   | { type: 'stage'; stage: Stage; status: 'start' | 'done' | 'failed' | 'skipped'; detail?: string }
   /** a session's own activity: text, thinking summaries, tool calls, per-turn usage */
@@ -59,9 +62,14 @@ export type StudioEvent =
   | { type: 'user'; text: string; refs?: UserRef[] }
   /** a short line from the director that isn't a model message: how a user note will be handled, what a revision redraws */
   | { type: 'note'; text: string }
+  /** a change to the finished film is drawn: each page it redrew, by number, with what its agent says it changed (in the
+   *  user's language; absent when it said nothing), so a change that looks alike at a glance still says what moved */
+  | { type: 'revised'; pages: { id: string; n: number; section?: string; what?: string }[] }
   /** the run stopped: the user paused, the app was closed mid-run, an error, or (a hosted service) the account ran out
    *  of credits; completed work is kept */
-  | { type: 'paused'; reason: 'user' | 'interrupted' | 'error' | 'credits'; stage?: string; message?: string }
+  | { type: 'paused'; reason: 'user' | 'interrupted' | 'error' | 'credits'; stage?: string; message?: string; /** what a host knows the
+   *  error to be, for a panel to word in its language (`message` stays for any other): `workspace` its workspace (a hosted
+   *  service's box) could not be opened just now, `workspace-lost` it was lost while the film was being made */ code?: PauseCode }
   /** a paused run was continued; its next step follows once the director is ready */
   | { type: 'resumed' }
   | { type: 'narrate'; page: string; index: number; total: number; cached: boolean }

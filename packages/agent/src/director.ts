@@ -1260,6 +1260,8 @@ export class Director {
         declined = unchanged() && flagOf(r) !== undefined ? flagOf(r)!.trim() || this.say(NOT_MADE.zh, NOT_MADE.en) : undefined;
         if (declined) { st.status = 'flagged'; st.issues = [{ from: 'agent', msg: declined }]; }
         else if (unchanged()) r = await this.send(s, `pages/${id}.js is exactly as it was: the change was not made${r.error ? ` (${r.error})` : ''}. Make it now with edit. If an edit failed, its old_string must be copied exactly from the current file; read the file first if unsure.`, undefined, PAGE_THINKING);
+        // a revision's page: the agent's one sentence on what it changed, told to the user when the change is drawn
+        if (fix && !declined && r.text.trim()) this.changed.set(id, r.text.trim());
       }
       st.ref = s.ref;
       if (lane) lane.drawn = true;
@@ -1511,6 +1513,7 @@ export class Director {
     for (const id of ids) this.state.pages[id] = { status: 'queued', rounds: 0, issues: [] };
     this.state.stage = 'pages'; this.save();
     const tDraw = Date.now();
+    this.changed.clear();
     await this.pages(ids);
     this.state.revision = undefined; this.save();
     const tPages = Date.now();
@@ -1519,10 +1522,17 @@ export class Director {
     const missed = [...this.unchanged].filter(([, why]) => !why).map(([id]) => num(id));
     if (missed.length) this.emit({ type: 'note', text: this.say(`${missed.map((n) => `第 ${n} 页`).join('、')}没有改上，画面还是原来的。换个说法再告诉我一次？`, `${missed.length > 1 ? 'Pages' : 'Page'} ${missed.join(', ')} did not change; the picture is as it was. Could you ask again in other words?`) });
     // where the time went, in one line, so a slow step is seen (and can be fixed) instead of only felt
+    // what each redrawn page now shows differently, said once the film plays again: a change that looks alike at a
+    // glance (a beat's timing, a label) is otherwise taken for no change at all
+    const revised = ids.filter((id) => !this.unchanged.has(id)).map((id) => {
+      const what = this.changed.get(id), section = pagesNow.find((p) => p.id === id)?.section;
+      return { id, n: num(id), ...(section ? { section } : {}), ...(what ? { what } : {}) };
+    });
+    this.changed.clear();
     const sec = (ms: number) => this.say(`${Math.max(1, Math.round(ms / 1000))} 秒`, `${Math.max(1, Math.round(ms / 1000))} s`);
-    this.beforeReady = () => this.emit({ type: 'note', text: this.say(
+    this.beforeReady = () => { if (revised.length) this.emit({ type: 'revised', pages: revised }); this.emit({ type: 'note', text: this.say(
       `这次改了 ${sec(Date.now() - t0)}：${direct ? '' : `想怎么改 ${sec(tPlan - t0)} · `}${tDraw - tPlan > 1500 ? `配音 ${sec(tDraw - tPlan)} · ` : ''}画和自检 ${sec(tPages - tDraw)} · 全片检查 ${sec(Date.now() - tPages)}`,
-      `This change took ${sec(Date.now() - t0)}: ${direct ? '' : `planning ${sec(tPlan - t0)} · `}${tDraw - tPlan > 1500 ? `voice ${sec(tDraw - tPlan)} · ` : ''}drawing and checks ${sec(tPages - tDraw)} · whole-film check ${sec(Date.now() - tPages)}`) });
+      `This change took ${sec(Date.now() - t0)}: ${direct ? '' : `planning ${sec(tPlan - t0)} · `}${tDraw - tPlan > 1500 ? `voice ${sec(tDraw - tPlan)} · ` : ''}drawing and checks ${sec(tPages - tDraw)} · whole-film check ${sec(Date.now() - tPages)}`) }); };
     await this.review();
     this.unchanged.clear();
     this.state.change = undefined; this.save();
@@ -1531,6 +1541,8 @@ export class Director {
    *  now, so a picture added while the film is made is placed by the pages drawn after it */
   private assetsOn(sb: Storyboard, id: string) { return assetsOn(userAssets(this.project.dir), sb.pages, id, this.state.revision?.[id]); }
   private picturesOn(sb: Storyboard, id: string) { return picturesOn(picturePlan(sb.look, this.pictureStyle()), readPictures(this.o.dir).items, id); }
+  /** what each page of a revision changed, in its agent's words */
+  private changed = new Map<string, string>();
   /** pages a revision left as they were, with the agent's reason when it gave one */
   private unchanged = new Map<string, string | undefined>();
   /** the revision in progress changed script.js */

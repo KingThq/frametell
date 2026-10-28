@@ -34,6 +34,10 @@ const en: typeof zh = {
     credits: 'You ran out of credits, so the film stopped at {where}.\nTop up, then Continue: it picks up from here.',
     interrupted: 'Stopped at {where} last time: the app was closed or interrupted.',
     error: 'Stopped at {where} on an error: {msg}',
+    code: {
+      workspace: 'this film\'s workspace could not be opened just now (a passing cloud fault). Continue in a minute.',
+      'workspace-lost': 'this film\'s workspace was lost while it was being made (a passing cloud fault). Continue to go on.',
+    },
     unknownError: 'unknown error',
     kept: 'Everything made so far is kept. Continuing won’t redo it or charge you twice.',
     continue: 'Continue',
@@ -47,6 +51,7 @@ const en: typeof zh = {
   },
   export: { running: 'Exporting mp4', done: 'Exported', failed: 'Export failed', withSubs: 'With subtitles', noSubs: 'No subtitles' },
   plan: { title: 'Revision plan', looking: 'Working out which pages to change' },
+  revised: { title: 'Done. Here is what changed', page: 'Page {n}', redrawn: 'Redrawn as you asked', open: 'View page' },
   live: {
     pagesAtOnce: 'Drawing {n} pages at once',
     preparing: 'Getting ready',
@@ -155,6 +160,11 @@ const en: typeof zh = {
       loading: 'Loading brand assets…',
       failed: 'Couldn’t load brand assets: {error}',
       empty: 'No brand assets yet',
+    },
+    outgoing: {
+      sending: 'Sending…',
+      opening: 'Opening this film\'s workspace, usually a few seconds · {n} s',
+      refs: '{n} attachments',
     },
     queue: {
       title: 'Queued · {n}',

@@ -417,7 +417,7 @@ function PicturesLine({ run, project }: { run: RunView; project: ProjectView }) 
 function PausedCard({ item, run, project, latest }: { item: Extract<FeedItem, { kind: 'paused' }>; run: RunView; project: ProjectView; latest: boolean }) {
   useT();
   const where = item.stage ? t('conversation.paused.whereStage', { stage: STAGE_NAME[item.stage] }) : t('conversation.paused.whereHere');
-  const text = item.reason === 'credits' ? t('conversation.paused.credits', { where }) : item.reason === 'user' ? t('conversation.paused.user', { where }) : item.reason === 'interrupted' ? t('conversation.paused.interrupted', { where }) : t('conversation.paused.error', { where, msg: item.message ?? t('conversation.paused.unknownError') });
+  const text = item.reason === 'credits' ? t('conversation.paused.credits', { where }) : item.reason === 'user' ? t('conversation.paused.user', { where }) : item.reason === 'interrupted' ? t('conversation.paused.interrupted', { where }) : t('conversation.paused.error', { where, msg: item.code ? t(`conversation.paused.code.${item.code}`) : item.message ?? t('conversation.paused.unknownError') });
   const canContinue = latest && !!run.paused;
   // the error's first line says what happened; the lines after it, what to do next
   const [what, ...next] = text.split('\n');
@@ -500,7 +500,7 @@ type Block = { kind: 'chapter'; stage: Stage; items: FeedItem[]; key: string; la
 function blocks(feed: FeedItem[]): Block[] {
   const out: Block[] = [];
   for (const it of feed) {
-    const loose = it.kind === 'user' || it.kind === 'paused' || it.kind === 'done' || it.kind === 'ready' || it.kind === 'export' || (it.kind === 'stage' && it.status === 'running');
+    const loose = it.kind === 'user' || it.kind === 'paused' || it.kind === 'revised' || it.kind === 'done' || it.kind === 'ready' || it.kind === 'export' || (it.kind === 'stage' && it.status === 'running');
     const stage = it.kind === 'stage' ? it.stage : it.stage;
     const last = out[out.length - 1];
     // the director working outside a stage (planning a change to the finished film) gets a chapter of its own
@@ -522,6 +522,30 @@ function blocks(feed: FeedItem[]): Block[] {
     else if (b.kind === 'chapter' && !seen.has(b.stage)) { b.latest = true; seen.add(b.stage); }
   }
   return out;
+}
+
+/** a change drawn: what each redrawn page now does differently, in its agent's words, and a way to look at it. A change
+ *  that looks alike at a glance (a beat's timing, a label) otherwise reads as no change at all */
+function RevisedCard({ it, onOpen }: { it: Extract<FeedItem, { kind: 'revised' }>; onOpen: (id: string) => void }) {
+  useT();
+  return (
+    <section className="rounded-2xl border border-line bg-surface px-4 py-3.5 animate-rise" aria-label={t('conversation.revised.title')}>
+      <h3 className="flex items-center gap-1.5 text-[13px] font-semibold text-ink"><Check size={14} className="text-jade" aria-hidden />{t('conversation.revised.title')}</h3>
+      <ul className="mt-2 space-y-2">
+        {it.pages.map((p) => (
+          <li key={p.id} className="flex items-start gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-[12px] font-medium text-ink-2">{t('conversation.revised.page', { n: p.n })}{p.section ? ` · ${p.section}` : ''}</p>
+              <p className="mt-0.5 text-[13px] leading-relaxed text-ink">{p.what ?? t('conversation.revised.redrawn')}</p>
+            </div>
+            <button type="button" className="fs-btn fs-btn-secondary fs-btn-sm mt-0.5 shrink-0" onClick={() => onOpen(p.id)}>
+              <Play size={11} className="fill-current" aria-hidden /> {t('conversation.revised.open')}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
 }
 
 /** the director planning a change: what it read and decided, folded like a stage */
@@ -715,6 +739,7 @@ export function Conversation({ run, project, onSelectPage, onPlayPage, selected,
               : <p key={it.key} className="flex items-center gap-2 text-[12.5px] text-ink-3"><Pause size={13} aria-hidden />{t('conversation.paused.once', { error: it.reason === 'error', stage: it.stage ? STAGE_NAME[it.stage] : undefined })}</p>;
             if (it.kind === 'done' || it.kind === 'ready') return run.feed.filter((f) => f.kind === 'done' || f.kind === 'ready').at(-1) === it ? <DoneCard key={it.key} run={run} project={project} onPlay={onPlay} /> : null;
             if (it.kind === 'export') return <ExportLine key={it.key} it={it} project={project} />;
+            if (it.kind === 'revised') return <RevisedCard key={it.key} it={it} onOpen={onSelectPage} />;
             // first heard of on a finished film (a picture drawn again): a line of its own
             if (it.kind === 'pictures') return <PicturesLine key={it.key} run={run} project={project} />;
             if (it.kind === 'note') return <p key={it.key} className="flex items-start gap-2.5 text-[13px] leading-relaxed text-ink-2"><span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-paper ring-1 ring-line"><Crest size={11} /></span>{it.text}</p>;

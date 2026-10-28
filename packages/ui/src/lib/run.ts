@@ -21,6 +21,8 @@ export type FeedItem = In & (
   | { kind: 'tools'; key: string; session: string; calls: ToolCall[]; at: number }
   | { kind: 'user'; key: string; text: string; refs?: UserRef[]; at: number }
   | { kind: 'note'; key: string; text: string; at: number }
+  /** a change to the finished film, drawn: each page it redrew and what its agent says changed there */
+  | { kind: 'revised'; key: string; pages: Ev<'revised'>['pages']; at: number }
   /** this film's own components being written (one line, shown as the run's `kit` stands now) */
   | { kind: 'kit'; key: string; at: number }
   /** the film's generated pictures after the storyboard (one line, shown as the run's `pictures` stand now) */
@@ -28,7 +30,7 @@ export type FeedItem = In & (
   /** the first page drawn alone, for the person to confirm the look before the rest (one per time it is shown: only the
    *  latest can be answered); `answer`: what they said, once the film moved on from it */
   | { kind: 'first_page'; key: string; page: string; answer?: 'go' | 'change'; at: number; /** when it goes on by itself */ goOnAt?: number; /** it did: nobody answered in time */ auto?: boolean }
-  | { kind: 'paused'; key: string; reason: 'user' | 'interrupted' | 'error' | 'credits'; message?: string; at: number }
+  | { kind: 'paused'; key: string; reason: 'user' | 'interrupted' | 'error' | 'credits'; message?: string; code?: Ev<'paused'>['code']; at: number }
   | { kind: 'check'; key: string; round: number; reds: number; yellows: number; messages: string[]; at: number }
   | { kind: 'approval'; key: string; storyboard: Storyboard; at: number; /** when it goes on by itself */ goOnAt?: number; /** it did: nobody answered in time */ auto?: boolean }
   | { kind: 'pages'; key: string; at: number }
@@ -292,6 +294,7 @@ function step(v: RunView, e: LoggedEvent): RunView {
       else if ((r.ready || r.video) && !r.current && !r.exporting && (e.text || e.refs?.some((x) => x.kind !== 'voice'))) { r.revising = at; r.startedAt = at; }
       push({ kind: 'user', key, text: e.text, refs: e.refs, at }); return r;
     case 'note': push({ kind: 'note', key, text: e.text, at }); return r;
+    case 'revised': push({ kind: 'revised', key, pages: e.pages, at }); return r;
     case 'kit':
       if (e.status === 'start') push({ kind: 'kit', key, at });
       r.kit = { status: e.status, components: e.components ?? r.kit?.components ?? [], round: e.round ?? r.kit?.round, sheet: e.sheet ?? r.kit?.sheet };
@@ -328,7 +331,7 @@ function step(v: RunView, e: LoggedEvent): RunView {
       r.resuming = undefined;
       r.pages = Object.fromEntries(Object.entries(r.pages).map(([k, p]) => [k, p.status === 'drawing' || p.status === 'checking' ? { ...p, status: 'queued' as PageStatus } : p]));
       if (e.reason === 'error' && r.feed.at(-1)?.kind === 'error') r.feed = r.feed.slice(0, -1);   // the paused card carries the message
-      push({ kind: 'paused', key, reason: e.reason, message: e.message, at });
+      push({ kind: 'paused', key, reason: e.reason, message: e.message, ...(e.code ? { code: e.code } : {}), at });
       return r;
     }
     // continued: not paused any more, getting ready for the next step (the header reads "Preparing" until it starts)

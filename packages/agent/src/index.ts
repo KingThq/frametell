@@ -8,7 +8,7 @@ export { gitSync, gitAsync, GIT_SAFE } from './git.js';
 export { cleanLook, type Look } from './look.js';
 export { STYLES, cleanCredits, creditsToFinish, type Brief, type CreditFacts } from './prompts.js';
 export { cleanBrand, brandSection, cornerMark, BRAND_DIR, BRAND_MOMENT_RULES, type BrandBrief, type BrandCorner, type BrandAsset, type BrandAssetKind } from './brand.js';
-export type { StudioEvent, Stage, PageStatus, PageIssue, UserRef } from './events.js';
+export type { StudioEvent, Stage, PageStatus, PageIssue, UserRef, PauseCode } from './events.js';
 export type { AgentRuntime, AgentSession, RuntimeEvent, TokenUsage, TurnResult } from './runtime/types.js';
 export { piRuntime } from './runtime/pi.js';
 // parked runtimes (Claude Agent SDK, Codex): not loaded with the package; import '@frametell/agent/runtime/claude' or '/codex'

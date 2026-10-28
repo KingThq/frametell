@@ -111,7 +111,7 @@ type Prices = { input: number; output: number; cacheRead: number; cacheWrite: nu
  * So is the note that it went on unanswered (went_on): a run picked up from it said the wait again, and the host took
  * that for the end of the go-ahead it had just opened (2026-10-27)
  */
-export const lastStep = <E extends { type: string }>(events: readonly E[]) => events.findLast((e) => !['picture', 'user', 'note', 'voice', 'went_on'].includes(e.type));
+export const lastStep = <E extends { type: string }>(events: readonly E[]) => events.findLast((e) => !['picture', 'user', 'note', 'voice', 'went_on', 'revised'].includes(e.type));
 
 /** a message that only says to go on */
 const GO_ON = /^(继续|接着|继续制作|接着做|继续做|继续吧|go on|continue|resume|keep going)[\s.!。！~～]*$/i;

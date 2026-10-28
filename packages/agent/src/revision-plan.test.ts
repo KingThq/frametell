@@ -31,7 +31,7 @@ test('a plan that cannot be used says what is wrong with it', () => {
 
 type Step = (dir: string, text: string) => Partial<TurnResult> | void;
 /** a finished film and a planner that takes `steps` in turn, one per message, across the sessions it is opened in */
-async function change(request: string, steps: Step[]) {
+async function change(request: string, steps: Step[], drew?: (inner: Record<string, unknown>) => void) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ft-plan-'));
   fs.mkdirSync(path.join(dir, 'pages')); fs.mkdirSync(path.join(dir, '.studio'));
   fs.writeFileSync(path.join(dir, 'storyboard.json'), storyboard());
@@ -57,8 +57,8 @@ async function change(request: string, steps: Step[]) {
   Object.assign(d.project, { timeline: async () => ({ duration: 12, pages: [] }) });
   Object.assign(inner, {
     serverMeta: () => {},
-    pages: async (ids: string[]) => { drawn.push({ ids, revision: { ...(inner.state as { revision?: Record<string, string> }).revision } }); inner.state.stage = 'review'; },
-    review: async () => { reviewed++; inner.state.stage = 'done'; },
+    pages: async (ids: string[]) => { drawn.push({ ids, revision: { ...(inner.state as { revision?: Record<string, string> }).revision } }); drew?.(inner); inner.state.stage = 'review'; },
+    review: async () => { reviewed++; (inner.beforeReady as (() => void) | undefined)?.(); inner.state.stage = 'done'; },
   });
   let error: Error | undefined;
   await d.revise(request).catch((e: Error) => { error = e; });
@@ -139,4 +139,17 @@ test('a plan naming a page the film does not have is asked for again with the pa
   assert.equal(r.error, undefined);
   assert.match(r.sent[1], /p01, p02, p03, p04/);
   assert.deepEqual(r.drawn.map((x) => x.ids), [['p04']]);
+});
+
+test('a change drawn says, page by page, what each page agent changed', async () => {
+  const r = await change('第 2 页和第 4 页的圆再大一点', [], (inner) => {
+    (inner.changed as Map<string, string>).set('p02', '把圆放大到原来的两倍');
+    (inner.unchanged as Map<string, string | undefined>).set('p04', '已经是最大了');
+  });
+  assert.equal(r.error, undefined);
+  assert.deepEqual(r.drawn.map((d) => d.ids), [['p02', 'p04']]);
+  const revised = r.events.filter((e) => e.type === 'revised');
+  // p04 was left as it was (its own note says why): only p02 is in the list
+  assert.deepEqual(revised, [{ type: 'revised', pages: [{ id: 'p02', n: 2, section: 'p02', what: '把圆放大到原来的两倍' }] }]);
+  assert.ok(r.events.some((e) => e.type === 'note' && e.text.includes('第 4 页没有改：已经是最大了')));
 });

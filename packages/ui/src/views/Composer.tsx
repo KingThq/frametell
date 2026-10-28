@@ -9,6 +9,7 @@ import { FilmSettings } from '../components/FilmSettings';
 import { reportShort } from '../components/Credits';
 import { useT } from '../i18n';
 import { track } from '../lib/track';
+import { useNow } from '../lib/hooks';
 
 // The message box to the director. Above the words sits a tray of references — the pages, lines and frames picked on
 // the workbench, files attached, pasted or dropped — so a change request points at exactly what it means.
@@ -175,11 +176,27 @@ function AttachMenu({ onUpload, onPick, onApply }: { onUpload: () => void; onPic
   );
 }
 
+/** a message on its way to a film at rest: what it says, and, past a moment, that the film's workspace is being opened */
+function Outgoing({ text, n, at }: { text: string; n: number; at: number }) {
+  const { t } = useT();
+  const now = useNow(true);
+  const secs = Math.max(0, Math.round((now - at) / 1000));
+  return (
+    <div className="mb-2 flex items-center gap-2 rounded-2xl border border-line bg-paper px-3.5 py-2 text-[12.5px] animate-rise" role="status">
+      <Loader2 size={13} className="shrink-0 animate-spin text-accent-ink" aria-hidden />
+      <span className="min-w-0 truncate text-ink">{text || t('conversation.composer.outgoing.refs', { n })}</span>
+      <span className="shrink-0 text-ink-3">· {secs < 2 ? t('conversation.composer.outgoing.sending') : t('conversation.composer.outgoing.opening', { n: secs })}</span>
+    </div>
+  );
+}
+
 export function Composer({ run, project, viewing, openSettings }: { run: RunView; project: ProjectView; viewing?: Ref; openSettings?: (section?: string) => void }) {
   const { t } = useT();
   const [text, setText] = useState('');
   const [items, setItems] = useState<Item[]>([]);
-  const [busy, setBusy] = useState(false);
+  // a message to a film at rest, on its way: the box is free at once, and a line above it says what is happening (a film
+  // at rest has its workspace put away, and opening it again takes seconds); what was written comes back if it fails
+  const [out, setOut] = useState<{ text: string; items: Item[]; at: number }>();
   const [drag, setDrag] = useState(false);
   const [note, setNote] = useState<string>();
   const [light, setLight] = useState<LightItem | null>(null);
@@ -254,26 +271,32 @@ export function Composer({ run, project, viewing, openSettings }: { run: RunView
 
   const refs = items.filter((x) => x.ref && !x.error).map((x) => x.ref!);
   const pending = items.some((x) => !x.ref && !x.error);
-  const canSend = (!!text.trim() || refs.length > 0) && !busy && !pending;
-  const clear = () => { setText(''); for (const x of items) if (x.preview?.startsWith('blob:')) URL.revokeObjectURL(x.preview); setItems([]); };
+  const canSend = (!!text.trim() || refs.length > 0) && !pending;
+  const revoke = (xs: Item[]) => { for (const x of xs) if (x.preview?.startsWith('blob:')) URL.revokeObjectURL(x.preview); };
+  const clear = () => { setText(''); revoke(items); setItems([]); };
   const send = async () => {
     if (!canSend) return;
     track('edit-submit', { project: project.id, scope: scopeOf(refs), refs: refs.length, queued: running || queue.length > 0 });
     composing.current = false;
-    // the film is being made (or a queue is still waiting its turn): this one waits too, after the others
-    if (running || queue.length) {
+    // the film is being made (or a queue, or a message, is still on its way): this one waits too, after the others
+    if (running || queue.length || out) {
       setQueue((q) => [...q, { id: Math.random().toString(36).slice(2, 10), text: text.trim(), refs }]);
       clear(); takeFocusBack();
       return;
     }
-    setBusy(true);
+    const sent = { text: text.trim(), items: items.filter((x) => x.ref && !x.error), at: Date.now() };
+    setOut(sent);
+    setText(''); setItems([]); takeFocusBack();
     try {
-      await client.say(project.id, text.trim(), toSend(refs));
-      clear();
+      await client.say(project.id, sent.text, toSend(refs));
+      revoke(sent.items);
     } catch (e) {
-      // short of credits: the notice above says so, and what was written stays in the box to send again
+      // short of credits: the notice above says so; either way what was written comes back to the box to send again,
+      // unless something else has been written there meanwhile
       if (!reportShort(project.id, e)) setNote((e as Error).message);
-    } finally { setBusy(false); takeFocusBack(); }
+      setText((cur) => (cur.trim() ? cur : sent.text));
+      setItems((cur) => (cur.length ? (revoke(sent.items), cur) : sent.items));
+    } finally { setOut(undefined); }
   };
 
   // the run at rest: the queue goes as one message (each would otherwise start a change of its own), the references
@@ -297,10 +320,10 @@ export function Composer({ run, project, viewing, openSettings }: { run: RunView
     }
   };
   useEffect(() => {
-    if (running || !queue.length || flush.sending || flush.error) return;
+    if (running || out || !queue.length || flush.sending || flush.error) return;
     const t = setTimeout(() => void sendQueue(), SETTLE_MS);
     return () => clearTimeout(t);
-  }, [running, queue.length, flush.sending, flush.error]);
+  }, [running, !!out, queue.length, flush.sending, flush.error]);
   useEffect(() => { if (running) setFlush((f) => (f.error ? {} : f)); }, [running]);
 
   const open = (x: Item) => {
@@ -327,6 +350,7 @@ export function Composer({ run, project, viewing, openSettings }: { run: RunView
       onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) e.preventDefault(); }}
       onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDrag(false); }}
       onDrop={(e) => { e.preventDefault(); setDrag(false); if (e.dataTransfer.files.length) upload([...e.dataTransfer.files]); }}>
+      {out && <Outgoing text={out.text} n={out.items.length} at={out.at} />}
       {queue.length > 0 && (
         <section className="mb-2 rounded-2xl border border-line bg-paper px-1.5 pb-1.5 pt-2" aria-label={t('conversation.composer.queue.title', { n: queue.length })}>
           <header className="flex items-center gap-1.5 px-2.5 pb-1 text-[11.5px] text-ink-3">
@@ -382,7 +406,7 @@ export function Composer({ run, project, viewing, openSettings }: { run: RunView
           )}
           <span className="ml-auto truncate px-1 text-[11.5px] text-ink-3" role="status">{note ?? (pending ? t('conversation.composer.attaching') : (running || queue.length) && (text.trim() || refs.length) ? t('conversation.composer.queueHint') : switchTo ? t(narrated ? 'conversation.composer.voiceSend' : 'conversation.composer.voiceSendEarly') : suggest ? t('conversation.composer.sendHint') : t('conversation.composer.sendHintNewline'))}</span>
           <button type="submit" disabled={!canSend} aria-label={t('conversation.composer.send')} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-accent text-accent-fg transition-[opacity,transform] duration-150 disabled:opacity-30 active:scale-95">
-            {busy ? <Loader2 size={15} className="animate-spin" aria-hidden /> : <ArrowUp size={16} strokeWidth={2.5} aria-hidden />}
+            <ArrowUp size={16} strokeWidth={2.5} aria-hidden />
           </button>
         </div>
         {drag && (

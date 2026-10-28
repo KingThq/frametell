@@ -36,6 +36,10 @@ export default {
     interrupted: '上次在{where}停下了：应用被关闭或中断。',
     error: '在{where}出错停下了：{msg}',
     unknownError: '未知错误',
+    code: {
+      workspace: '这部片子的工作区刚才没能打开（云服务临时故障），过一会儿点「继续制作」即可。',
+      'workspace-lost': '这部片子的工作区中途断开了（云服务临时故障），点「继续制作」会接着做。',
+    },
     kept: '已经做好的部分都保留着，继续不会重做，也不会重复花钱。',
     continue: '继续制作',
     once: (v: { error: boolean; stage?: string }) => `${v.error ? '出错停过一次' : '停过一次'}${v.stage ? `（${v.stage}）` : ''}，之后接着做了`,
@@ -48,6 +52,7 @@ export default {
   },
   export: { running: '正在导出 mp4', done: '导出好了', failed: '导出没成功', withSubs: '带字幕', noSubs: '无字幕' },
   plan: { title: '修改计划', looking: '在看要改哪几页' },
+  revised: { title: '改好了，这次改了这些', page: '第 {n} 页', redrawn: '这一页按你说的重画了', open: '看这一页' },
   live: {
     pagesAtOnce: '同时在画 {n} 页',
     preparing: '准备中',
@@ -157,6 +162,11 @@ export default {
       loading: '正在载入品牌素材…',
       failed: '品牌素材没能载入：{error}',
       empty: '还没有品牌素材',
+    },
+    outgoing: {
+      sending: '发送中…',
+      opening: '正在打开这部片子的工作区，一般几秒 · {n} 秒',
+      refs: '{n} 个附件',
     },
     queue: {
       title: '排队中 · {n} 条',
