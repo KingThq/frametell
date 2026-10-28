@@ -244,3 +244,21 @@ test('a write the rules refuse leaves no folder behind', () => {
     assert.equal(fs.existsSync(path.join(root, '.git', 'hooks')), false);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
+
+test('a picture too large for the model service is described, not sent', async () => {
+  const f = setup();
+  const png = (w: number, h: number) => {
+    const b = Buffer.alloc(40);
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(b, 0);
+    b.writeUInt32BE(13, 8); b.write('IHDR', 12, 'latin1'); b.writeUInt32BE(w, 16); b.writeUInt32BE(h, 20); b[24] = 8; b[25] = 6;
+    return b;
+  };
+  fs.mkdirSync(path.join(f.root, 'assets/brand'), { recursive: true });
+  fs.writeFileSync(path.join(f.root, 'assets/brand/logo.png'), png(8376, 2317));
+  fs.writeFileSync(path.join(f.root, 'assets/brand/mark.png'), png(512, 512));
+  const big = await f.call('read', { path: 'assets/brand/logo.png' });
+  assert.match(big.text, /assets\/brand\/logo\.png is a picture of 8376×2317 px, too large to be shown to you/);
+  const small = await f.call('read', { path: 'assets/brand/mark.png' });
+  assert.equal(small.text, png(512, 512).toString('base64'));
+  f.done();
+});

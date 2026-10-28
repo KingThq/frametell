@@ -9,6 +9,7 @@ import type { AgentTool } from '@earendil-works/pi-agent-core';
 import { rewriteRefusal } from '../runtime/types.js';
 import { confine } from './sandbox.js';
 import { editIn, readIn, writeIn } from '../projectfs.js';
+import { sniffPicture } from '../pictures.js';
 
 const READ_ONLY = ['engine', 'engine_modules', '.git'];
 const STUDIO = '.studio';
@@ -29,6 +30,8 @@ export function resolveIn(root: string, p: string, write = false): string {
   return abs;
 }
 
+/** what the model service takes of a picture: no side over 8000 px, at most 5 MB of base64 */
+const IMAGE_SIDE_MAX = 7900, IMAGE_BYTES_MAX = 3_700_000;
 const text = (t: string) => ({ content: [{ type: 'text' as const, text: t }], details: undefined });
 
 const ReadP = Type.Object({ path: Type.String(), offset: Type.Optional(Type.Number()), limit: Type.Optional(Type.Number()) });
@@ -52,6 +55,12 @@ export function fileTools(root: string, opts: { timeoutMs?: number } = {}): Agen
       const abs = resolveIn(root, p.path);
       const bytes = readIn(root, abs, { engine: true, shown: p.path });
       if (IMAGE.test(abs)) {
+        // a picture the model service refuses (a side over 8000 px, or over 5 MB once encoded) is described, never sent:
+        // sent, it failed the whole turn (seen 2026-10-28: a brand's 8376 px wide logo stopped a storyboard twice)
+        const size = sniffPicture(bytes);
+        if ((size && Math.max(size.w, size.h) > IMAGE_SIDE_MAX) || bytes.length > IMAGE_BYTES_MAX) {
+          return text(`${p.path} is a picture${size ? ` of ${size.w}×${size.h} px` : ''}, too large to be shown to you (${size && Math.max(size.w, size.h) > IMAGE_SIDE_MAX ? `the limit is ${IMAGE_SIDE_MAX} px a side` : `${(bytes.length / 1e6).toFixed(1)} MB`}). Go by its name and what the brief says it is; it can still be placed on a page.`);
+        }
         const mime = /\.png$/i.test(abs) ? 'image/png' : /\.webp$/i.test(abs) ? 'image/webp' : /\.gif$/i.test(abs) ? 'image/gif' : 'image/jpeg';
         return { content: [{ type: 'image', data: bytes.toString('base64'), mimeType: mime }], details: undefined };
       }
