@@ -154,13 +154,14 @@ const KIND_LINE: Record<PictureKind, string> = {
 
 /** the prompt a picture is drawn from: the style's words, what the picture is, the person's adjustments, and what the
  *  pictures it is drawn from are for */
-export function picturePrompt(style: PictureStyle, p: PicturePlan, notes: string[], refs: 'none' | 'look' | 'same' | 'adjust' | 'own', note?: string): string {
+export function picturePrompt(style: PictureStyle, p: PicturePlan, notes: string[], refs: 'none' | 'look' | 'same' | 'adjust' | 'own' | 'kin', note?: string): string {
   return [
     `${style.prefix.replace(/[.\s]+$/, '')}.`,
     KIND_LINE[p.kind],
     `Subject: ${p.what.replace(/[.\s]+$/, '')}.`,
     refs === 'look' ? 'The reference image shows the look of this film: match its style, palette, shading and level of detail exactly, but draw the subject above, not what the reference shows.' : '',
     refs === 'same' ? 'The reference image shows this very subject: keep it exactly the same (shape, proportions, colours, details); change only what the subject above says.' : '',
+    refs === 'kin' ? 'The reference image shows this same character or thing in another picture of the film: keep who it is exactly (face, hair, build, colours, clothes), but draw the pose and expression the subject above says, and only the hats, props and things in hand that it names; leave out any the reference has that the subject does not mention.' : '',
     refs === 'adjust' ? 'The reference image is this picture as it is now: keep its subject, pose, composition and look, and change only what the latest adjustment below asks.' : '',
     refs === 'own' ? "The reference image is the person's own picture of this subject (their character, mascot, product or person): keep it recognisably the same one (its shape, proportions, colours, markings and character), but draw it in the look described above, in the pose the subject says. Leave out any words, letters or logo text in the reference." : '',
     notes.length ? `Adjustments to the look: ${notes.join('; ')}.` : '',

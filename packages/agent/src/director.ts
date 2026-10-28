@@ -896,11 +896,26 @@ export class Director {
     const style = this.pictureStyle()!, id = p.id;
     const pics = readPictures(this.o.dir);
     const old = pics.items.find((x) => x.id === id), change = note?.replace(/\s+/g, ' ').trim().slice(0, 300) || undefined;
-    const base = p.like ? pics.items.find((x) => x.id === p.like) : undefined, sample = pics.items.find((x) => x.id === plan[0].id && x.id !== id);
-    const [refs, mode]: [(Picture | string)[], 'none' | 'look' | 'same' | 'own'] = old && change ? [[old], 'same'] : base ? [[base], 'same'] : p.from ? [[p.from], 'own'] : sample ? [[sample], 'look'] : [[], 'none'];
+    // a picture drawn from is copied, faults and all: a cut-out with a ground or a rim (cutOutTrouble) is never one.
+    // The same subject comes from a clean picture of it (its base, or another pose of it), the look from a clean other
+    const clean = (x: Picture | undefined) => {
+      if (!x) return undefined;
+      const k = plan.find((q) => q.id === x.id)?.kind;
+      if (!k || !cutOut(k)) return x;
+      try { return cutOutTrouble(new Uint8Array(readIn(this.o.dir, picturePath(x), { record: true }))) ? undefined : x; } catch { return undefined; }
+    };
+    const itself = clean(old && change ? old : undefined);
+    const kin = itself ? undefined : clean(p.like ? pics.items.find((x) => x.id === p.like) : undefined)
+      ?? pics.items.map((x) => (plan.find((q) => q.id === x.id)?.like === id ? clean(x) : undefined)).find(Boolean);
+    const look = [plan[0].id, ...plan.map((q) => q.id)].map((pid) => (pid === id ? undefined : clean(pics.items.find((x) => x.id === pid)))).find(Boolean);
+    // another pose of it is drawn from as the same one, not copied: its hat and props stay with it ('kin')
+    const [refs, mode]: [(Picture | string)[], 'none' | 'look' | 'same' | 'own' | 'kin'] = itself ? [[itself], 'same'] : kin ? [[kin], p.like ? 'same' : 'kin'] : p.from ? [[p.from], 'own'] : look ? [[look], 'look'] : [[], 'none'];
     this.pictureEvent(p, 'drawing', { note: change });
     let pic: Picture;
-    try { pic = await this.drawPicture(p, picturePrompt(style, p, pics.notes, mode, change), refs, pictureKey(p, pics.notes), change); }
+    // drawn from another pose of it: what that one adds (a hat, a prop) is named, or the image model copies it
+    const other = mode === 'kin' && kin ? plan.find((q) => q.id === kin.id)?.what : undefined;
+    const ask = other ? [change, `the reference picture shows "${other}": draw none of what that adds to the subject above (its hat, props, pose)`].filter(Boolean).join('; ') : change;
+    try { pic = await this.drawPicture(p, picturePrompt(style, p, pics.notes, mode, ask), refs, pictureKey(p, pics.notes), change); }
     catch (e) {
       if (stopped(e) || this.o.signal?.aborted) throw e;
       this.pictureEvent(p, 'failed', { detail: (e as Error).message });
