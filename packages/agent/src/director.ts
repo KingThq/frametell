@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { narrate, type TtsProvider } from '@frametell/voice';
 import { Project, childCmd, projectFiles, type LintIssue, type LintKind, type PageTiming, type Storyboard, type Renderer } from './project.js';
-import { FLAG, KIT_CHANGE, ROUTE, VERDICT, fixPrompt, kitChangeAsk, kitChangePrompt, kitChangeSystem, kitFixPrompt, kitPrompt, kitReviewNote, kitReviewerPrompt, kitSystem, langNote, voiceNote, pagePrompt, pageSystem, plannerSystem, replyNote, reviewPrompt, reviewerPrompt, reviewerSystem, routeAsk, routeSystem, scriptPrompt, storyboardFixPrompt, storyboardPrompt, verdictAgain, type Brief, type CreditFacts, type FilmFacts, type Problem } from './prompts.js';
+import { FLAG, KIT_CHANGE, ROUTE, VERDICT, fixPrompt, laneNote, kitChangeAsk, kitChangePrompt, kitChangeSystem, kitFixPrompt, kitPrompt, kitReviewNote, kitReviewerPrompt, kitSystem, langNote, voiceNote, pagePrompt, pageSystem, plannerSystem, replyNote, reviewPrompt, reviewerPrompt, reviewerSystem, routeAsk, routeSystem, scriptPrompt, storyboardFixPrompt, storyboardPrompt, verdictAgain, type Brief, type CreditFacts, type FilmFacts, type Problem } from './prompts.js';
 import { KIT_CHECK_FILE, KIT_FILE, KIT_KEPT, kitCell, kitCheckPage, kitIssues, kitPart, kitPartCheck, kitPlan, kitStage, kitTimes, kitWanted, type KitItem } from './kit.js';
 import { addUsage, emptyUsage, type AgentRuntime, type AgentSession, type SessionOptions, type Thinking, type TokenUsage, type TurnResult } from './runtime/types.js';
 import type { PageIssue, PageStatus, Stage, StudioEvent } from './events.js';
@@ -180,14 +180,37 @@ const addedNote = (fix: string) => `
 
 This page is new: the film is finished and the user's change adds it. What it should be: ${fix}`;
 
-// Pages are drawn at medium thinking, drafts and check rounds alike; on a gateway's …-high model that means its …-medium
-// sibling. Most of a page's time was the model thinking before writing: on the same pages a -high draft took 170–220 s
-// and a -medium one 37–74 s, with no worse a page (one was cleaner, with no lint issues); a check round dropped from
-// 26–153 s to about 6 s. The storyboard and the narration keep the model's own level.
-const PAGE_THINKING: Thinking = 'medium';
+// Pages are drawn at low thinking, drafts and check rounds alike; on a gateway's …-high model that means its …-low
+// sibling. Most of a page's time and cost was the model thinking before writing: on the same pages a -high draft took
+// 170–220 s and a -medium one 37–74 s, with no worse a page; at medium a page still wrote ~8k output tokens for ~1k of
+// code, most of it thought, and low draws pages as good for a fraction of it. The storyboard and the narration keep
+// the model's own level.
+const PAGE_THINKING: Thinking = 'low';
 /** the film's components: a few small drawings every page is waiting on (at medium, one kettle took 44k tokens and
  *  7½ minutes of thought); the kit's check and reviewer catch what a quicker draft gets wrong */
 const KIT_THINKING: Thinking = 'low';
+/** pages one artist session draws, one after the other (a lane): it opens once (its prompt written to the cache once,
+ *  read after that) and sees the pages it drew, so they match without a film kit. A film of up to this many pages is one
+ *  lane, carrying on from the first page's session; a longer one is split into lanes side by side (a session per page wrote
+ *  the same long prompt to the cache once a page, a large share of what a short film cost) */
+const PAGES_PER_LANE = 6;
+export const laneCount = (pages: number) => Math.max(1, Math.ceil(pages / PAGES_PER_LANE));
+/** `items` cut into `n` runs in order, as even as they go (7 in 2 → 4 + 3) */
+export function lanesOf<T>(items: T[], n: number): T[][] {
+  const size = Math.ceil(items.length / Math.max(1, n));
+  return Array.from({ length: Math.ceil(items.length / size) }, (_, i) => items.slice(i * size, (i + 1) * size));
+}
+/** a lane: its session (opened with its first page), the page it is on, and whether it has drawn one already */
+interface Lane { name: string; resume?: string; s?: AgentSession; cur: string; drawn: boolean }
+
+/** components one kit session writes, one after the other: a session's first turn writes its whole prompt to the cache
+ *  (~9k tokens, 2026-10-28), so two to a session halve that, and the pages wait on two short components at most */
+const KIT_PER_SESSION = 2;
+/** `items` in groups of at most `n`, as even as they go (3 → 2 + 1, 5 → 2 + 2 + 1) */
+export function kitGroups<T>(items: T[], n: number): T[][] {
+  const count = Math.ceil(items.length / n);
+  return Array.from({ length: count }, (_, g) => items.filter((_, i) => i % count === g));
+}
 /** a revised page whose code is as it was: the change never landed */
 const NOT_MADE = { zh: '这次没有改上：页面和改之前一样', en: 'The change was not made: the page is as it was' };
 /** a model service's trouble behind a failure, in words the user can act on (none: the trouble is the page's own) */
@@ -209,11 +232,13 @@ async function pool<T>(items: T[], n: number, fn: (x: T) => Promise<unknown>) {
 /** pictures drawn at once: the image service takes ~30 s for each */
 const PICTURES_AT_ONCE = 4;
 // pageChecks: a drawn page is checked at most 3 times (2 rounds of fixes); a revision starts from a checked page, 2.
-/** the length a film is held to: the user's choice, which they pay for by the minute. At most 6 pages a minute (one
- *  more for a short film), and a narration whose estimate runs at most a third over (the estimate runs long; real
- *  narration comes out 20–25% shorter). A 10-minute film of three textbook chapters ran to 70 pages and 22 minutes
- *  when length was only a guide. */
-export const lengthBudget = (durationSec: number) => ({ pages: Math.ceil((durationSec / 60) * 6) + 1, estimateSec: Math.round(durationSec * 4 / 3) });
+/** the length a film is held to: the user's choice, which they pay for by the minute. At most 4 pages a minute (one
+ *  more for a short film), and a narration whose estimate runs at most a third over and at least the length (the
+ *  estimate runs long; real narration comes out 15–25% shorter: estimates of 54 s gave 48 s films, 2026-10-28). A 10-minute film of three textbook chapters ran to 70 pages and 22 minutes
+ *  when length was only a guide. Each page is a session of its own with a fixed cost (its prompt, its first look, its
+ *  check), so pages of ~20 s cost less than pages of ~13 s for the same film. */
+export const PAGES_PER_MINUTE = 4;
+export const lengthBudget = (durationSec: number) => ({ pages: Math.ceil((durationSec / 60) * PAGES_PER_MINUTE) + 1, estimateSec: Math.round(durationSec * 4 / 3), leastSec: durationSec });
 const MAX = { pageLintMs: 90_000, pagesAtOnce: 10, storyboardFix: 2, scriptFix: 2, planTurns: 30, pageTurns: 40, reviewerTurns: 3, pageChecks: 3, kitChecks: 3, kitTurns: 30, revisionChecks: 2, brokenChecks: 2, reviewRounds: 2, reviewDefectsMs: 180_000 };
 /** the reviewer looks at one sheet and answers: little thinking, quickly */
 const REVIEWER_THINKING: Thinking = 'low';
@@ -399,13 +424,14 @@ export class Director {
     if (name.startsWith('check-') || name === ROUTE_SESSION) return this.o.reviewer ?? this.o.pages ?? { runtime: this.o.runtime, prices: this.o.prices };
     return this.o.pages && (name.startsWith('page-') || name === 'review' || name.startsWith('kit-')) ? this.o.pages : { runtime: this.o.runtime, prices: this.o.prices };
   }
-  private async session(name: string, system: string, maxTurns: number, resume?: string, signal = this.o.signal, tools: Pick<SessionOptions, 'tools' | 'answers'> = {}): Promise<AgentSession> {
+  private async session(name: string, system: string, maxTurns: number, resume?: string, signal = this.o.signal, tools: Pick<SessionOptions, 'tools' | 'answers'> = {}, shownAs?: () => string): Promise<AgentSession> {
     const { runtime, prices } = this.model(name);
     // a reviewer's words are for the page agent, not the people watching: only its turns go out, to be counted (the
     // router's too: its reply goes out as a note, from the runner)
     const shown = !name.startsWith('check-') && name !== ROUTE_SESSION;
     return runtime.open({ name, system, cwd: this.o.dir, maxTurns, signal, ...tools, onEvent: (event) => {
-      if (shown || event.type === 'turn') this.emit({ type: 'agent', session: name, event });
+      // a lane's session speaks for the page it is on, so the panel shows each page's work on that page
+      if (shown || event.type === 'turn') this.emit({ type: 'agent', session: shownAs?.() ?? name, event });
       if (event.type === 'turn') { this.countTurn(event.usage, prices, runtime.model); if (name.startsWith('page-')) this.firstTurn?.(); }
     } }, resume);
   }
@@ -498,7 +524,7 @@ export class Director {
     let r = await this.send(s, scriptPrompt(feedback, this.o.brief) + this.unseen('planner'));
     this.state.planner = s.ref; this.save();
     let check: Awaited<ReturnType<Project['scriptCheck']>>;
-    let condensed = false;
+    let resized = false;
     for (let ask = 0; ; ask++) {
       // the planner rewrites script.js: put the server-owned fields back (a lost META.voice once rendered a silent film)
       this.serverMeta();
@@ -511,10 +537,18 @@ export class Director {
       const missing = this.project.storyboard().pages.map((p) => p.id).filter((id) => !narrated.has(id));
       // the length the user chose is kept to: a narration that runs well over is sent back once to be condensed (not
       // after the user's own changes to the storyboard: what they asked for comes first)
-      const target = this.o.brief.durationSec, over = !missing.length && !feedback && !condensed && target > 0 && timeline.duration > lengthBudget(target).estimateSec;
+      // and one that falls short of it is sent back once to be filled out (a film of fewer, longer pages came out at 48 s
+      // of 60: the planner wrote as many lines a page as before)
+      const target = this.o.brief.durationSec, sized = !missing.length && !feedback && !resized && target > 0;
+      const over = sized && timeline.duration > lengthBudget(target).estimateSec, short = sized && timeline.duration < lengthBudget(target).leastSec;
+      const m = (sec: number) => Math.round(sec / 6) / 10;
+      if (short) {
+        resized = true;
+        r = await this.send(s, `script.js is estimated at ${m(timeline.duration)} minutes; the film is ${m(target)} minutes, the length the user chose and pays for, and real narration comes out shorter than the estimate, so the estimate should land between ${m(target * 1.1)} and ${m(lengthBudget(target).estimateSec)}. Fill it out on the pages you have: more of the explanation, a concrete example or number, the step the viewer would ask about (more cues on a page, never padding or repetition), keeping the storyboard's beats. Then run node engine/tools/script.mjs and stop. ` + replyNote(this.o.brief.replyLang, this.o.brief.lang));
+        continue;
+      }
       if (over) {
-        condensed = true;
-        const m = (sec: number) => Math.round(sec / 6) / 10;
+        resized = true;
         r = await this.send(s, `script.js is estimated at ${m(timeline.duration)} minutes; the film is ${m(target)} minutes, the length the user chose and pays for, and the estimate may run at most ${m(lengthBudget(target).estimateSec)}. Condense the narration to fit: keep every page and every main point, and cut secondary detail, extra examples, repetition and asides (fewer cues on a page, shorter lines). Then run node engine/tools/script.mjs, stop, and say in your report what was condensed. ` + replyNote(this.o.brief.replyLang, this.o.brief.lang));
         continue;
       }
@@ -627,10 +661,11 @@ export class Director {
     const sb = this.project.storyboard();
     const designed = this.designed();
     const items = kitPlan(sb.look);
-    if (!kitWanted(sb.pages.length, items)) { this.state.kit = { status: 'none', components: [] }; this.save(); return; }
+    // a film drawn in one lane needs none: one session draws every page and sees what it drew
+    if (!kitWanted(sb.pages.length, items) || (this.lanesOn() && laneCount(sb.pages.length) === 1)) { this.state.kit = { status: 'none', components: [] }; this.save(); return; }
     this.emit({ type: 'kit', status: 'start', components: items.map((x) => x.name) });
-    // one session per component, all at once: the pages wait on the slowest one, not on the sum (one session writing a
-    // 6-page film's two components took 10 minutes)
+    // sessions side by side, each writing up to KIT_PER_SESSION components one after the other: the pages wait on the
+    // slowest session, not on the sum (one session writing a 6-page film's two components took 10 minutes, at medium)
     const sessions = new Map<string, AgentSession>();
     let reviewer: AgentSession | undefined;
     let passed: string[] = [], sheet: string | undefined;
@@ -643,14 +678,19 @@ export class Director {
     };
     try {
       const system = kitSystem(this.o.style, styleExtras(this.o.style), this.o.brief.styleNotes, designed?.card);
-      await Promise.all(items.map(async (it, i) => {
-        try {
-          const s = await this.session(`kit-${it.name}`, system, MAX.kitTurns);
-          sessions.set(it.name, s);
-          const r = await this.send(s, kitPrompt(sb, items, it, kitCell(i, items.length), this.o.brief.lang, this.o.brief.replyLang), undefined, KIT_THINKING);
-          if (!written(it)) await this.send(s, `Write both ${kitPart(it.name)} and ${kitPartCheck(it.name)}, then stop.`, undefined, KIT_THINKING);
-          if (!written(it)) this.emit({ type: 'kit', status: 'failed', detail: `${it.name}: ${r.error || 'not written'}`.slice(0, 400) });
-        } catch (e) { if (stopped(e)) throw e; this.emit({ type: 'kit', status: 'failed', detail: `${it.name}: ${(e as Error).message}`.slice(0, 400) }); }
+      await Promise.all(kitGroups(items, KIT_PER_SESSION).map(async (group) => {
+        let s: AgentSession | undefined;
+        for (const [k, it] of group.entries()) {
+          const i = items.indexOf(it);
+          try {
+            s ??= await this.session(`kit-${it.name}`, system, MAX.kitTurns);
+            sessions.set(it.name, s);
+            const next = k ? `Next, another of this film's components, in the same session: ${group.slice(0, k).map((x) => `\`P.${x.name}\``).join(', ')} ${k > 1 ? 'are' : 'is'} yours and written.\n\n` : '';
+            const r = await this.send(s, next + kitPrompt(sb, items, it, kitCell(i, items.length), this.o.brief.lang, this.o.brief.replyLang), undefined, KIT_THINKING);
+            if (!written(it)) await this.send(s, `Write both ${kitPart(it.name)} and ${kitPartCheck(it.name)}, then stop.`, undefined, KIT_THINKING);
+            if (!written(it)) this.emit({ type: 'kit', status: 'failed', detail: `${it.name}: ${r.error || 'not written'}`.slice(0, 400) });
+          } catch (e) { if (stopped(e)) throw e; this.emit({ type: 'kit', status: 'failed', detail: `${it.name}: ${(e as Error).message}`.slice(0, 400) }); }
+        }
       }));
       // a component that was never written is left out; the check page is laid out for those that were
       let ready = items.filter(written);
@@ -683,10 +723,14 @@ export class Director {
         // each component's session fixes its own problems, all at once; a crash, or a problem that names none, goes to all
         const before = files();
         const mine = (n: string) => problems.filter((p) => p.name === n || p.name === undefined);
-        await Promise.all(ready.map(async (x) => {
+        // a session that holds two components fixes them one after the other
+        const owed = new Map<AgentSession, KitItem[]>();
+        for (const x of ready) {
           const s = sessions.get(x.name);
-          if (!s || (!crash && !mine(x.name).length)) return;
-          await this.send(s, kitFixPrompt(x.name, round, mine(x.name), crash), sheet ? [sheet] : undefined, KIT_THINKING);
+          if (s && (crash || mine(x.name).length)) owed.set(s, [...(owed.get(s) ?? []), x]);
+        }
+        await Promise.all([...owed].map(async ([s, xs]) => {
+          for (const x of xs) await this.send(s, kitFixPrompt(x.name, round, mine(x.name), crash), sheet ? [sheet] : undefined, KIT_THINKING);
         }));
         if (files() === before) break;
         ready = items.filter(written);
@@ -697,7 +741,7 @@ export class Director {
       this.emit({ type: 'kit', status: 'failed', detail: (e as Error).message.slice(0, 400) });
     } finally {
       await reviewer?.close();
-      await Promise.all([...sessions.values()].map((s) => s.close()));
+      await Promise.all([...new Set(sessions.values())].map((s) => s.close()));
     }
     if (passed.length) {
       // the components that passed, each its own IIFE as its session wrote it
@@ -907,7 +951,10 @@ export class Director {
     if (this.state.firstPage === 'done') return;
     const tl = await this.project.timeline();
     const drawn = (id: string) => ['ok', 'flagged'].includes(this.state.pages[id]?.status ?? '');
-    if (this.o.firstPage === false || tl.pages.length < 2 || tl.pages.slice(1).some((p) => drawn(p.id))) { this.state.firstPage = 'done'; this.save(); return; }
+    // only a film whose look is designed for it (a style with no look of its own) waits: a style pack's look is known
+    // before anything is drawn, so its pages are drawn straight on, in one session from the first page (few films ever
+    // stopped at the wait, and it kept the first page's session from carrying on)
+    if (this.o.firstPage === false || !designedFonts(this.o.style) || tl.pages.length < 2 || tl.pages.slice(1).some((p) => drawn(p.id))) { this.state.firstPage = 'done'; this.save(); return; }
     // a run picked up again while it waits (the app restarted) has said so already, unless the log has moved on since
     // (a pause, a new voice: seen 2026-10-26, a film narrated again at its wait then sat silent, the user's 「继续」
     // answered as a question): the wait is said once, and again for a first page drawn anew or a log moved past it
@@ -1061,6 +1108,32 @@ export class Director {
       return was?.status === 'checking' && was.ref && was.rounds > 0 && !this.state.revision?.[p.id] && this.project.exists(`pages/${p.id}.js`) ? [[p.id, { ref: was.ref, rounds: was.rounds }]] : [];
     }));
     for (const p of todo) this.setPage(p.id, { status: 'queued', rounds: 0, issues: [], failures: failures(p.id) });
+    // the film's drawing (not a redraw of some pages, not a change): in lanes, carrying on from the first page's session
+    const opener = tl.pages[0]?.id, seed = opener && !todo.some((p) => p.id === opener) ? this.state.pages[opener]?.ref : undefined;
+    if (!only && !this.state.revision && this.lanesOn() && todo.length > 1) {
+      const fresh = todo.filter((p) => !this.inChecks.has(p.id));
+      const runs = lanesOf(fresh, laneCount(tl.pages.length)).map((pages) => {
+        const name = `page-${pages[0].id}`;
+        const lane: Lane = { name, cur: name, drawn: !!seed, resume: seed && fs.existsSync(seed) ? this.fork(seed, name) : undefined };
+        return async () => { try { for (const p of pages) { if (this.o.signal?.aborted) break; await this.page(sb, p, lane); } } finally { await lane.s?.close(); if (lane.s) this.drewAll = lane.s.ref; } };
+      });
+      // pages picked up in their checks go on in sessions of their own, as before
+      const picked = todo.filter((p) => this.inChecks.has(p.id)).map((p) => () => this.page(sb, p));
+      const m = this.model('page-').runtime.model;
+      const paysToCache = m.provider === 'anthropic' || /claude/i.test(m.id);
+      const warm = new Promise<void>((ok) => { this.firstTurn = ok; setTimeout(ok, 90_000); });
+      this.drewAll = undefined;
+      const [lead, ...rest] = [...runs, ...picked];
+      const led = lead();
+      if (rest.length && paysToCache) await Promise.race([warm, led]);
+      const settled = await Promise.allSettled([led, ...rest.map((go) => go())]);
+      const thrown = settled.find((x): x is PromiseRejectedResult => x.status === 'rejected');
+      if (thrown) throw thrown.reason;
+      this.firstTurn = undefined;
+      // the whole-film check carries on from the session that drew every page (one lane): its prompt is cached already
+      if (runs.length !== 1 || picked.length) this.drewAll = undefined;
+      return this.pagesDone(only, o);
+    }
     const queue = [...todo];
     const worker = async () => { for (let p = queue.shift(); p && !this.o.signal?.aborted; p = queue.shift()) await this.page(sb, p); };
     // Up to 10 pages at once. Every page session opens with the same long system prompt (the style's component pack).
@@ -1079,6 +1152,11 @@ export class Director {
     const thrown = settled.find((x): x is PromiseRejectedResult => x.status === 'rejected');
     if (thrown) throw thrown.reason;
     this.firstTurn = undefined;
+    return this.pagesDone(only, o);
+  }
+
+  /** the pages are all drawn or given up: failed ones stop the film with why; otherwise it goes on to its review */
+  private pagesDone(only: string[] | undefined, o: { hold?: boolean }) {
     const bad = Object.entries(this.state.pages).filter(([id, s]) => s.status === 'failed' && (!o.hold || only?.includes(id)));
     const ids = bad.map(([id]) => id);
     if (o.hold && !bad.length) return;
@@ -1140,14 +1218,31 @@ export class Director {
     }
   }
 
-  private async page(sb: Storyboard, t: PageTiming) {
+  /** whether pages are drawn in lanes: a runtime whose session can be resumed from a copy of another's transcript */
+  private lanesOn() { return this.model('page-').runtime.id === 'pi'; }
+  /** a copy of a session's transcript under `name`, to resume as a session of its own (the first page's for a lane) */
+  private fork(ref: string, name: string) {
+    if (!fs.existsSync(ref)) return ref;   // nothing on disk to copy (a runtime that keeps it elsewhere): resumed as it is
+    const to = this.project.file(`.studio/sessions/${name}.json`);
+    fs.mkdirSync(path.dirname(to), { recursive: true });
+    if (path.resolve(ref) !== path.resolve(to)) fs.copyFileSync(ref, to);
+    return to;
+  }
+
+  private async page(sb: Storyboard, t: PageTiming, lane?: Lane) {
     const id = t.id;
     const was = this.inChecks.get(id);
     const st: PageState = { status: 'drawing', rounds: 0, issues: [], failures: this.state.pages[id]?.failures };
     this.setPage(id, st);
     let s: AgentSession | undefined;
     try {
-      s = await this.session(`page-${id}`, pageSystem(this.o.style, styleExtras(this.o.style), this.o.brief.preferences, this.o.brief.styleNotes, this.designed()?.card, this.filmKit()), MAX.pageTurns, was?.ref, undefined, { answers: [FLAG] });
+      const system = pageSystem(this.o.style, styleExtras(this.o.style), this.o.brief.preferences, this.o.brief.styleNotes, this.designed()?.card, this.filmKit());
+      if (lane) { lane.cur = `page-${id}`; s = lane.s ??= await this.session(lane.name, system, MAX.pageTurns, lane.resume, undefined, { answers: [FLAG] }, () => lane.cur); }
+      // a page picked up in its checks resumes its conversation; a lane's is shared, so it goes on in a copy
+      else s = await this.session(`page-${id}`, system, MAX.pageTurns, was?.ref && this.lanesOn() ? this.fork(was.ref, `page-${id}`) : was?.ref, undefined, { answers: [FLAG] });
+      // in a lane the session has drawn pages before this one: it says which page it is on now in every message
+      const next = lane?.drawn ? laneNote(id) : '';
+      const on = lane ? `pages/${id}.js: ` : '';
       // a page the change adds has no code yet (seen: an end card added to the storyboard; reading its code failed the
       // page on every Continue): it is drawn from nothing, with the change as its brief
       const added = this.state.revision?.[id] !== undefined && !was && !this.project.exists(`pages/${id}.js`);
@@ -1158,7 +1253,7 @@ export class Director {
       const unchanged = () => before !== undefined && this.project.read(`pages/${id}.js`) === before;
       let r: TurnResult | undefined, declined: string | undefined;
       if (!was) {
-        r = await this.send(s, pagePrompt(sb, id, t, this.o.brief.lang, this.o.brief.replyLang, !!fix, this.o.brief.brand, this.assetsOn(sb, id), picturePageNote(this.picturesOn(sb, id))) + (fix ? revisionNote(id, fix, this.project.read(`pages/${id}.js`), this.state.firstPage === 'waiting') : added ? addedNote(this.state.revision![id]) : '') + directionsNote(this.directions(`page-${id}`)), undefined, PAGE_THINKING);
+        r = await this.send(s, next + pagePrompt(sb, id, t, this.o.brief.lang, this.o.brief.replyLang, !!fix, this.o.brief.brand, this.assetsOn(sb, id), picturePageNote(this.picturesOn(sb, id))) + (fix ? revisionNote(id, fix, this.project.read(`pages/${id}.js`), this.state.firstPage === 'waiting') : added ? addedNote(this.state.revision![id]) : '') + directionsNote(this.directions(`page-${id}`)), undefined, PAGE_THINKING);
         if (!this.project.exists(`pages/${id}.js`)) r = await this.send(s, `pages/${id}.js does not exist yet; write it, then stop.`, undefined, PAGE_THINKING);
         if (!this.project.exists(`pages/${id}.js`)) throw new Error(r.error || this.say('没有写出页面文件', 'No page file was written'));
         // the agent found nothing to change (already so, or nothing this page can do): it says why instead of searching
@@ -1167,6 +1262,7 @@ export class Director {
         else if (unchanged()) r = await this.send(s, `pages/${id}.js is exactly as it was: the change was not made${r.error ? ` (${r.error})` : ''}. Make it now with edit. If an edit failed, its old_string must be copied exactly from the current file; read the file first if unsure.`, undefined, PAGE_THINKING);
       }
       st.ref = s.ref;
+      if (lane) lane.drawn = true;
       if (!was) await this.commit(this.say(`${id}：初稿`, `${id}: first draft`));
       // Each round: the page is checked (lint and a contact sheet, one browser) and a reviewer that did not draw it looks
       // at the sheet. The page is done when the reviewer passes it and lint has no error; otherwise the problems go back
@@ -1212,7 +1308,7 @@ export class Director {
           if (last(round)) break;
           // past its own rounds, only what keeps the page from being drawn is asked for
           const extra = round >= checks;
-          r = await this.send(s, fixPrompt(round, extra ? errors.filter((i) => BROKEN.includes(i.kind)) : errors, extra ? [] : problems, times, change) + this.unseen(`page-${id}`), [c.sheet], PAGE_THINKING);
+          r = await this.send(s, on + fixPrompt(round, extra ? errors.filter((i) => BROKEN.includes(i.kind)) : errors, extra ? [] : problems, times, change) + this.unseen(`page-${id}`), [c.sheet], PAGE_THINKING);
           await this.commit(this.say(`${id}：第 ${round} 轮修改`, `${id}: check round ${round}`));
           const reason = flagOf(r);
           if (reason !== undefined) { st.status = 'flagged'; st.issues = [{ from: 'agent', msg: reason }]; break; }
@@ -1241,7 +1337,7 @@ export class Director {
         if (!declined) { st.status = 'flagged'; st.issues = [{ from: 'run', kind: 'not-made', msg: NOT_MADE.en }]; }
         this.unchanged.set(id, declined);
       }
-      await s.close();
+      if (!lane) await s.close();
       // one settled frame as the film-strip thumbnail (the check sheets are 4-up and read as noise at tile size)
       let thumb: string | undefined;
       try { thumb = await this.project.snap(`${id}-thumb`, [Math.max(t.start + 0.5, t.end - 0.4)], [id], 480, false); } catch (e) { if (stopped(e)) throw e; }
@@ -1275,7 +1371,8 @@ export class Director {
     const limit = defectsOnly ? new AbortController() : undefined;
     const timer = limit && setTimeout(() => limit.abort(), MAX.reviewDefectsMs);
     const signal = limit ? AbortSignal.any([limit.signal, ...(this.o.signal ? [this.o.signal] : [])]) : this.o.signal;
-    const s = await this.session('review', pageSystem(this.o.style, styleExtras(this.o.style), this.o.brief.preferences, this.o.brief.styleNotes, this.designed()?.card, this.filmKit()), MAX.pageTurns, undefined, signal);
+    const s = await this.session('review', pageSystem(this.o.style, styleExtras(this.o.style), this.o.brief.preferences, this.o.brief.styleNotes, this.designed()?.card, this.filmKit()), MAX.pageTurns, this.drewAll ? this.fork(this.drewAll, 'review') : undefined, signal, this.drewAll ? { answers: [FLAG] } : {});
+    // (carrying on from the pages' conversation, it keeps their tools: a transcript that used flag is refused without it)
     let timedOut = false;
     try {
       for (let round = 1; round <= (defectsOnly ? 1 : MAX.reviewRounds); round++) {
@@ -1446,6 +1543,8 @@ export class Director {
   private redraw = new Set<string>();
   /** pages the last run left in their checks: the conversation to resume, and the check round it was in */
   private inChecks = new Map<string, { ref: string; rounds: number }>();
+  /** the transcript of the one lane that drew every page of this run, for the whole-film check to carry on from */
+  private drewAll?: string;
   /** each session's last error from its model service */
   private lastError = new WeakMap<AgentSession, string>();
 

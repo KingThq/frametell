@@ -40,3 +40,7 @@ export function plantRepo(dir: string, marker: string) {
   evilRepo(path.join(dir, 'sub'), marker);
   fs.writeFileSync(path.join(dir, '.gitmodules'), `[submodule "sub"]\n\tpath = sub\n\turl = ./sub\n\tupdate = !touch ${marker}\n`);
 }
+
+/** the page a page agent is asked about: a lane's session draws several, so the message names it (\`page **p03**\`,
+ *  \`pages/p03.js: \`); a session of one page is named for it */
+export const askedPage = (text: string, session: string) => /page \*\*(p\d+)\*\*|^pages\/(p\d+)\.js: /.exec(text)?.slice(1).find(Boolean) ?? session.slice(5);

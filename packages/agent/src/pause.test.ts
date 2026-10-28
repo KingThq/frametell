@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import { askedPage } from './testing.js';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -17,9 +18,10 @@ test('Pause ends the run only once every page has stopped, and starts no new pag
   const pages: AgentRuntime = {
     id: 'pi', model: { provider: 'x', id: 'flash' },
     async open(s) {
-      return { ref: 'r', close: async () => {}, send: async () => {
+      return { ref: 'r', close: async () => {}, send: async ({ text }: { text: string }) => {
         if (stop.signal.aborted) return { text: '', stopReason: 'aborted', usage: {}, answers: [] } as never;
-        fs.writeFileSync(path.join(s.cwd, `pages/${s.name.slice(5)}.js`), PAGE(s.name.slice(5)));
+        const id = askedPage(text, s.name);
+        fs.writeFileSync(path.join(s.cwd, `pages/${id}.js`), PAGE(id));
         return { text: 'drawn', stopReason: 'done', usage: {}, answers: [] } as never;
       } };
     },
@@ -31,18 +33,18 @@ test('Pause ends the run only once every page has stopped, and starts no new pag
   Object.assign(d.project, {
     lint: async () => [], commit: async () => undefined, storyboard: () => sb,
     timeline: async () => ({ duration: 15, pages: ids.map((id, i) => ({ id, start: i * 5, end: i * 5 + 5, speechEnd: i * 5 + 4, cues: [] })) }),
-    // p01's check stops at once; p02's takes a while to wind down
+    // the pages are drawn one after the other (one lane): Pause comes during p01's check, which takes a while to wind down
     check: (id: string) => new Promise((_ok, fail) => {
-      const end = () => setTimeout(() => { if (id === 'p02') slowDone = true; fail(new DOMException('aborted', 'AbortError')); }, id === 'p02' ? 200 : 0);
+      const end = () => setTimeout(() => { if (id === 'p01') slowDone = true; fail(new DOMException('aborted', 'AbortError')); }, id === 'p01' ? 200 : 0);
       if (stop.signal.aborted) return end();
       stop.signal.addEventListener('abort', end);
-      if (id === 'p02') setTimeout(() => stop.abort(), 20);
+      if (id === 'p01') setTimeout(() => stop.abort(), 20);
     }),
   });
   (d as unknown as { o: { emit: (e: { type: string; id: string; status: string }) => void } }).o.emit = (e) => { if (e.type === 'page') events.push(e); };
   await assert.rejects(d.pages(), (e: Error) => e.name === 'AbortError');
   assert.ok(slowDone, 'the run ended before every page had stopped');
-  assert.ok(!events.some((e) => e.id === 'p03' && e.status !== 'queued'), 'a page was started after the stop');
+  assert.ok(!events.some((e) => e.id !== 'p01' && e.status !== 'queued'), 'a page was started after the stop');
 });
 
 test('a stopped shell command takes what it started with it', { skip: process.platform === 'win32' }, async () => {

@@ -53,8 +53,16 @@ test('a narration that runs well over the chosen length is sent back once to be 
   assert.match(sent[1], /keep every page and every main point/);
 });
 
+test('a narration short of the chosen length is sent back once to be filled out', async () => {
+  const sent = await timed(() => 50);
+  assert.equal(sent.length, 2);
+  assert.match(sent[1], /estimated at 0\.8 minutes; the film is 1 minutes.*between 1\.1 and 1\.3/);
+  assert.equal((await timed((n) => (n === 1 ? 50 : 150))).length, 2, 'once only: a second answer stands, short or long');
+});
+
 test('a narration within a third over is kept, and the user\'s own changes are not pushed back', async () => {
   assert.equal((await timed(() => 80)).length, 1);
+  assert.equal((await timed(() => 60)).length, 1);
   assert.equal((await timed(() => 150, 'add a page on the history')).length, 1);
 });
 
@@ -63,8 +71,8 @@ test('a storyboard with more pages than the length holds is red; the length is t
   const page = (id: string) => ({ id, section: id, say: '…', beats: [] });
   const d = new Director({ dir, style: 'chalkboard', brief: { durationSec: 60, lang: 'zh', replyLang: 'zh' }, runtime: {} as AgentRuntime });
   const issues = () => (d as unknown as { lengthIssues(): { msg: string }[] }).lengthIssues();
-  fs.writeFileSync(path.join(dir, 'storyboard.json'), JSON.stringify({ title: 'T', pages: Array.from({ length: 7 }, (_, i) => page(`p0${i + 1}`)) }));
+  fs.writeFileSync(path.join(dir, 'storyboard.json'), JSON.stringify({ title: 'T', pages: Array.from({ length: 5 }, (_, i) => page(`p0${i + 1}`)) }));
   assert.deepEqual(issues(), []);
-  fs.writeFileSync(path.join(dir, 'storyboard.json'), JSON.stringify({ title: 'T', pages: Array.from({ length: 8 }, (_, i) => page(`p0${i + 1}`)) }));
-  assert.match(issues()[0].msg, /8 pages for a 1-minute film: at most 7/);
+  fs.writeFileSync(path.join(dir, 'storyboard.json'), JSON.stringify({ title: 'T', pages: Array.from({ length: 6 }, (_, i) => page(`p0${i + 1}`)) }));
+  assert.match(issues()[0].msg, /6 pages for a 1-minute film: at most 5/);
 });

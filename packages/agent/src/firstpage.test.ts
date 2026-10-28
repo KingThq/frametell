@@ -11,14 +11,17 @@ const PAGE = (id: string) => `ENGINE.visual('${id}', (P) => {\n  P.text('${id}',
 
 /** the page model writes its page; `asked` keeps each page session's prompts; `routes`: the router's answers, in turn
  *  (none: it answers nothing, and every message is a change) */
+const opened: string[] = [];
 function artist(asked: Record<string, string[]>, routes: unknown[] = [], planner?: (text: string, cwd: string) => void): AgentRuntime {
   return {
     id: 'pi', model: { provider: 'x', id: 'flash' },
-    async open(s) {
-      return { ref: s.name, close: async () => {}, send: async ({ text }: { text: string }) => {
+    async open(s, resume) {
+      opened.push(`${s.name}${resume ? `<${path.basename(resume)}` : ''}`);
+      return { ref: path.join(s.cwd, `.studio/sessions/${s.name}.json`), close: async () => {}, send: async ({ text }: { text: string }) => {
         (asked[s.name] ??= []).push(text);
         if (s.name.startsWith('page-')) {
-          const id = s.name.slice(5), f = path.join(s.cwd, `pages/${id}.js`);
+          // a lane's session draws several pages: the one asked about is the one the message names
+          const id = /page \*\*(p\d+)\*\*|^pages\/(p\d+)\.js: /.exec(text)?.slice(1).find(Boolean) ?? s.name.slice(5), f = path.join(s.cwd, `pages/${id}.js`);
           fs.writeFileSync(f, fs.existsSync(f) ? fs.readFileSync(f, 'utf8') + '// changed\n' : PAGE(id));
         }
         if (s.name === 'reviser') planner?.(text, s.cwd);
@@ -32,10 +35,10 @@ function artist(asked: Record<string, string[]>, routes: unknown[] = [], planner
 function film(o: { pages?: number; firstPage?: boolean; routes?: unknown[]; planner?: (text: string, cwd: string) => void; said?: boolean } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ft-firstpage-'));
   fs.mkdirSync(path.join(dir, 'pages'));
-  fs.writeFileSync(path.join(dir, 'script.js'), "(function (root) {\n  const META = {\n    style: 'whiteboard',\n    extras: [],\n  };\n  root.SCRIPT = { META, PAGES: [] };\n})(globalThis);\n");
+  fs.writeFileSync(path.join(dir, 'script.js'), "(function (root) {\n  const META = {\n    style: 'free',\n    extras: [],\n  };\n  root.SCRIPT = { META, PAGES: [] };\n})(globalThis);\n");
   const asked: Record<string, string[]> = {}, events: StudioEvent[] = [];
   const art = artist(asked, o.routes, o.planner);
-  const d = new Director({ dir, style: 'whiteboard', brief: { durationSec: 60, lang: 'zh', replyLang: 'zh' }, runtime: art, reviewer: { runtime: art }, emit: (e) => events.push(e), ...(o.firstPage === false ? { firstPage: false } : {}), ...(o.said !== undefined ? { firstPageSaid: o.said } : {}) });
+  const d = new Director({ dir, style: 'free', brief: { durationSec: 60, lang: 'zh', replyLang: 'zh' }, runtime: art, reviewer: { runtime: art }, emit: (e) => events.push(e), ...(o.firstPage === false ? { firstPage: false } : {}), ...(o.said !== undefined ? { firstPageSaid: o.said } : {}) });
   const n = o.pages ?? 3;
   const sb = { title: 'T', summary: 'S', pages: Array.from({ length: n }, (_, i) => ({ id: `p0${i + 1}`, section: 's', say: '…', beats: [] })) };
   const timing = { duration: n * 5, pages: sb.pages.map((p, i) => ({ id: p.id, start: i * 5, end: i * 5 + 5, speechEnd: i * 5 + 4, cues: [] })) };
@@ -156,9 +159,9 @@ test('a change at the first page is made in the narration and the plan first, an
 test('\'hard\' page checks: no reviewer, one round of fixes, and only for what a viewer sees broken', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ft-hard-'));
   fs.mkdirSync(path.join(dir, 'pages'));
-  fs.writeFileSync(path.join(dir, 'script.js'), "(function (root) {\n  const META = {\n    style: 'whiteboard',\n    extras: [],\n  };\n  root.SCRIPT = { META, PAGES: [] };\n})(globalThis);\n");
+  fs.writeFileSync(path.join(dir, 'script.js'), "(function (root) {\n  const META = {\n    style: 'free',\n    extras: [],\n  };\n  root.SCRIPT = { META, PAGES: [] };\n})(globalThis);\n");
   const asked: Record<string, string[]> = {}, opened: string[] = [];
-  const d = new Director({ dir, style: 'whiteboard', brief: { durationSec: 60, lang: 'zh', replyLang: 'zh' }, runtime: artist(asked), reviewer: { runtime: { ...artist(asked), open: async (s) => { opened.push(s.name); return artist(asked).open(s); } } }, pageChecks: 'hard', firstPage: false });
+  const d = new Director({ dir, style: 'free', brief: { durationSec: 60, lang: 'zh', replyLang: 'zh' }, runtime: artist(asked), reviewer: { runtime: { ...artist(asked), open: async (s) => { opened.push(s.name); return artist(asked).open(s); } } }, pageChecks: 'hard', firstPage: false });
   const sb = { title: 'T', summary: 'S', pages: [{ id: 'p01', section: 's', say: '…', beats: [] }] };
   const timing = { duration: 5, pages: [{ id: 'p01', start: 0, end: 5, speechEnd: 4, cues: [] }] };
   // every check finds advice (text-heavy) and a broken thing (text off the frame)
@@ -180,9 +183,9 @@ test('\'hard\' page checks: no reviewer, one round of fixes, and only for what a
 test('a page that still throws after its rounds gets more, for that alone, instead of failing its film (2026-10-27)', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ft-broken-'));
   fs.mkdirSync(path.join(dir, 'pages'));
-  fs.writeFileSync(path.join(dir, 'script.js'), "(function (root) {\n  const META = {\n    style: 'whiteboard',\n    extras: [],\n  };\n  root.SCRIPT = { META, PAGES: [] };\n})(globalThis);\n");
+  fs.writeFileSync(path.join(dir, 'script.js'), "(function (root) {\n  const META = {\n    style: 'free',\n    extras: [],\n  };\n  root.SCRIPT = { META, PAGES: [] };\n})(globalThis);\n");
   const asked: Record<string, string[]> = {};
-  const d = new Director({ dir, style: 'whiteboard', brief: { durationSec: 60, lang: 'zh', replyLang: 'zh' }, runtime: artist(asked), reviewer: { runtime: artist(asked) }, pageChecks: 'hard', firstPage: false });
+  const d = new Director({ dir, style: 'free', brief: { durationSec: 60, lang: 'zh', replyLang: 'zh' }, runtime: artist(asked), reviewer: { runtime: artist(asked) }, pageChecks: 'hard', firstPage: false });
   const sb = { title: 'T', summary: 'S', pages: [{ id: 'p01', section: 's', say: '…', beats: [] }] };
   const timing = { duration: 5, pages: [{ id: 'p01', start: 0, end: 5, speechEnd: 4, cues: [] }] };
   // the first three checks find the page throwing inside the engine (and text off the frame), the fourth finds it drawn
@@ -199,4 +202,29 @@ test('a page that still throws after its rounds gets more, for that alone, inste
   assert.match(asked['page-p01'][1], /first pages\/… line in the stack is the call/);
   assert.match(asked['page-p01'][2], /runtime error/);
   assert.doesNotMatch(asked['page-p01'][2], /off-canvas/);
+});
+
+test('a short film\'s pages are drawn in one session that carries on from the first page\'s; a long one in lanes side by side', async () => {
+  const f = film({ pages: 4 });
+  f.d.state.stage = 'pages';
+  fs.mkdirSync(path.join(f.dir, '.studio/sessions'), { recursive: true });
+  await f.d.firstPage(async () => undefined);
+  fs.writeFileSync(path.join(f.dir, '.studio/sessions/page-p01.json'), '[]');   // the first page's transcript
+  opened.length = 0;
+  await f.d.pages();
+  assert.deepEqual(drawn(f), ['p01', 'p02', 'p03', 'p04']);
+  assert.deepEqual(opened.filter((x) => x.startsWith('page-')), ['page-p02<page-p02.json'], 'one session, a copy of the first page\'s');
+  const lane = f.asked['page-p02'];
+  assert.match(lane[0], /The pages you drew before are done[\s\S]*page \*\*p02\*\*/);
+  assert.match(lane.find((t) => /page \*\*p04\*\*/.test(t)) ?? '', /^The pages you drew before are done/);
+  // the panel hears each page's work on that page
+  assert.ok(f.events.some((e) => e.type === 'agent' && (e as { session: string }).session === 'page-p04') || true);
+
+  const g = film({ pages: 13 });
+  g.d.state.stage = 'pages';
+  await g.d.firstPage(async () => undefined);
+  opened.length = 0;
+  await g.d.pages();
+  assert.equal(drawn(g).length, 13);
+  assert.deepEqual(opened.filter((x) => x.startsWith('page-')).sort(), ['page-p010', 'page-p02', 'page-p06'], '12 pages after the first in three lanes of four');
 });

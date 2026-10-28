@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import { askedPage } from './testing.js';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -29,7 +30,8 @@ function artist(systems: Record<string, string>, o: { writesKit?: boolean } = {}
         if (s.name === 'kit-route') return { text: '', stopReason: 'done', usage: {}, answers: [{ name: 'components', args: { names: /蓝/.test(text) ? ['globe', 'nope'] : [] } }] } as never;
         if (s.name.startsWith('kit-') && /^The user looked at the film's first page/.test(text)) { fs.appendFileSync(path.join(s.cwd, `extras/kit/${s.name.slice(4)}.js`), '// bluer\n'); return { text: 'done', stopReason: 'done', usage: {}, answers: [] } as never; }
         if (s.name.startsWith('kit-')) {
-          const name = s.name.slice(4);
+          // a session may hold more than one component: the one asked about is the file the message names
+          const name = /extras\/kit\/(\w+)\.js/.exec(text)?.[1] ?? s.name.slice(4);
           if (/^Check round/.test(text)) { if (/They may not be yours/.test(text) && !/throws/.test(text)) return { text: 'not mine', stopReason: 'done', usage: {}, answers: [] } as never; fs.appendFileSync(path.join(s.cwd, `extras/kit/${name}.js`), '// changed\n'); }
           else if (o.writesKit !== false && /film's own components|Write both/.test(text)) {
             fs.mkdirSync(path.join(s.cwd, 'extras/kit'), { recursive: true });
@@ -37,7 +39,7 @@ function artist(systems: Record<string, string>, o: { writesKit?: boolean } = {}
             fs.writeFileSync(path.join(s.cwd, `extras/kit/${name}.check.js`), PARTS[name].check);
           }
         } else if (s.name.startsWith('page-')) {
-          const id = s.name.slice(5);
+          const id = askedPage(text, s.name);
           fs.writeFileSync(path.join(s.cwd, `pages/${id}.js`), PAGE.replace('p01', id));
           // one page reaches into the film's components
           if (id === 'p02' && fs.existsSync(path.join(s.cwd, 'extras'))) fs.writeFileSync(path.join(s.cwd, 'extras/film-kit.js'), '/* gone */');
@@ -93,13 +95,14 @@ test('a designed style\'s film of eight pages writes its components first, and e
   await f.d.kit();
   assert.deepEqual(f.d.state.kit, { status: 'done', components: ['globe', 'flag'] });
   assert.match(f.systems['kit-globe'], /This film's style card/);
-  assert.ok(f.systems['kit-flag'], 'each component has a session of its own');
+  assert.ok(!f.systems['kit-flag'], 'two components share a session: its prompt is written to the cache once');
   assert.ok(f.events.some((e) => e.type === 'kit' && e.status === 'done'));
   await f.d.pages();
   // the pages load it (META.extras) and are told about it, first
   assert.match(fs.readFileSync(path.join(f.dir, 'script.js'), 'utf8'), /extras: \["extras\/film-kit\.js"\]/);
   assert.match(f.systems['page-p01'], /This film's own components \(film-kit\.js\)[\s\S]*P\.globe\(x, y, r, o = \{\}\)[\s\S]*P\.flag\(x, y, label, o = \{\}\)/);
-  assert.ok(f.prompts.some((p) => p.startsWith('check-p01')));
+  assert.ok(f.prompts.some((p) => p.startsWith('check-p01')));  // the pages see the kit's source too, so they need not read the file
+  assert.match(f.systems['page-p01'], /no need to read the file[\s\S]*B\.globe/);
 });
 
 test('once checked, the components are fixed: the agents\' file tools refuse them, and a shell\'s change is put back', async () => {
@@ -128,11 +131,14 @@ test('a component the check fails is kept out; the others are given to the pages
   assert.match(f.checked[2], /\/\/ changed\n\/\/ changed/);
 });
 
-test('a short film in a style with its own look gets its kit too: the pages are drawn apart, the kettle must match', async () => {
-  const f = film({ pages: 3, designed: false, kit: [{ name: 'kettle', what: 'a red electric kettle', pages: ['p01', 'p02', 'p03'] }] });
+test('a film in a style with its own look gets its kit when its pages are drawn in lanes apart; drawn in one, it needs none', async () => {
+  const f = film({ pages: 8, designed: false, kit: [{ name: 'kettle', what: 'a red electric kettle', pages: ['p01', 'p02', 'p08'] }] });
   await f.d.kit();
   assert.equal(f.d.state.kit?.status, 'done');
   assert.doesNotMatch(f.systems['kit-kettle'], /This film's style card/);
+  const g = film({ pages: 3, designed: false, kit: [{ name: 'kettle', what: 'a red electric kettle', pages: ['p01', 'p02', 'p03'] }] });
+  await g.d.kit();
+  assert.deepEqual(g.d.state.kit, { status: 'none', components: [] });
 });
 
 test('no kit for a one-page film or a storyboard that lists none', async () => {

@@ -82,13 +82,13 @@ export function langNote(stage: 'storyboard' | 'script' | 'page' | 'revise', lan
   const film = {
     zh: {
       storyboard: 'Film language: **Chinese**. In storyboard.json write `"lang": "zh"`; write title, summary, section, say and each beat\'s object / action / text in Simplified Chinese: on-screen text at most 8 characters per element, and a beat tied to a word names the Chinese word as spoken (`c2:三十年`).',
-      script: 'Film language: **Chinese**. A cue is one short spoken sentence in Simplified Chinese, at most 16 characters, 3–8 per page; write numbers in Arabic digits and units as they are spoken (年, 元).',
+      script: 'Film language: **Chinese**. A cue is one short spoken sentence in Simplified Chinese, at most 16 characters, 4–10 per page; write numbers in Arabic digits and units as they are spoken (年, 元).',
       page: 'This is a Chinese film: all text on screen (titles, labels, units) is in Simplified Chinese, matching the narration.',
       revise: 'This is a Chinese film: rewrite narration in Simplified Chinese, keeping the number of cues; your notes to the page agent can be in English.',
     },
     en: {
       storyboard: 'Film language: **English**. In storyboard.json write `"lang": "en"`; write title, summary, section, say and each beat\'s object / action / text in English: on-screen text at most 5 English words per element, and a beat tied to a word names the English word (`c2:thirty`).',
-      script: 'Film language: **English**. A cue is one short spoken English sentence, at most 12 words, 3–8 per page; write numbers in Arabic digits (1,000, 30%) and units as they are spoken (years, dollars).',
+      script: 'Film language: **English**. A cue is one short spoken English sentence, at most 12 words, 4–10 per page; write numbers in Arabic digits (1,000, 30%) and units as they are spoken (years, dollars).',
       page: 'This is an English film: all text on screen (titles, labels, units) is in English, matching the narration. English runs longer than Chinese, so leave enough width for text.',
       revise: 'This is an English film: rewrite narration in English, keeping the number of cues; your notes to the page agent can be in English.',
     },
@@ -172,6 +172,13 @@ The page lasts ${(t.end - t.start).toFixed(2)}s; its narration ends at ${(t.spee
 ${t.cues.map((c) => `- c${c.i}: at ${c.at}s in the page, "${c.text}"`).join('\n')}${sb.pages[sb.pages.length - 1]?.id === id ? endingNote(t, signsOff(brand, sb.pages)) : ''}${brandPageNote(brandFilesOn(brand, sb.pages, id), brand?.emphasis, cornerMark(brand) ? brand?.corner : undefined)}${assetPageNote(assets)}${pictures}
 
 ${revising ? `pages/${id}.js is already written; stop once the change below is made in it and say in one sentence what you changed.` : `Stop once pages/${id}.js is written and say in one sentence what you drew.`}${langNote('page', lang, replyLang)}`;
+}
+
+/** a lane's next page: the session drew the pages before it (or carries on from the first page's), and they are done */
+export function laneNote(id: string) {
+  return `The pages you drew before are done and checked: leave their files as they are. Now page **${id}**, drawn the same way: where a thing, a person, a colour or a label comes back, it looks as it did on your earlier pages (copy how you drew it).
+
+`;
 }
 
 /** For the film's last page: the film ends on it, so it closes rather than turns */
