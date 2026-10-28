@@ -141,10 +141,13 @@ export function pictureIssues(look: unknown, pageIds: string[], style: PictureSt
   return out;
 }
 
+/** a cut-out's own edge meets the page: image models like to add a sticker's white rim or a patch of paper behind it,
+ *  which on the page looks like a sticker or a note stuck on (seen 2026-10-28: "characters drawn on post-its") */
+const BARE = "the subject's own outline meeting the transparency directly: no white outline, no sticker border, no halo, no card, paper patch, blob or shape behind it, no ground, no shadow.";
 const KIND_LINE: Record<PictureKind, string> = {
   scene: 'A full-frame illustration that fills the whole canvas edge to edge.',
-  object: 'One object alone, whole and uncropped, centred with a clear margin, on a fully transparent background, no ground, no shadow.',
-  character: 'One character alone, full body, whole and uncropped, centred with a clear margin, on a fully transparent background, no ground, no shadow.',
+  object: `One object alone, whole and uncropped, centred with a clear margin, on a fully transparent background, ${BARE}`,
+  character: `One character alone, full body, whole and uncropped, centred with a clear margin, on a fully transparent background, ${BARE}`,
   texture: 'A full-frame ground texture with no objects in it, even in tone so text can sit on top.',
 };
 
