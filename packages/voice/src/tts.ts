@@ -113,8 +113,11 @@ export class VoiceNotFound extends Error {
   constructor(readonly voice: string, detail: string) { super(`Volcengine voice ${voice} not found for this key (${detail})`); this.name = 'VoiceNotFound'; }
 }
 
-/** ElevenLabs text-to-speech with character-level timestamps. */
-export function elevenLabsTts(apiKey: string, model = 'eleven_multilingual_v2', endpoint: TtsEndpoint = {}): TtsProvider {
+/** ElevenLabs text-to-speech with character-level timestamps. Turbo v2.5 by default: half the price of Multilingual v2
+ *  ($0.04 against $0.08 per 1,000 characters, 2026-10-28) and, on a blind listen of the same explainer narration, as good
+ *  or better. Its speed means nothing here (a film is narrated in minutes); a cached page keeps its audio whatever model
+ *  made it, so a film narrated before keeps it until its words change */
+export function elevenLabsTts(apiKey: string, model = 'eleven_turbo_v2_5', endpoint: TtsEndpoint = {}): TtsProvider {
   return {
     id: 'elevenlabs',
     synth: (text, o) => retry(async () => {
