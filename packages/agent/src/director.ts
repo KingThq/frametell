@@ -544,7 +544,7 @@ export class Director {
       const m = (sec: number) => Math.round(sec / 6) / 10;
       if (short) {
         resized = true;
-        r = await this.send(s, `script.js is estimated at ${m(timeline.duration)} minutes; the film is ${m(target)} minutes, the length the user chose and pays for, and real narration comes out shorter than the estimate, so the estimate should land between ${m(target * 1.1)} and ${m(lengthBudget(target).estimateSec)}. Fill it out on the pages you have: more of the explanation, a concrete example or number, the step the viewer would ask about (more cues on a page, never padding or repetition), keeping the storyboard's beats. Then run node engine/tools/script.mjs and stop. ` + replyNote(this.o.brief.replyLang, this.o.brief.lang));
+        r = await this.send(s, `script.js is estimated at ${m(timeline.duration)} minutes; the film is ${m(target)} minutes, the length the user chose and pays for, and real narration comes out shorter than the estimate, so the estimate should land between ${m(target * 1.1)} and ${m(lengthBudget(target).estimateSec)}. Fill it out on the pages you have: more of the explanation, a concrete example or number, the step the viewer would ask about (more cues on a page, never padding or repetition), keeping the storyboard's beats. Then run node engine/tools/script.mjs and stop. If the narration is the user's own, written out in their brief, leave it as it is and stop: their words are not padded. ` + replyNote(this.o.brief.replyLang, this.o.brief.lang));
         continue;
       }
       if (over) {
