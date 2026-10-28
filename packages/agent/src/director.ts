@@ -166,7 +166,7 @@ Here is the current pages/${id}.js; it is already given, so don't read it again:
 \`\`\`js
 ${code}
 \`\`\`
-Change only what needs changing, with edit; **never rewrite the whole file with write**. **Put all the edits in one reply** (one reply can call edit several times), each with finish: true: you're done once they apply, no reply needed and no need to read the file again; the check screenshots will show the result.
+Change only what needs changing, with edit; **never rewrite the whole file with write**. **Put all the edits in one reply** (one reply can call edit several times), each with finish: true, and **open that reply with one short sentence for the user**, in the language you reply in, saying what you change on screen (such as "标题放大到 72 号" or "The title is now twice as large"): it is shown to them as what this change did. You're done once the edits apply, no reply after them and no need to read the file again; the check screenshots will show the result.
 If this page already shows the change, or the change says nothing this page can do, don't go looking for what was meant (other files, the film's history, other folders): change nothing and call flag with one sentence for the user, in the language you reply in, saying what you found.`;
 
 /** the user's notes so far, which outrank the storyboard (Director.directions) */
