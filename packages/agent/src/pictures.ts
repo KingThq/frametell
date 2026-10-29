@@ -309,18 +309,25 @@ export function openaiImages(key: string, o: { baseUrl?: string; model?: string 
     async draw({ prompt, size, quality, transparent, refs, signal }) {
       const timeout = AbortSignal.timeout(180_000);
       const sig = signal ? AbortSignal.any([signal, timeout]) : timeout;
-      let res: Response;
-      if (refs?.length) {
+      const ask = () => {
+        if (!refs?.length) return fetch(`${base}/v1/images/generations`, {
+          method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' }, signal: sig,
+          body: JSON.stringify({ model, prompt, size, quality, n: 1, ...(transparent ? { background: 'transparent' } : {}) }),
+        });
         const form = new FormData();
         form.append('model', model); form.append('prompt', prompt); form.append('size', size); form.append('quality', quality); form.append('n', '1');
         if (transparent) form.append('background', 'transparent');
         refs.forEach((r, i) => { const t = sniffPicture(r)?.type ?? 'png'; form.append('image[]', new Blob([r], { type: `image/${t === 'jpg' ? 'jpeg' : t}` }), `ref-${i}.${t}`); });
-        res = await fetch(`${base}/v1/images/edits`, { method: 'POST', headers: { authorization: `Bearer ${key}` }, body: form, signal: sig });
-      } else {
-        res = await fetch(`${base}/v1/images/generations`, {
-          method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' }, signal: sig,
-          body: JSON.stringify({ model, prompt, size, quality, n: 1, ...(transparent ? { background: 'transparent' } : {}) }),
-        });
+        return fetch(`${base}/v1/images/edits`, { method: 'POST', headers: { authorization: `Bearer ${key}` }, body: form, signal: sig });
+      };
+      // too many at once (the gateway's cap for a film, or the service's rate limit): asked again after a wait, as
+      // long as the picture's 3 minutes last, never failed at once
+      let res = await ask();
+      for (let i = 0; res.status === 429 && i < 4; i++) {
+        await res.body?.cancel();
+        const wait = Math.min(30, Number(res.headers.get('retry-after')) || 5 * 2 ** i) * 1000;
+        await new Promise((ok, no) => { const t = setTimeout(ok, wait); sig.addEventListener('abort', () => { clearTimeout(t); no(sig.reason); }, { once: true }); });
+        res = await ask();
       }
       const body = await res.text();
       if (!res.ok) throw new Error(`image service ${res.status}: ${body.slice(0, 300)}`);

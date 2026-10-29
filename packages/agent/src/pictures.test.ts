@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { Director } from './director.js';
 import { writeIn } from './projectfs.js';
-import { lookPrefix, picturePageNote, picturePlanNote, pictureSize, picturePlan, pictureIssues, picturePrompt, pictureStyle, picturesOn, readPictures, sniffPicture, type ImageProvider, type PictureStyle } from './pictures.js';
+import { lookPrefix, openaiImages, picturePageNote, picturePlanNote, pictureSize, picturePlan, pictureIssues, picturePrompt, pictureStyle, picturesOn, readPictures, sniffPicture, type ImageProvider, type PictureStyle } from './pictures.js';
 import type { AgentRuntime } from './runtime/types.js';
 import type { StudioEvent } from './events.js';
 
@@ -330,4 +330,17 @@ test('in a style with a cast sheet every scene is drawn from the sheet', async (
   assert.equal(f.calls[0].refs, 0);
   assert.match(f.calls[0].prompt, /character model sheet/);
   for (const c of f.calls.slice(1)) { assert.equal(c.refs, 1); assert.match(c.prompt, /this film's cast sheet/); }
+});
+
+test('a picture refused for too many at once is asked for again after the wait it is given, not failed', async () => {
+  const real = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = (async () => (++calls < 3
+    ? new Response('{"error":"too many pictures at once for this film"}', { status: 429, headers: { 'retry-after': '0.01' } })
+    : Response.json({ data: [{ b64_json: Buffer.from('png').toString('base64') }] }))) as typeof fetch;
+  try {
+    const got = await openaiImages('k').draw({ prompt: 'a cat', size: '1536x1024', quality: 'medium', transparent: false });
+    assert.equal(Buffer.from(got).toString(), 'png');
+    assert.equal(calls, 3);
+  } finally { globalThis.fetch = real; }
 });

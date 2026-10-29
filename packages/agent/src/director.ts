@@ -237,10 +237,8 @@ async function pool<T>(items: T[], n: number, fn: (x: T) => Promise<unknown>) {
   const queue = [...items];
   await Promise.all(Array.from({ length: Math.min(n, queue.length) }, async () => { for (let x = queue.shift(); x !== undefined; x = queue.shift()) await fn(x); }));
 }
-/** pictures drawn at once: the image service takes ~30 s for each */
-const PICTURES_AT_ONCE = 4;
-/** a style drawn in pictures asks for a scene every few seconds: more are drawn side by side */
-const LED_PICTURES_AT_ONCE = 8;
+/** pictures drawn at once: the image service takes ~30 s for each (the Cloud's gateway lets a film draw 10 at once) */
+const PICTURES_AT_ONCE = 10;
 // pageChecks: a drawn page is checked at most 3 times (2 rounds of fixes); a revision starts from a checked page, 2.
 /** the length a film is held to: the user's choice, which they pay for by the minute. At most 4 pages a minute (one
  *  more for a short film), and a narration whose estimate runs at most a third over and at least the length (the
@@ -534,7 +532,6 @@ export class Director {
     let r = await this.send(s, scriptPrompt(feedback, this.o.brief) + this.unseen('planner'));
     this.state.planner = s.ref; this.save();
     let check: Awaited<ReturnType<Project['scriptCheck']>>;
-    let resized = false;
     for (let ask = 0; ; ask++) {
       // the planner rewrites script.js: put the server-owned fields back (a lost META.voice once rendered a silent film)
       this.serverMeta();
@@ -545,23 +542,9 @@ export class Director {
       const timeline = await this.project.timeline();
       const narrated = new Set(timeline.pages.map((p) => p.id));
       const missing = this.project.storyboard().pages.map((p) => p.id).filter((id) => !narrated.has(id));
-      // the length the user chose is kept to: a narration that runs well over is sent back once to be condensed (not
-      // after the user's own changes to the storyboard: what they asked for comes first)
-      // and one that falls short of it is sent back once to be filled out (a film of fewer, longer pages came out at 48 s
-      // of 60: the planner wrote as many lines a page as before)
-      const target = this.o.brief.durationSec, sized = !missing.length && !feedback && !resized && target > 0;
-      const over = sized && timeline.duration > lengthBudget(target).estimateSec, short = sized && timeline.duration < lengthBudget(target).leastSec;
-      const m = (sec: number) => Math.round(sec / 6) / 10;
-      if (short) {
-        resized = true;
-        r = await this.send(s, `script.js is estimated at ${m(timeline.duration)} minutes; the film is ${m(target)} minutes, the length the user chose and pays for, and real narration comes out shorter than the estimate, so the estimate should land between ${m(target * 1.1)} and ${m(lengthBudget(target).estimateSec)}. Fill it out on the pages you have: more of the explanation, a concrete example or number, the step the viewer would ask about (more cues on a page, never padding or repetition), keeping the storyboard's beats. Then run node engine/tools/script.mjs and stop. If the narration is the user's own, written out in their brief, leave it as it is and stop: their words are not padded. ` + replyNote(this.o.brief.replyLang, this.o.brief.lang));
-        continue;
-      }
-      if (over) {
-        resized = true;
-        r = await this.send(s, `script.js is estimated at ${m(timeline.duration)} minutes; the film is ${m(target)} minutes, the length the user chose and pays for, and the estimate may run at most ${m(lengthBudget(target).estimateSec)}. Condense the narration to fit: keep every page and every main point, and cut secondary detail, extra examples, repetition and asides (fewer cues on a page, shorter lines). Then run node engine/tools/script.mjs, stop, and say in your report what was condensed. ` + replyNote(this.o.brief.replyLang, this.o.brief.lang));
-        continue;
-      }
+      // the narration is never sent back for its length: the planner fits it as it writes (the storyboard's pages are
+      // held to the length), and a rewrite to trim or fill it cost more than the film's own words (2026-10-29: ten
+      // rounds of trimming a pasted script, ~100 credits)
       if (!missing.length) break;
       if (ask === MAX.scriptFix) this.fail('script', this.say(`口播没有写完：分镜里的 ${missing.join('、')} 没有口播`, `The narration is unfinished: ${missing.join(', ')} of the storyboard ha${missing.length > 1 ? 've' : 's'} no narration`) + (r.error ? ` (${r.error})` : ''));
       r = await this.send(s, `script.js has no narration for ${missing.join(', ')}: every page of storyboard.json needs its entry in PAGES, in the storyboard's order, with the same id. Add the missing pages and keep the ones already written, then run node engine/tools/script.mjs and stop. ` + replyNote(this.o.brief.replyLang, this.o.brief.lang));
@@ -865,7 +848,7 @@ export class Director {
     const sample = drawn.get(first.id);
     // in a style with a cast sheet the sample is the sheet: every picture is drawn from it, its people as they are there
     const look = (): [Picture[], 'none' | 'look' | 'cast'] => (sample ? [[sample], style.cast ? 'cast' : 'look'] : [[], 'none']);
-    const many = style.led ? LED_PICTURES_AT_ONCE : PICTURES_AT_ONCE;
+    const many = PICTURES_AT_ONCE;
     await pool(rest.filter((p) => !p.like), many, (p) => one(p, ...look()));
     await pool(rest.filter((p) => p.like), many, (p) => { const base = drawn.get(p.like!); return base ? one(p, [base], 'same') : one(p, ...look()); });
     // pictures the storyboard no longer asks for are let go
