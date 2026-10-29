@@ -85,6 +85,20 @@ export class Projects {
     fs.writeFileSync(studioFile(dir, 'project.json'), JSON.stringify(m, null, 2));
   }
 
+  /** the model a film is made with from now on (its pages and reviews follow unless they were set apart); a run
+   *  already going keeps the model it started with, so it is stopped here and 继续制作 starts it again with the new one */
+  async setModel(id: string, model: string) {
+    if (!/^[\w-]+$/.test(id)) throw new Error(tr('项目不存在', 'Project not found'));
+    const next = model.trim();
+    if (!/^[\w.-]+\/[\w.:@/-]+$/.test(next)) throw new Error(tr('模型名不对', 'That is not a model name'));
+    const dir = this.dir(id), m = this.read(id);
+    if (heldElsewhere(dir)) throw new Error(tr('这个项目正在另一个帧言窗口里制作，请在那里先暂停再换模型', 'This film is being made in another Frametell window. Pause it there before changing its model'));
+    if (m.model === next) return;
+    m.model = next;
+    writeMeta(dir, m);
+    await this.runner(id).interrupt();
+  }
+
   /** delete a project and everything in it; refused while it is being made, here or in another process */
   remove(id: string) {
     if (!/^[\w-]+$/.test(id)) throw new Error(tr('项目不存在', 'Project not found'));
@@ -576,6 +590,18 @@ class Runner {
 
   /** stop the run; `why`: the host stopped it because the account ran out of credits (said so, not as the user's pause) */
   stop(why?: 'credits') { this.stopWhy = why; this.abort?.abort(); }
+
+  /** the film's model changed under a run that is going or waiting for the user: it would keep drawing with the model
+   *  it started with, so it stops here, and 继续制作 starts it again with the new one. Resolves once the run has
+   *  settled, or after 3s: a run that will not stop now must not hold up the answer */
+  async interrupt(): Promise<void> {
+    if (!this.task || this.exporting || (this.status !== 'running' && this.status !== 'awaiting_approval')) return;
+    const gate = this.gate;
+    this.gate = undefined;
+    this.abort?.abort();
+    gate?.(undefined);   // an unanswered storyboard or first page would hold the run open: let it go, and stop at once
+    await Promise.race([this.task.catch(() => undefined), new Promise((r) => { setTimeout(r, 3000).unref?.(); })]);
+  }
 
   halt(): Promise<void> {
     this.halted = true;

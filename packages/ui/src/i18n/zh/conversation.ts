@@ -44,6 +44,13 @@ export default {
     continue: '继续制作',
     once: (v: { error: boolean; stage?: string }) => `${v.error ? '出错停过一次' : '停过一次'}${v.stage ? `（${v.stage}）` : ''}，之后接着做了`,
   },
+  model: {
+    title: '制作模型',
+    hint: '换模型只改这台片子接下来用的模型，已经画好的页面保留；它正在制作的话会先停下这一轮，点「继续制作」用新模型接着做。',
+    loading: '正在读取可用模型…',
+    failed: '读不到可用模型：{msg}',
+    manage: '管理模型与服务商',
+  },
   done: {
     play: '播放',
     title: '你的视频好了',

@@ -107,7 +107,13 @@ export function createServer(studio = new Studio(), opts: { token?: string } = {
     return image ? c.json({ image }) : c.json({ error: 'cover must be a JPEG, PNG or WebP of at most 10 MB, and not while the film is being made' }, 400);
   });
   app.post('/api/projects/:id/stop', (c) => { studio.stop(c.req.param('id')); return c.json({ ok: true }); });
-  app.patch('/api/projects/:id', async (c) => { studio.moveProject(c.req.param('id'), String((await c.req.json()).group ?? '')); return c.json({ ok: true }); });
+  // a film's group on the home page, or the model it is made with from now on (a film being made refuses a new model)
+  app.patch('/api/projects/:id', async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as { group?: unknown; model?: unknown };
+    if (typeof body.model === 'string') await studio.setModel(c.req.param('id'), body.model);
+    else studio.moveProject(c.req.param('id'), String(body.group ?? ''));
+    return c.json({ ok: true });
+  });
   app.delete('/api/projects/:id', (c) => { studio.deleteProject(c.req.param('id')); return c.json({ ok: true }); });
   app.post('/api/projects/:id/say', async (c) => {
     const { text, refs } = (await c.req.json().catch(() => ({}))) as { text?: string; refs?: unknown };

@@ -4,6 +4,7 @@ import { client, type ProjectView } from '../lib/client';
 import { useLoad, useRun } from '../lib/hooks';
 import { finished, isWorking, money, STAGE_NAME, type RunView } from '../lib/run';
 import { TopBar } from '../components/TopBar';
+import { ModelChip } from '../components/ModelChip';
 import { Conversation } from './Conversation';
 import { Stage } from './Stage';
 import { offerRef } from '../lib/refs';
@@ -136,6 +137,7 @@ export function Workbench({ id, openSettings }: { id: string; openSettings: (sec
         <span className={`hidden shrink-0 text-[12.5px] sm:inline ${finished(run) && !running ? 'text-jade' : run.awaitingApproval ? 'text-accent-ink' : 'text-ink-3'}`} aria-live="polite">{status}</span>
         {conn === 'reconnecting' && <span className="shrink-0 rounded-full bg-seal-soft px-2 py-0.5 text-[12px] text-seal" role="status">{t('workbench.reconnecting')}</span>}
         <span className="ml-auto flex shrink-0 items-center gap-2">
+          {p && <ModelChip project={p} openSettings={openSettings} onChanged={project.reload} />}
           {p && <CostChip run={run} project={p} />}
           {p && running && <button className="fs-btn fs-btn-ghost fs-btn-sm" onClick={() => pause(p.id)} disabled={pausing} aria-busy={pausing} title={t('workbench.pauseTitle')}><Pause size={13} aria-hidden /> {pausing ? t('workbench.pausing') : t('workbench.pause')}</button>}
           {p && run.paused && <button className="fs-btn fs-btn-secondary fs-btn-sm" onClick={() => client.start(p.id).catch(orShort(p.id))}><Play size={13} aria-hidden /> {t('workbench.resume')}</button>}

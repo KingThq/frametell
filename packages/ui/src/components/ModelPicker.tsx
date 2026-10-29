@@ -10,7 +10,7 @@ import { ProviderLogo } from './ProviderLogo';
 
 export const modelKey = (m: Pick<ModelInfo, 'provider' | 'id'>) => `${m.provider}/${m.id}`;
 /** a provider by the name Studio gives it (「Claude」, not Pi's 「Anthropic」); the user's own endpoints keep theirs */
-const nameOf = (m: Pick<ModelInfo, 'provider' | 'providerName'>) => { const k = `providers.name.${m.provider}`; const n = t(k as MessageKey); return n === k ? m.providerName : n; };
+export const nameOf = (m: Pick<ModelInfo, 'provider' | 'providerName'>) => { const k = `providers.name.${m.provider}`; const n = t(k as MessageKey); return n === k ? m.providerName : n; };
 
 export function ModelPicker({ id = 'model', models, value, onChange, onAdd, onManage, disabled }: {
   id?: string;

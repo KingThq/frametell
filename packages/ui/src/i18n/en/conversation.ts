@@ -43,6 +43,13 @@ const en: typeof zh = {
     continue: 'Continue',
     once: (v) => `${v.error ? 'Stopped once on an error' : 'Paused once'}${v.stage ? ` (${v.stage})` : ''}, then carried on`,
   },
+  model: {
+    title: 'Model',
+    hint: 'Switching changes the model this film uses from now on; pages already drawn stay. A run in progress is stopped first: press Continue and it goes on with the new model.',
+    loading: 'Loading the models that work now…',
+    failed: 'Could not read the available models: {msg}',
+    manage: 'Manage models and providers',
+  },
   done: {
     play: 'Play',
     title: 'Your video is ready',

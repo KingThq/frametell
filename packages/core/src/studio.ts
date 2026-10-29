@@ -325,6 +325,15 @@ export class Studio {
   deleteProject(id: string) { this.store.remove(id); this.timelines.delete(id); }
   /** file a project under a group on the home page; '' takes it out of any */
   moveProject(id: string, group: string) { this.store.setGroup(id, String(group ?? '')); }
+  /** the model a film is made with from now on (its pages and reviews follow unless set apart): it must be one of the
+   *  models that work now, so a film is never pointed at a provider whose key is missing */
+  async setModel(id: string, model: string) {
+    const next = String(model ?? '').trim();
+    const { models } = await this.models();
+    if (!models.some((m) => `${m.provider}/${m.id}` === next)) throw new Error(tr('这个模型现在用不了：先在设置里连上它的服务商', 'That model is not available: connect its provider in Settings first'));
+    await this.store.setModel(id, next);
+    return this.project(id);
+  }
   /** talk to the director: storyboard feedback, a note or a question mid-run, or a change to the finished film.
    *  `credits`: a hosted service's credit facts (CreditFacts), checked here, for a question about what is left to pay */
   say(id: string, text: string, refs?: unknown, credits?: unknown) { return this.store.runner(id).say(text, cleanRefs(refs), cleanCredits(credits)); }

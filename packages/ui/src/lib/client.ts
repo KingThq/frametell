@@ -43,6 +43,9 @@ export interface StudioClient {
   deleteProject(id: string): Promise<void>;
   /** file a project under a group on the home page ('' : none); absent where a host keeps no groups */
   moveProject?(id: string, group: string): Promise<void>;
+  /** the model a film is made with from now on (its pages and reviews follow unless set apart); refused while it is
+   *  being made. Absent where a host can't change it */
+  setProjectModel?(id: string, model: string): Promise<void>;
   /** talk to the director: storyboard feedback, a note mid-run, or a change to the finished film */
   say(id: string, text: string, refs?: UserRef[]): Promise<boolean>;
   /** save a file the user attached to a message into the project; returns the reference to send with it */
@@ -165,6 +168,7 @@ export const httpClient: StudioClient = {
   stop: async (id) => { await call('POST', `/api/projects/${id}/stop`); },
   deleteProject: async (id) => { await call('DELETE', `/api/projects/${id}`); },
   moveProject: async (id, group) => { await call('PATCH', `/api/projects/${id}`, { group }); },
+  setProjectModel: async (id, model) => { await call('PATCH', `/api/projects/${id}`, { model }); },
   timeline: (id) => call<Timeline | null>('GET', `/api/projects/${id}/timeline`),
   export: async (id) => (await call<{ ok: boolean }>('POST', `/api/projects/${id}/export`)).ok,
   setCover: async (id, page) => (await call<{ ok: boolean }>('PUT', `/api/projects/${id}/cover`, { page })).ok,
