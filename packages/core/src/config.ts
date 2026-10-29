@@ -163,7 +163,7 @@ export function patchConfig(c: Config, patch: SettingsPatch): Config {
         throw new Error(tr(`自定义服务商「${c.name || c.id}」的名称、协议或地址不对`, `The custom provider "${c.name || c.id}" needs a name, a protocol and an http(s) address`));
       }
     }
-    next.custom = patch.custom.map((c) => ({ id: c.id, name: c.name.trim(), protocol: c.protocol, baseUrl: c.baseUrl.trim().replace(/\/+$/, ''), models: c.models || [], discover: c.protocol === 'openai' }));
+    next.custom = patch.custom.map((c) => ({ id: c.id, name: c.name.trim(), protocol: c.protocol, baseUrl: c.baseUrl.trim().replace(/\/+$/, ''), models: c.models || [], discover: c.protocol === 'openai', ...(c.auth === 'bearer' ? { auth: 'bearer' as const } : {}) }));
     for (const k of Object.keys(next.keys)) if (k.startsWith('custom-') && !next.custom.some((c) => c.id === k)) delete next.keys[k];   // a removed endpoint takes its key along
   }
   // renaming or removing in 「我的音色」: only voices already there (adding one checks it first: Studio.addVoice)

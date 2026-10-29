@@ -1,5 +1,5 @@
 // Providers the user configures: Volcengine Ark (OpenAI-compatible) and any OpenAI- or Anthropic-compatible endpoint.
-import { createProvider, envApiKeyAuth, type Model } from '@earendil-works/pi-ai';
+import { createProvider, envApiKeyAuth, type ApiKeyAuth, type Model } from '@earendil-works/pi-ai';
 import { anthropicMessagesApi } from '@earendil-works/pi-ai/api/anthropic-messages.lazy';
 import { openAICompletionsApi } from '@earendil-works/pi-ai/api/openai-completions.lazy';
 
@@ -13,6 +13,26 @@ export interface CustomProviderConfig {
   models: { id: string; name?: string; vision?: boolean; reasoning?: boolean; contextWindow?: number }[];
   /** list models from GET {baseUrl}/models when the endpoint supports it */
   discover?: boolean;
+  /** how the key travels: 'key' (default) is x-api-key for Anthropic, Bearer for OpenAI; 'bearer' is Authorization: Bearer for both */
+  auth?: 'key' | 'bearer';
+}
+
+/**
+ * Bearer auth for gateways that only read `Authorization` (the Anthropic SDK sends `x-api-key`, which they ignore).
+ * The key is resolved exactly like a normal API key and then travels as a header instead.
+ */
+function bearerAuth(name: string, envVar: string): ApiKeyAuth {
+  const base = envApiKeyAuth(name, [envVar]);
+  return {
+    name: base.name,
+    login: base.login,
+    resolve: async (input) => {
+      const r = await base.resolve(input);
+      const key = r?.auth.apiKey;
+      if (!r || !key) return r;   // no key stays "not configured" so the panel shows the endpoint as unconnected
+      return { auth: { headers: { authorization: `Bearer ${key}` } }, env: r.env, source: r.source };
+    },
+  };
 }
 
 function model(cfg: CustomProviderConfig, m: CustomProviderConfig['models'][number]): Model<'openai-completions' | 'anthropic-messages'> {
@@ -32,7 +52,7 @@ export function customProvider(cfg: CustomProviderConfig) {
     id: cfg.id,
     name: cfg.name,
     baseUrl: cfg.baseUrl,
-    auth: { apiKey: envApiKeyAuth(`${cfg.name} API key`, [envName]) },
+    auth: { apiKey: cfg.auth === 'bearer' ? bearerAuth(`${cfg.name} API key`, envName) : envApiKeyAuth(`${cfg.name} API key`, [envName]) },
     models: cfg.models.map((m) => model(cfg, m)),
     fetchModels: cfg.discover && cfg.protocol === 'openai'
       ? async ({ signal, credential }) => {

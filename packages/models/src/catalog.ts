@@ -58,15 +58,20 @@ export function normalizeBaseUrl(protocol: string, url?: string): string | undef
 }
 
 export class Catalog {
-  constructor(readonly models: MutableModels, private o: Pick<CatalogOptions, 'baseUrls' | 'models'> = {}) {}
+  constructor(readonly models: MutableModels, private o: Pick<CatalogOptions, 'baseUrls' | 'models' | 'custom'> = {}) {}
 
   /** Chat models whose provider has a working key, with the ones the user added by hand. */
   async available(): Promise<ModelInfo[]> {
     const list = await this.models.getAvailable();
     const out = list.map((m) => this.info(m));
-    const keyed = new Set(list.map((m) => m.provider));
+    // A provider that lists no models is not necessarily unconfigured: an endpoint with a private catalog advertises
+    // nothing, and the ids typed in are the only list there is — ask the auth store rather than the advertised models.
+    const configured = new Map<string, boolean>(list.map((m) => [m.provider, true]));
     for (const [provider, ids] of Object.entries(this.o.models || {})) {
-      if (!keyed.has(provider)) continue;
+      if (!ids.length) continue;
+      let ok = configured.get(provider);
+      if (ok === undefined) { ok = !!(await this.models.checkAuth(provider)); configured.set(provider, ok); }
+      if (!ok) continue;
       for (const id of ids) if (!out.some((m) => m.provider === provider && m.id === id)) { const m = this.get(provider, id); if (m) out.push({ ...this.info(m), added: true }); }
     }
     return out;
@@ -79,6 +84,17 @@ export class Catalog {
       // typed in by hand: shaped like the provider's own models (same API), with neutral defaults
       const like = this.models.getModels().find((x) => x.provider === provider);
       if (like) m = { ...like, id, name: id, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } };
+      else {
+        // nothing of the provider's to copy (it lists no models at all): our own endpoint's protocol is the only clue
+        const c = this.o.custom?.find((x) => x.id === provider);
+        if (c) m = {
+          id, name: id, provider, baseUrl: c.baseUrl,
+          api: c.protocol === 'anthropic' ? 'anthropic-messages' : 'openai-completions',
+          reasoning: false, input: ['text', 'image'],
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+          contextWindow: 128_000, maxTokens: 32_000,
+        };
+      }
     }
     const own = m && !providerSpec(provider)?.compat ? normalizeBaseUrl(m.api, this.o.baseUrls?.[provider]) : undefined;
     return m && own ? { ...m, baseUrl: own } : m;
@@ -120,5 +136,5 @@ export async function createCatalog(opts: CatalogOptions): Promise<Catalog> {
       for (const [provider, error] of res.errors) console.warn(`[models] ${provider}: ${error instanceof Error ? error.message : String(error)}`);
     } catch (e) { console.warn(`[models] ${dynamic.join(', ')}: ${(e as Error).message}`); }
   }
-  return new Catalog(models, { baseUrls: opts.baseUrls, models: opts.models });
+  return new Catalog(models, { baseUrls: opts.baseUrls, models: opts.models, custom: opts.custom });
 }

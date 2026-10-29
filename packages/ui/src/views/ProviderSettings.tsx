@@ -130,6 +130,10 @@ export function ProviderDetail({ p, s, models, loading, patch, onClose, onRemove
   useEffect(() => { setQ(''); setVendor(undefined); setMore(false); }, [p.id]);
   const isOn = connected(s, p);
   const def = s.defaults.model;
+  // our own endpoint: whether its key travels as x-api-key (default) or Authorization: Bearer
+  const customEntry = p.group === 'custom' ? s.custom.find((c) => c.id === p.id) : undefined;
+  const auth = customEntry?.auth === 'bearer' ? 'bearer' : 'key';
+  const setAuth = (mode: 'key' | 'bearer') => patch({ custom: s.custom.map((c) => (c.id === p.id ? { ...c, auth: mode } : c)) });
   const addModel = async () => {
     const id = adding.trim();
     if (!id || added.includes(id) || mine.some((m) => m.id === id)) { setAdding(''); return; }
@@ -169,6 +173,18 @@ export function ProviderDetail({ p, s, models, loading, patch, onClose, onRemove
           )}
           {p.keyUrl && <a href={p.keyUrl} target="_blank" rel="noreferrer" className="-mt-1 inline-flex items-center gap-1 text-[12.5px] text-accent-ink hover:underline">{t('providers.getKey', { name: providerName(p) })}<ArrowUpRight size={13} aria-hidden /></a>}
           {p.group !== 'custom' && <UrlInput id={p.id} saved={s.baseUrls?.[p.id] ?? ''} placeholder={p.baseUrl} onSave={(v) => patch({ baseUrls: { [p.id]: v } })} />}
+          {customEntry && (
+            <div>
+              <span className="fs-label">{t('providers.authMode')}</span>
+              <div className="flex rounded-[10px] bg-ink/[0.05] p-0.5">
+                {(['key', 'bearer'] as const).map((k) => (
+                  <button key={k} type="button" aria-pressed={auth === k} onClick={() => void setAuth(k)}
+                    className={`flex-1 rounded-lg py-1.5 text-[12.5px] font-medium transition-colors ${auth === k ? 'bg-surface text-ink shadow-sm' : 'text-ink-3 hover:text-ink'}`}>{t(k === 'key' ? 'providers.authDefault' : 'providers.authBearer')}</button>
+                ))}
+              </div>
+              <p className="mt-1.5 text-[12px] text-ink-3">{t('providers.authHint')}</p>
+            </div>
+          )}
         </section>
 
         <section aria-labelledby={`models-${p.id}`}>
@@ -248,8 +264,8 @@ export function ProviderDetail({ p, s, models, loading, patch, onClose, onRemove
 }
 
 /** a new OpenAI- or Anthropic-compatible endpoint */
-export function CustomForm({ onSave, onCancel }: { onSave: (c: { name: string; protocol: 'openai' | 'anthropic'; baseUrl: string; key: string }) => Promise<void>; onCancel: () => void }) {
-  const [c, setC] = useState({ name: '', protocol: 'openai' as 'openai' | 'anthropic', baseUrl: '', key: '' });
+export function CustomForm({ onSave, onCancel }: { onSave: (c: { name: string; protocol: 'openai' | 'anthropic'; baseUrl: string; key: string; auth: 'key' | 'bearer' }) => Promise<void>; onCancel: () => void }) {
+  const [c, setC] = useState({ name: '', protocol: 'openai' as 'openai' | 'anthropic', baseUrl: '', key: '', auth: 'key' as 'key' | 'bearer' });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const ok = c.name.trim() && /^https?:\/\/\S+$/.test(c.baseUrl.trim());
@@ -267,6 +283,15 @@ export function CustomForm({ onSave, onCancel }: { onSave: (c: { name: string; p
             {(['openai', 'anthropic'] as const).map((k) => (
               <button key={k} type="button" aria-pressed={c.protocol === k} onClick={() => setC({ ...c, protocol: k })}
                 className={`flex-1 rounded-lg py-1.5 text-[12.5px] font-medium transition-colors ${c.protocol === k ? 'bg-surface text-ink shadow-sm' : 'text-ink-3 hover:text-ink'}`}>{t(`providers.protocolName.${k}`)}</button>
+            ))}
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend className="fs-label">{t('providers.authMode')}</legend>
+          <div className="flex rounded-[10px] bg-ink/[0.05] p-0.5">
+            {(['key', 'bearer'] as const).map((k) => (
+              <button key={k} type="button" aria-pressed={c.auth === k} onClick={() => setC({ ...c, auth: k })}
+                className={`flex-1 rounded-lg py-1.5 text-[12.5px] font-medium transition-colors ${c.auth === k ? 'bg-surface text-ink shadow-sm' : 'text-ink-3 hover:text-ink'}`}>{t(k === 'key' ? 'providers.authDefault' : 'providers.authBearer')}</button>
             ))}
           </div>
         </fieldset>

@@ -48,7 +48,7 @@ export function cleanRefs(refs: unknown): UserRef[] {
       // one of the film's own pictures: a file right in assets/user/
       return x.asset === false || (x.asset === true && path.posix.dirname(x.path) === USER_ASSETS_DIR);
     }
-    if (x.kind === 'voice') return (x.provider === 'volcengine' || x.provider === 'elevenlabs') && typeof x.id === 'string' && /^[\w.-]{1,120}$/.test(x.id) && typeof x.name === 'string';
+    if (x.kind === 'voice') return (x.provider === 'volcengine' || x.provider === 'elevenlabs' || x.provider === 'edge') && typeof x.id === 'string' && /^[\w.-]{1,120}$/.test(x.id) && typeof x.name === 'string';
     return false;
   });
 }

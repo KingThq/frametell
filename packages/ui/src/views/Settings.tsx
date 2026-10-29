@@ -29,6 +29,8 @@ interface Section {
 const VOICES = [
   { id: 'volcengine', key: 'volcengine' as const, url: 'https://console.volcengine.com/speech/app', hint: 'API Key / AppID:Token' },
   { id: 'elevenlabs', key: 'elevenlabs' as const, url: 'https://elevenlabs.io/app/settings/api-keys', hint: 'sk_…' },
+  // free and keyless: nothing to fill in, so it has no key field (v.key null) and is always offered
+  { id: 'edge', key: null, url: 'https://github.com/SchneeHertz/node-edge-tts', hint: '' },
 ];
 
 // the web search the research uses before a storyboard; reading pages needs no key, searching needs one of these
@@ -50,7 +52,7 @@ const SECTIONS: Section[] = [
       if (open === '+custom') return (
         <CustomForm onCancel={() => setOpen(undefined)} onSave={async (x) => {
           const id = `custom-${x.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || Date.now().toString(36)}`;
-          await c.patch({ custom: [...(c.s.custom as never[]), { id, name: x.name, protocol: x.protocol, baseUrl: x.baseUrl, models: [], discover: x.protocol === 'openai' }], keys: x.key ? { [id]: x.key } : undefined });
+          await c.patch({ custom: [...(c.s.custom as never[]), { id, name: x.name, protocol: x.protocol, baseUrl: x.baseUrl, models: [], discover: x.protocol === 'openai', auth: x.auth }], keys: x.key ? { [id]: x.key } : undefined });
           setOpen(id);
         }} />
       );
@@ -63,7 +65,7 @@ const SECTIONS: Section[] = [
   },
   {
     id: 'voice', icon: AudioLines, label: 'settings.nav.voice',
-    list: (c) => ({ items: (getLocale() === 'en' ? [...VOICES].reverse() : VOICES).map((v) => ({ id: v.id, name: t(`settings.voice.${v.id}` as MessageKey), logo: v.id, on: !!c.s.tts[v.key] })) }),
+    list: (c) => ({ items: (getLocale() === 'en' ? [...VOICES].reverse() : VOICES).map((v) => ({ id: v.id, name: t(`settings.voice.${v.id}` as MessageKey), logo: v.id, on: v.key ? !!c.s.tts[v.key] : true })) }),
     detail: (c, open) => { const v = VOICES.find((x) => x.id === open) ?? VOICES[0]; return <VoiceDetail key={v.id} v={v} c={c} />; },
   },
   { id: 'preferences', icon: NotebookPen, label: 'settings.nav.preferences', hosted: true, detail: (c) => <PreferenceSettings s={c.s} patch={c.patch} /> },
@@ -105,7 +107,8 @@ function SecretField({ id, label, saved, hint, onSave }: { id: string; label: st
 }
 
 function VoiceDetail({ v, c }: { v: (typeof VOICES)[number]; c: Ctx }) {
-  const on = !!c.s.tts[v.key];
+  // Edge needs no key, so it is always on; the paid services are on once their key is saved
+  const on = v.key ? !!c.s.tts[v.key] : true;
   // a saved ElevenLabs key is tried by listing its voices, so a wrong key or a missing permission is said right here
   const voices = useLoad(() => (v.id === 'elevenlabs' && c.s.tts.elevenlabs ? client.voices() : Promise.resolve(undefined)), [v.id, c.s.tts.elevenlabs]);
   return (
@@ -115,16 +118,18 @@ function VoiceDetail({ v, c }: { v: (typeof VOICES)[number]; c: Ctx }) {
         <div className="min-w-0 flex-1">
           <h3 className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[17px] font-semibold leading-tight text-ink">
             {t(`settings.voice.${v.id}` as MessageKey)}
-            <span className={`inline-flex items-center gap-1.5 text-[12px] font-normal ${on ? 'text-jade' : 'text-ink-3'}`}><span className={`h-1.5 w-1.5 rounded-full ${on ? 'bg-jade' : 'bg-line-2'}`} aria-hidden />{on ? t('providers.connected') : t('providers.notConnected')}</span>
+            <span className={`inline-flex items-center gap-1.5 text-[12px] font-normal ${on ? 'text-jade' : 'text-ink-3'}`}><span className={`h-1.5 w-1.5 rounded-full ${on ? 'bg-jade' : 'bg-line-2'}`} aria-hidden />{v.key ? (on ? t('providers.connected') : t('providers.notConnected')) : t('settings.voice.edgeFree')}</span>
           </h3>
           <p className="mt-1 text-[12.5px] text-ink-3">{t(`settings.voice.${v.id}Blurb` as MessageKey)}</p>
         </div>
       </header>
       <div className="space-y-4 px-7 py-6">
-        <SecretField id={`tts-${v.id}`} label={t('providers.key')} saved={c.s.tts[v.key]} hint={v.hint} onSave={(x) => c.patch({ tts: { [v.key]: x } })} />
+        {v.key
+          ? <SecretField id={`tts-${v.id}`} label={t('providers.key')} saved={c.s.tts[v.key]} hint={v.hint} onSave={(x) => c.patch({ tts: { [v.key]: x } })} />
+          : <p className="rounded-lg border border-line bg-paper px-3.5 py-3 text-[12.5px] leading-relaxed text-ink-3">{t('settings.voice.edgeNote')}</p>}
         {on && <VoiceProblem problems={voices.data?.problems} />}
-        {!on && <a href={v.url} target="_blank" rel="noreferrer" className="inline-flex text-[12.5px] text-accent-ink hover:underline">{t('providers.getKey', { name: t(`settings.voice.${v.id}` as MessageKey) })} ↗</a>}
-        <p className="text-[12.5px] leading-relaxed text-ink-3">{t('settings.voice.desc')}</p>
+        {v.key && !on && <a href={v.url} target="_blank" rel="noreferrer" className="inline-flex text-[12.5px] text-accent-ink hover:underline">{t('providers.getKey', { name: t(`settings.voice.${v.id}` as MessageKey) })} ↗</a>}
+        <p className="text-[12.5px] leading-relaxed text-ink-3">{v.key ? t('settings.voice.desc') : t('settings.voice.edgeDesc')}</p>
       </div>
       {v.id === 'volcengine' && on && <MyVoices c={c} />}
     </div>

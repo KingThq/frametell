@@ -6,7 +6,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { createProject, linkProject } from '@frametell/engine/tools/project.mjs';
 import { createCatalog } from '@frametell/models';
-import { elevenLabsTts, volcengineTts } from '@frametell/voice';
+import { edgeTts, elevenLabsTts, volcengineTts } from '@frametell/voice';
 import { createWeb, openaiImages, userAssets, Director, findSources, hasSources, offlineWeb, openProjectFile, piRuntime, Project, readFd, writeIn, type AgentRuntime, type CreditFacts, type DirectorOptions, type MessageRoute, type Renderer, type StudioEvent, type Storyboard, type UserRef } from '@frametell/agent';
 import type { Config, ConfigStore } from './config.js';
 import { prepareMaterials } from './materials.js';
@@ -196,10 +196,10 @@ async function buildRuntime(meta: ProjectMeta, cfg: Config, research?: boolean):
 
 /** the film's narrator as the director takes it; no tts when the film has no voice, or its service has no key */
 function voiceFor(meta: ProjectMeta, cfg: Config) {
-  const key = meta.voice?.provider === 'elevenlabs' ? cfg.tts.elevenlabs : cfg.tts.volcengine;
-  const tts = meta.voice && key ? (meta.voice.provider === 'elevenlabs'
-    ? elevenLabsTts(key, undefined, { baseUrl: cfg.ttsBaseUrls?.elevenlabs })
-    : volcengineTts(key, { baseUrl: cfg.ttsBaseUrls?.volcengine })) : undefined;
+  const tts = !meta.voice ? undefined
+    : meta.voice.provider === 'edge' ? edgeTts()
+    : meta.voice.provider === 'elevenlabs' ? (cfg.tts.elevenlabs ? elevenLabsTts(cfg.tts.elevenlabs, undefined, { baseUrl: cfg.ttsBaseUrls?.elevenlabs }) : undefined)
+    : (cfg.tts.volcengine ? volcengineTts(cfg.tts.volcengine, { baseUrl: cfg.ttsBaseUrls?.volcengine }) : undefined);
   const voice = meta.voice && tts ? { speaker: meta.voice.id, rate: 0, instruction: '像跟朋友分享一个实用的发现，语气轻松、真诚、自然，有轻重缓急' } : undefined;
   return { tts, voice, provider: voice && meta.voice?.provider };
 }
@@ -648,7 +648,7 @@ class Runner {
       this.emit({ type: 'note', text: this.tr(`这部片子用的已经是「${name}」了`, `This film already uses ${name}.`) });
       return false;
     }
-    if (!(v.provider === 'elevenlabs' ? cfg.tts.elevenlabs : cfg.tts.volcengine)) {
+    if (v.provider !== 'edge' && !(v.provider === 'elevenlabs' ? cfg.tts.elevenlabs : cfg.tts.volcengine)) {
       this.emit({ type: 'error', message: this.tr(`「${name}」需要先在设置里连接${v.provider === 'elevenlabs' ? ' ElevenLabs' : '火山引擎'}`, `${name} needs ${v.provider === 'elevenlabs' ? 'ElevenLabs' : 'Volcengine'} connected in Settings first.`) });
       return false;
     }

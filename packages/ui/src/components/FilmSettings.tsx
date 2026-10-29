@@ -61,7 +61,7 @@ function Panel({ project, narrated, current, pending, onPick, onClose, openSetti
   // the voices that speak the film's language (on a hosted service, those it can use), and the film's own voice even
   // when it has left the list
   const list = useMemo(() => {
-    const all = (voices.data?.voices ?? []).filter((v) => (!v.lang || v.lang === lang) && (!hosted || voices.data?.configured[v.provider]));
+    const all = (voices.data?.voices ?? []).filter((v) => (!v.lang || v.lang === lang) && (!hosted || (v.provider !== 'edge' && voices.data?.configured[v.provider])));
     if (current && !all.some((v) => v.provider === current.provider && v.id === current.id)) all.unshift({ provider: current.provider, id: current.id, name: current.name || current.id });
     return all;
   }, [voices.data, lang, current?.id]);

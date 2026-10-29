@@ -32,7 +32,12 @@ process.env.JPEG_QUALITY = String(JPEG);
 // service); children inherit WATERMARK=1, and marked segments are cached apart from unmarked ones
 const WATERMARK = has('watermark');
 if (WATERMARK) process.env.WATERMARK = '1';
-const FPS = +arg('fps', 60), W = +arg('workers', 12), name = arg('name', META.name || 'video') + (PORTRAIT ? (META.lang === 'en' ? '-portrait' : '-竖版') : '');
+// the film's name is its title, which may hold what a file name cannot (a path, a question mark): keep the mp4s nameable
+const safeName = (s) => {
+  const n = String(s || '').replace(/[\\/:*?"<>|\u0000-\u001f]/g, '-').replace(/[. ]+$/, '').trim();
+  return (n || 'video').slice(0, 60);
+};
+const FPS = +arg('fps', 60), W = +arg('workers', 12), name = safeName(arg('name', META.name || 'video')) + (PORTRAIT ? (META.lang === 'en' ? '-portrait' : '-竖版') : '');
 const from = +arg('from', 0), to = +arg('to', L.duration);
 const F0 = Math.round(from * FPS), F1 = Math.round(to * FPS);
 // The film's first frame is its cover: a page settled, at the moment its thumbnail is cut (0.4 s before it ends). Which

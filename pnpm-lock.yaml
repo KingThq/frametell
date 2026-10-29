@@ -215,6 +215,9 @@ importers:
       '@frametell/engine':
         specifier: workspace:*
         version: link:../engine
+      node-edge-tts:
+        specifier: ^1.2.12
+        version: 1.2.12
 
 packages:
 
@@ -2122,6 +2125,10 @@ packages:
     resolution: {integrity: sha512-/jKZoMpw0F8GRwl4/eLROPA3cfcXtLApP0QzLmUT/HuPCZWyB7IY9ZrMeKw2O/nFIqPQB3PVM9aYm0F312AXDQ==}
     engines: {node: '>=10.5.0'}
     deprecated: Use your platform's native DOMException instead
+
+  node-edge-tts@1.2.12:
+    resolution: {integrity: sha512-tvopsQ+XkxHGHM58GUVDM7iwzxVivjqSJb948xg2F0q9r+OWO7bSrJkHnJ0e7BPTxhPiTrxK+9zsl4CL5H5KbQ==}
+    hasBin: true
 
   node-fetch@3.3.2:
     resolution: {integrity: sha512-dRB78srN/l6gqWulah9SrxeYnxeddIG30+GOqK/9OlLVyLg3HPnr6SqOWTWOXKRwC2eGYCkZ59NNuSgvSrpgOA==}
@@ -5046,6 +5053,16 @@ snapshots:
       semver: 7.8.5
 
   node-domexception@1.0.0: {}
+
+  node-edge-tts@1.2.12:
+    dependencies:
+      https-proxy-agent: 7.0.6
+      ws: 8.22.0
+      yargs: 17.7.3
+    transitivePeerDependencies:
+      - bufferutil
+      - supports-color
+      - utf-8-validate
 
   node-fetch@3.3.2:
     dependencies:

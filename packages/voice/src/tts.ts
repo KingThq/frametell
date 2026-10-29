@@ -19,7 +19,7 @@ export interface SynthOptions {
 }
 
 export interface TtsProvider {
-  readonly id: 'volcengine' | 'elevenlabs';
+  readonly id: 'volcengine' | 'elevenlabs' | 'edge';
   synth(text: string, opts: SynthOptions): Promise<SynthResult>;
 }
 
@@ -142,6 +142,45 @@ export function elevenLabsTts(apiKey: string, model = 'eleven_v4_turbo', endpoin
 export interface Voice { provider: TtsProvider['id']; id: string; name: string; gender?: 'female' | 'male'; lang?: string; /** a hosted sample (ElevenLabs) */ previewUrl?: string; /** added by the user by its id (「我的音色」) */ mine?: boolean }
 
 /**
+ * Microsoft Edge's online narrators: free, and no key. The service returns word boundaries beside the audio, so a take
+ * still cuts into cues and syncs words like the paid providers. It speaks one locale per voice and is an unofficial,
+ * best-effort endpoint (Microsoft rotates its DRM token), so it sits beside them rather than replacing them.
+ */
+export function edgeTts(): TtsProvider {
+  type Chunk = Buffer | { part: string; start: number; end: number };
+  type Client = { streamAudio(text: string): AsyncIterable<Chunk>; close(): void };
+  return {
+    id: 'edge',
+    synth: (text, o) => retry(async () => {
+      // loaded only by a film that narrates with Edge; a desktop build bundles it here, and the CLI finds it in node_modules
+      const { EdgeTTS } = await import('node-edge-tts') as unknown as { EdgeTTS: new (options: Record<string, unknown>) => Client };
+      const rate = Math.round(o.rate ?? 0);
+      const pitch = Math.round(o.pitch ?? 0);
+      const lang = /^([a-z]{2}-[A-Z]{2})-/.exec(o.voice)?.[1] ?? 'zh-CN';
+      const tts = new EdgeTTS({
+        voice: o.voice, lang, saveSubtitles: true, timeout: 90_000,
+        rate: `${rate >= 0 ? '+' : ''}${rate}%`,
+        ...(pitch ? { pitch: `${pitch >= 0 ? '+' : ''}${pitch}st` } : {}),
+      });
+      const chunks: Buffer[] = [];
+      const words: WordTime[] = [];
+      try {
+        for await (const part of tts.streamAudio(text)) {
+          // stopping a film ends its take at the next chunk; closing the socket is what stops the service
+          if (o.signal?.aborted) throw new DOMException('stopped', 'AbortError');
+          if (Buffer.isBuffer(part)) chunks.push(part);
+          else if (part?.part) words.push({ word: part.part, startTime: part.start / 1000, endTime: part.end / 1000 });
+        }
+      } finally {
+        try { tts.close(); } catch {}
+      }
+      if (!chunks.length) throw new Error('Edge TTS returned no audio');
+      return { audio: Buffer.concat(chunks), words };
+    }),
+  };
+}
+
+/**
  * Volcengine preset narrators (TTS 2.0), chosen for explainers: the four flagship voices, then narrators and
  * presenters. Earlier presets that left the list (甜美小源, 温暖阿虎, 爽快思思) still speak, and still have samples, for
  * the films that use them.
@@ -165,6 +204,22 @@ export const VOLCENGINE_VOICES: Voice[] = [
   { provider: 'volcengine', id: 'zh_female_wenroushunv_uranus_bigtts', name: '温柔淑女', gender: 'female', lang: 'zh' },
   { provider: 'volcengine', id: 'zh_male_xuanyijieshuo_uranus_bigtts', name: '悬疑解说', gender: 'male', lang: 'zh' },
   { provider: 'volcengine', id: 'zh_male_yangguangqingnian_uranus_bigtts', name: '阳光青年', gender: 'male', lang: 'zh' },
+];
+
+/**
+ * Microsoft Edge's narrators, free and without a key: the Chinese voices a film defaults to, then the English ones.
+ * Edge speaks many more languages; these are the ones Studio's films are made in.
+ */
+export const EDGE_VOICES: Voice[] = [
+  { provider: 'edge', id: 'zh-CN-XiaoxiaoNeural', name: '晓晓', gender: 'female', lang: 'zh' },
+  { provider: 'edge', id: 'zh-CN-YunxiNeural', name: '云希', gender: 'male', lang: 'zh' },
+  { provider: 'edge', id: 'zh-CN-YunjianNeural', name: '云健', gender: 'male', lang: 'zh' },
+  { provider: 'edge', id: 'zh-CN-XiaoyiNeural', name: '晓伊', gender: 'female', lang: 'zh' },
+  { provider: 'edge', id: 'zh-CN-YunyangNeural', name: '云扬', gender: 'male', lang: 'zh' },
+  { provider: 'edge', id: 'en-US-AriaNeural', name: 'Aria', gender: 'female', lang: 'en' },
+  { provider: 'edge', id: 'en-US-GuyNeural', name: 'Guy', gender: 'male', lang: 'en' },
+  { provider: 'edge', id: 'en-US-JennyNeural', name: 'Jenny', gender: 'female', lang: 'en' },
+  { provider: 'edge', id: 'en-GB-SoniaNeural', name: 'Sonia', gender: 'female', lang: 'en' },
 ];
 
 /**
