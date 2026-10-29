@@ -26,9 +26,36 @@
     // box, behind its proxy, sometimes answers so), and a seek in it never ends. Such a line used to lead the clock all
     // the same: the picture was pulled back to its stuck time every few frames and shook at the start of the page. Now a
     // line leads only while it flows; a stuck one holds the clock, is fetched again after RETRY_MS, and is given up at WAIT_MS.
+    // On an iPhone or iPad, Safari loads no <audio> before it is played from a tap and ignores preload: every line
+    // waited out WAIT_MS unloaded and was dropped, and most of a film played silent. So where the page may read its own
+    // files (not a sandbox's opaque origin, not file://), the lines are fetched and decoded into one AudioContext, which
+    // the tap on play opens once for all of them; elsewhere they stay <audio> elements. A decoded line is never stuck:
+    // one that missed WAIT_MS only stops holding the clock, and still speaks from where the film is once it arrives.
     const AHEAD = 15, WAIT_MS = 4000, RETRY_MS = 1500, DRIFT = 0.12;
     const clips = ENGINE.layout.pages.flatMap((p) => p.cues).filter((c) => c.audio)
-      .map((c) => ({ at: c.audioAt ?? c.start, d: c.dur ?? c.end - c.start, src: c.audio, el: null, done: false, since: 0, fresh: false }));
+      .map((c) => ({ at: c.audioAt ?? c.start, d: c.dur ?? c.end - c.start, src: c.audio, el: null, done: false, since: 0, fresh: false, buf: null, loading: null, node: null, t0: 0, late: false }));
+    const ac = window.AudioContext && self.origin !== 'null' && clips.length ? new AudioContext() : null;
+    if (ac && navigator.audioSession) navigator.audioSession.type = 'playback';   // an iPhone speaks with its silent switch on, as <audio> does
+    const decode = (c) => {
+      if (c.buf || c.loading) return;
+      const p = (c.loading = fetch(c.src).then((r) => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
+        .then((b) => ac.decodeAudioData(b))
+        .then((b) => { if (c.loading === p) c.buf = b; }, () => { if (c.loading === p) c.done = true; }));   // a line that will not load does not hold the film
+    };
+    const start = (c, off) => {
+      const n = (c.node = ac.createBufferSource());
+      n.buffer = c.buf; n.connect(ac.destination);
+      n.onended = () => { if (c.node === n) { c.node = null; c.done = true; } };
+      n.start(0, off); c.t0 = ac.currentTime - off;
+    };
+    const stop = (c) => {
+      if (!ac) { if (c.el) c.el.pause(); return; }
+      const n = c.node; c.node = null;
+      if (n) { n.onended = null; n.stop(); }
+    };
+    /** the line is sounding, and where in it */
+    const live = (c) => (ac ? !!c.node : !!c.el && !c.el.paused);
+    const pos = (c) => (ac ? ac.currentTime - c.t0 : c.el.currentTime);
     const audioOf = (c) => {
       if (!c.el) {
         const el = (c.el = new Audio(c.src)); el.preload = 'auto';
@@ -41,23 +68,35 @@
     const forget = (c) => { const el = c.el; c.el = null; if (el) { el.pause(); el.removeAttribute('src'); el.load(); } };
     /** the line can play on from where it is: not mid-seek, and loaded ahead of its own time */
     const flowing = (el) => !el.seeking && el.readyState >= 3;
-    const loadAhead = () => { for (const c of clips) if (c.at + c.d > t && c.at < t + AHEAD) audioOf(c); };
+    /** the line can start now */
+    const ready = (c) => (ac ? !!c.buf : flowing(audioOf(c)));
+    /** the line leads the clock: sounding, and its time moving */
+    const leads = (c) => (ac ? !!c.node && ac.state === 'running' : live(c) && flowing(c.el));
+    // decoded lines far from the film's time are let go (a long film's would fill a phone's memory); a jump back fetches
+    // them again, from the browser's cache
+    const loadAhead = () => {
+      for (const c of clips) {
+        if (c.at + c.d > t && c.at < t + AHEAD) ac ? decode(c) : audioOf(c);
+        else if (ac && !c.node && (c.at + c.d < t - AHEAD || c.at > t + 4 * AHEAD)) { c.buf = null; c.loading = null; }
+      }
+    };
     /** a line due by `to` that cannot play yet (not loaded, or stuck since it was started): the clock waits for it */
     const holding = (to, now) => clips.find((c) => {
-      if (c.done || to < c.at || t >= c.at + c.d) return false;
-      const el = audioOf(c);
-      if (flowing(el)) { c.since = 0; return false; }
+      if (c.done || c.late || to < c.at || t >= c.at + c.d) return false;
+      if (ac) decode(c);
+      if (ready(c)) { c.since = 0; return false; }
       if (!c.since) c.since = now;
-      if (now - c.since > WAIT_MS) { forget(c); c.done = true; return false; }
-      if (now - c.since > RETRY_MS && !c.fresh && !el.paused) { c.fresh = true; forget(c); audioOf(c); }
+      if (now - c.since > WAIT_MS) { if (ac) c.late = true; else { forget(c); c.done = true; } return false; }
+      if (!ac && now - c.since > RETRY_MS && !c.fresh && !c.el.paused) { c.fresh = true; forget(c); audioOf(c); }
       return true;
     });
     const sfx = TIMING.sfxTimes ? TIMING.sfxTimes(ENGINE.layout).map((s) => ({ ...s, el: null })) : [];
     const syncAudio = () => {
       if (playing) loadAhead();
       for (const c of clips) {
-        const off = t - c.at, el = c.el;
+        const off = t - c.at;
         if (playing && !c.done && off >= 0 && off < c.d) {
+          if (ac) { if (!c.node && c.buf && ac.state === 'running') start(c, off); continue; }
           const a = audioOf(c);
           if (a.paused) {
             if (a.readyState < 2) continue;
@@ -66,7 +105,7 @@
             // for one, rather than going on silent. Any other refusal: leave it, rather than asking every frame
             a.play().catch((e) => { if (e?.name === 'NotAllowedError' && playing) needsClick(); else c.done = true; });
           }
-        } else if (el && !el.paused && (!playing || off < 0 || off > c.d + 0.5)) el.pause();
+        } else if (live(c) && (!playing || off < 0 || off > c.d + 0.5)) stop(c);
       }
       // sound effects / music beds (page.sfx): volume and fades approximated, no ducking (the render mixes them exactly)
       for (const s of sfx) {
@@ -124,9 +163,9 @@
       if (!playing) return;
       let next = Math.min(dur, wall + (now - t0) / 1000);
       const wait = holding(next, now);
-      const lead = !wait && clips.findLast((c) => c.el && !c.el.paused && flowing(c.el));
+      const lead = !wait && clips.findLast(leads);
       if (wait) { next = Math.max(t, wait.at); wall = next; t0 = now; }
-      else if (lead && Math.abs(lead.at + lead.el.currentTime - next) > DRIFT) { next = Math.min(dur, lead.at + lead.el.currentTime); wall = next; t0 = now; }
+      else if (lead && Math.abs(lead.at + pos(lead) - next) > DRIFT) { next = Math.min(dur, lead.at + pos(lead)); wall = next; t0 = now; }
       t = next;
       if (t >= dur) playing = false;
       syncAudio();
@@ -136,6 +175,7 @@
     const play = () => {
       if (t >= dur - 0.05) t = 0;
       playing = true; wall = t; t0 = performance.now();
+      unlock();
       loadAhead();
       hint.firstChild.style.opacity = '0';
       requestAnimationFrame(loop);
@@ -146,10 +186,18 @@
       hint.firstChild.textContent = say('点击画面播放（有声音）', 'Click the picture to play with sound');
       hint.firstChild.style.opacity = '1';
     };
+    // The context opens in the tap that plays (Safari before 15 also wanted a sound started in it). Asked to play from
+    // outside (the Studio panel), it may stay shut: the film stops and asks for a click, as a refused <audio> does
+    const unlock = () => {
+      if (!ac || ac.state === 'running') return;
+      ac.resume().catch(() => {});
+      const s = ac.createBufferSource(); s.buffer = ac.createBuffer(1, 1, 22050); s.connect(ac.destination); s.start(0);
+      setTimeout(() => { if (playing && ac.state !== 'running') needsClick(); }, 500);
+    };
     const toggle = () => (playing ? pause() : play());
     const jump = (to) => {
       t = Math.max(0, Math.min(dur, to)); wall = t; t0 = performance.now();
-      for (const c of clips) { c.done = false; c.since = 0; c.fresh = false; if (c.el) c.el.pause(); }
+      for (const c of clips) { c.done = false; c.since = 0; c.fresh = false; c.late = false; stop(c); }
       syncAudio(); show();
     };
     const fullscreen = () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()).catch(() => {});
