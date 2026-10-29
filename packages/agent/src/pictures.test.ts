@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { Director } from './director.js';
 import { writeIn } from './projectfs.js';
-import { lookPrefix, picturePageNote, picturePlan, pictureIssues, picturePrompt, pictureStyle, picturesOn, readPictures, sniffPicture, type ImageProvider, type PictureStyle } from './pictures.js';
+import { lookPrefix, picturePageNote, picturePlanNote, pictureSize, picturePlan, pictureIssues, picturePrompt, pictureStyle, picturesOn, readPictures, sniffPicture, type ImageProvider, type PictureStyle } from './pictures.js';
 import type { AgentRuntime } from './runtime/types.js';
 import type { StudioEvent } from './events.js';
 
@@ -78,15 +78,15 @@ const PLAN = [
   { id: 'bird-fly', kind: 'character', what: 'the bird flying to the right', pages: ['p03'], like: 'bird' },
 ];
 
-function film(o: { fail?: RegExp } = {}) {
+function film(o: { fail?: RegExp; style?: PictureStyle; plan?: object[] } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ft-pictures-'));
   fs.mkdirSync(path.join(dir, 'pages'));
   const calls: { prompt: string; refs: number; transparent: boolean }[] = [], events: StudioEvent[] = [];
   const none: AgentRuntime = { id: 'pi', model: { provider: 'x', id: 'y' }, open: async () => { throw new Error('no model here'); } };
   const d = new Director({ dir, style: 'vector', brief: { durationSec: 60, lang: 'zh', replyLang: 'zh' }, runtime: none, images: service(calls, o), emit: (e) => events.push(e) });
-  const sb: { title: string; summary: string; look: { pictures?: object[] }; pages: object[] } = { title: 'T', summary: 'S', look: { pictures: PLAN }, pages: ids.map((id) => ({ id, section: 's', say: '…', beats: [] })) };
+  const sb: { title: string; summary: string; look: { pictures?: object[] }; pages: object[] } = { title: 'T', summary: 'S', look: { pictures: o.plan ?? PLAN }, pages: ids.map((id) => ({ id, section: 's', say: '…', beats: [] })) };
   Object.assign(d.project, { commit: async () => undefined, storyboard: () => sb, timeline: async () => ({ duration: 15, pages: [] }) });
-  Object.assign(d, { pictureStyle: () => STYLE });
+  Object.assign(d, { pictureStyle: () => o.style ?? STYLE });
   return { d: d as unknown as Pick<Director, 'pictures' | 'redrawPicture'> & { state: { stage: string; exported?: boolean; pictures?: string } }, dir, calls, events, sb };
 }
 const pictureEvents = (events: StudioEvent[]) => events.filter((e): e is Extract<StudioEvent, { type: 'picture' }> => e.type === 'picture');
@@ -292,4 +292,42 @@ test('a cut-out with a ground behind it, or a sticker\'s white rim, is told apar
   assert.match(cutOutTrouble(rimmed) ?? '', /white sticker outline/);
   assert.match(cutOutTrouble(paper) ?? '', /background or paper behind the subject/);
   assert.equal(cutOutTrouble(snowman), undefined, 'a white subject is not a rim');
+});
+
+const LED: PictureStyle = { kinds: ['scene', 'character'], max: 30, quality: 'medium', prefix: 'Flat vector office comedy', avoid: '', led: true, cast: true };
+
+test('a style drawn in pictures: its cast sheet first and on no page, a scene for every beat it shows', () => {
+  const note = picturePlanNote(LED);
+  assert.match(note, /drawn in pictures/);
+  assert.match(note, /cast sheet, id `cast`, on no page/);
+  assert.match(note, /one every 8–12 seconds/);
+  assert.match(note, /at most 30 pictures/);
+  assert.match(note, /has no `kit`/);
+  assert.doesNotMatch(note, /3–6 pictures usually/);
+  assert.match(note, /written in code on top/);
+  const words = picturePlanNote({ ...LED, words: true });
+  assert.match(words, /words and all/);
+  assert.match(words, /quote them exactly in `what`/);
+  assert.doesNotMatch(words, /never in a picture/);
+  const ok = { pictures: [{ id: 'cast', kind: 'scene', what: 'Sam, a salesman with curly hair; Priya, a CHRO', pages: [] }, { id: 'p01-a', kind: 'scene', what: 'Sam at his desk, wide shot', pages: ['p01'] }] };
+  assert.deepEqual(pictureIssues(ok, ids, LED), []);
+  assert.match(pictureIssues({ pictures: [ok.pictures[1]] }, ids, LED).join('\n'), /the first picture is the film's cast sheet, id "cast"/);
+  assert.match(pictureIssues({ pictures: [{ ...ok.pictures[0], pages: ['p01'] }] }, ids, LED).join('\n'), /the cast sheet is on no page/);
+  const [sheet, scene] = picturePlan(ok, LED);
+  assert.match(picturePrompt(LED, sheet, [], 'none'), /character model sheet: every character the subject names standing side by side/);
+  assert.match(picturePrompt(LED, scene, [], 'cast'), /A full-frame illustration[\s\S]*reference image is this film's cast sheet/);
+  assert.deepEqual([sheet.shape, scene.shape, pictureSize(scene)], ['film', 'film', '1536x864'], 'a scene drawn in is the frame\'s own 16:9');
+});
+
+test('in a style with a cast sheet every scene is drawn from the sheet', async () => {
+  const f = film({ style: LED, plan: [
+    { id: 'cast', kind: 'scene', what: 'Sam, a salesman with curly hair; Buzz, a horsefly', pages: [] },
+    { id: 'p01-a', kind: 'scene', what: 'Sam at his desk, wide shot', pages: ['p01'] },
+    { id: 'p02-a', kind: 'scene', what: 'Buzz lands on the deck of slides', pages: ['p02'] },
+  ] });
+  await f.d.pictures();
+  assert.equal(f.calls.length, 3);
+  assert.equal(f.calls[0].refs, 0);
+  assert.match(f.calls[0].prompt, /character model sheet/);
+  for (const c of f.calls.slice(1)) { assert.equal(c.refs, 1); assert.match(c.prompt, /this film's cast sheet/); }
 });

@@ -12,7 +12,8 @@ import type { PageIssue, PageStatus, Stage, StudioEvent } from './events.js';
 import { designedFonts, designedIssues, designedLook, type Look } from './look.js';
 import { BRAND_DIR, SIGN_OFF_HOLD, cornerMark, signsOff } from './brand.js';
 import { assetPath, assetsOn, userAssets } from './assets.js';
-import { PICTURES_DIR, PICTURES_MANIFEST, cutOut, cutOutTrouble, lookPrefix, pictureFile, pictureIssues, pictureKey, picturePageNote, picturePath, picturePlan, picturePlanNote, picturePrompt, pictureReviewNote, pictureSize, pictureStyle, picturesOn, readPictures, sniffPicture, type ImageProvider, type Picture, type PicturePlan, type Pictures } from './pictures.js';
+import { inkScript } from './ink.js';
+import { PICTURES_DIR, PICTURES_MANIFEST, cutOut, inkPath, cutOutTrouble, lookPrefix, pictureFile, pictureIssues, pictureKey, picturePageNote, picturePath, picturePlan, picturePlanNote, picturePrompt, pictureReviewNote, pictureSize, pictureStyle, picturesOn, readPictures, sniffPicture, type ImageProvider, type Picture, type PicturePlan, type Pictures } from './pictures.js';
 import { ENGINE_DIR } from '@frametell/engine/tools/project.mjs';
 import { freeze, openIn, readIn, writeIn } from './projectfs.js';
 import { briefFile, runResearch, type ResearchLimits } from './research/research.js';
@@ -238,6 +239,8 @@ async function pool<T>(items: T[], n: number, fn: (x: T) => Promise<unknown>) {
 }
 /** pictures drawn at once: the image service takes ~30 s for each */
 const PICTURES_AT_ONCE = 4;
+/** a style drawn in pictures asks for a scene every few seconds: more are drawn side by side */
+const LED_PICTURES_AT_ONCE = 8;
 // pageChecks: a drawn page is checked at most 3 times (2 rounds of fixes); a revision starts from a checked page, 2.
 /** the length a film is held to: the user's choice, which they pay for by the minute. At most 4 pages a minute (one
  *  more for a short film), and a narration whose estimate runs at most a third over and at least the length (the
@@ -668,8 +671,9 @@ export class Director {
     const sb = this.project.storyboard();
     const designed = this.designed();
     const items = kitPlan(sb.look);
-    // a film drawn in one lane needs none: one session draws every page and sees what it drew
-    if (!kitWanted(sb.pages.length, items) || (this.lanesOn() && laneCount(sb.pages.length) === 1)) { this.state.kit = { status: 'none', components: [] }; this.save(); return; }
+    // a film drawn in one lane needs none: one session draws every page and sees what it drew; nor does a film drawn in
+    // pictures (its pages only draw its pictures in)
+    if (!kitWanted(sb.pages.length, items) || (this.lanesOn() && laneCount(sb.pages.length) === 1) || this.pictureStyle()?.led) { this.state.kit = { status: 'none', components: [] }; this.save(); return; }
     this.emit({ type: 'kit', status: 'start', components: items.map((x) => x.name) });
     // sessions side by side, each writing up to KIT_PER_SESSION components one after the other: the pages wait on the
     // slowest session, not on the sum (one session writing a 6-page film's two components took 10 minutes, at medium)
@@ -815,7 +819,11 @@ export class Director {
     now.items = [...now.items.filter((x) => x.id !== pic.id), pic];
     if (notes) now.notes = notes;
     this.project.write(PICTURES_MANIFEST, JSON.stringify(now, null, 2) + '\n');
-    if (old && old.file !== pic.file) { try { fs.rmSync(this.project.file(picturePath(old))); } catch { /* gone */ } }
+    if (old && old.file !== pic.file) for (const f of [picturePath(old), inkPath(old)]) { try { fs.rmSync(this.project.file(f)); } catch { /* gone */ } }
+    // a style that draws its pictures in on the page reads where each one's ink is (ink.ts)
+    if (this.pictureStyle()?.led) {
+      try { const js = inkScript(pic.file, new Uint8Array(readIn(this.o.dir, picturePath(pic), { record: true }))); if (js) writeIn(this.o.dir, inkPath(pic), js, { record: true }); } catch (e) { console.warn(`[pictures] ${pic.id}: no ink map: ${(e as Error).message}`); }
+    }
     freeze(this.o.dir, picturePath(pic));
     return old;
   }
@@ -834,7 +842,7 @@ export class Director {
     if (!style || !plan.length) { this.state.pictures = 'none'; this.save(); return; }
     const pics = readPictures(this.o.dir);
     const drawn = new Map<string, Picture>();
-    const one = async (p: PicturePlan, refs: (Picture | string)[], mode: 'none' | 'look' | 'same' | 'own') => {
+    const one = async (p: PicturePlan, refs: (Picture | string)[], mode: 'none' | 'look' | 'same' | 'own' | 'cast') => {
       // a picture of the person's own subject is drawn from their file, whatever else it would be drawn from
       if (p.from) { refs = [p.from]; mode = 'own'; }
       const prompt = picturePrompt(style, p, pics.notes, mode), key = pictureKey(p, pics.notes);
@@ -855,16 +863,18 @@ export class Director {
     const [first, ...rest] = plan;
     await one(first, [], 'none');
     const sample = drawn.get(first.id);
-    const look = (): [Picture[], 'none' | 'look'] => (sample ? [[sample], 'look'] : [[], 'none']);
-    await pool(rest.filter((p) => !p.like), PICTURES_AT_ONCE, (p) => one(p, ...look()));
-    await pool(rest.filter((p) => p.like), PICTURES_AT_ONCE, (p) => { const base = drawn.get(p.like!); return base ? one(p, [base], 'same') : one(p, ...look()); });
+    // in a style with a cast sheet the sample is the sheet: every picture is drawn from it, its people as they are there
+    const look = (): [Picture[], 'none' | 'look' | 'cast'] => (sample ? [[sample], style.cast ? 'cast' : 'look'] : [[], 'none']);
+    const many = style.led ? LED_PICTURES_AT_ONCE : PICTURES_AT_ONCE;
+    await pool(rest.filter((p) => !p.like), many, (p) => one(p, ...look()));
+    await pool(rest.filter((p) => p.like), many, (p) => { const base = drawn.get(p.like!); return base ? one(p, [base], 'same') : one(p, ...look()); });
     // pictures the storyboard no longer asks for are let go
     const now = readPictures(this.o.dir);
     const gone = now.items.filter((x) => !plan.some((p) => p.id === x.id));
     if (gone.length) {
       now.items = now.items.filter((x) => !gone.includes(x));
       this.project.write(PICTURES_MANIFEST, JSON.stringify(now, null, 2) + '\n');
-      for (const g of gone) { try { fs.rmSync(this.project.file(picturePath(g))); } catch { /* gone */ } }
+      for (const g of gone) for (const f of [picturePath(g), inkPath(g)]) { try { fs.rmSync(this.project.file(f)); } catch { /* gone */ } }
     }
     this.state.pictures = 'done'; this.save();
     this.freezePictures();
@@ -909,7 +919,7 @@ export class Director {
       ?? pics.items.map((x) => (plan.find((q) => q.id === x.id)?.like === id ? clean(x) : undefined)).find(Boolean);
     const look = [plan[0].id, ...plan.map((q) => q.id)].map((pid) => (pid === id ? undefined : clean(pics.items.find((x) => x.id === pid)))).find(Boolean);
     // another pose of it is drawn from as the same one, not copied: its hat and props stay with it ('kin')
-    const [refs, mode]: [(Picture | string)[], 'none' | 'look' | 'same' | 'own' | 'kin'] = itself ? [[itself], 'same'] : kin ? [[kin], p.like ? 'same' : 'kin'] : p.from ? [[p.from], 'own'] : look ? [[look], 'look'] : [[], 'none'];
+    const [refs, mode]: [(Picture | string)[], 'none' | 'look' | 'same' | 'own' | 'kin' | 'cast'] = itself ? [[itself], 'same'] : kin ? [[kin], p.like ? 'same' : 'kin'] : p.from ? [[p.from], 'own'] : look ? [[look], style.cast && look.id === plan[0].id ? 'cast' : 'look'] : [[], 'none'];
     this.pictureEvent(p, 'drawing', { note: change });
     let pic: Picture;
     // drawn from another pose of it: what that one adds (a hat, a prop) is named, or the image model copies it
@@ -1328,7 +1338,7 @@ export class Director {
       const unchanged = () => before !== undefined && this.project.read(`pages/${id}.js`) === before;
       let r: TurnResult | undefined, declined: string | undefined;
       if (!was) {
-        r = await this.send(s, next + pagePrompt(sb, id, t, this.o.brief.lang, this.o.brief.replyLang, !!fix, this.o.brief.brand, this.assetsOn(sb, id), picturePageNote(this.picturesOn(sb, id))) + (fix ? revisionNote(id, fix, this.project.read(`pages/${id}.js`), this.state.firstPage === 'waiting') : added ? addedNote(this.state.revision![id]) : '') + directionsNote(this.directions(`page-${id}`)), undefined, PAGE_THINKING);
+        r = await this.send(s, next + pagePrompt(sb, id, t, this.o.brief.lang, this.o.brief.replyLang, !!fix, this.o.brief.brand, this.assetsOn(sb, id), picturePageNote(this.picturesOn(sb, id), this.pictureStyle())) + (fix ? revisionNote(id, fix, this.project.read(`pages/${id}.js`), this.state.firstPage === 'waiting') : added ? addedNote(this.state.revision![id]) : '') + directionsNote(this.directions(`page-${id}`)), undefined, PAGE_THINKING);
         if (!this.project.exists(`pages/${id}.js`)) r = await this.send(s, `pages/${id}.js does not exist yet; write it, then stop.`, undefined, PAGE_THINKING);
         if (!this.project.exists(`pages/${id}.js`)) throw new Error(r.error || this.say('没有写出页面文件', 'No page file was written'));
         // the agent found nothing to change (already so, or nothing this page can do): it says why instead of searching
