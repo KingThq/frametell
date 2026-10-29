@@ -35,6 +35,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - What the user says mid-run is a standing direction: every page's first message and its reviewer read all of it, and the reviewer never fails a page for following it. Before, a page drawn again in a fresh session saw none of the earlier notes, and its reviewer, judging by the storyboard, put back what the user had ruled out.
 - A change to a finished film that asks for more than a page holds (everything, more detail, a full review) adds pages instead of packing one.
 
+## [0.7.4] - 2026-10-28
+
+### Fixed
+
+- An export no longer fails after the film is made because its length could not be read ("cannot read <film>.mp4: " with nothing after it): the film is handed over with the time line's length. When ffmpeg can't read a film, the message now says why, also when ffmpeg printed nothing (it could not start, or was stopped).
+
 ## [0.7.3] - 2026-10-19
 
 ### Added
@@ -383,7 +389,8 @@ The first release of Frametell: a local, open-source studio that turns an idea o
 - The npm packages are not published yet; install from source (see the README).
 - The Claude Agent SDK and Codex runtimes are in the code but not offered; every film runs on the built-in agent, which works with any provider.
 
-[Unreleased]: https://github.com/sitor-ai/frametell/compare/v0.7.3...HEAD
+[Unreleased]: https://github.com/sitor-ai/frametell/compare/v0.7.4...HEAD
+[0.7.4]: https://github.com/sitor-ai/frametell/compare/v0.7.3...v0.7.4
 [0.7.3]: https://github.com/sitor-ai/frametell/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/sitor-ai/frametell/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/sitor-ai/frametell/compare/v0.7.0...v0.7.1

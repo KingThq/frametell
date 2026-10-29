@@ -46,23 +46,8 @@ async function timed(seconds: (n: number) => number, feedback?: string) {
   return sent;
 }
 
-test('a narration that runs well over the chosen length is sent back once to be condensed', async () => {
-  const sent = await timed(() => 150);
-  assert.equal(sent.length, 2);
-  assert.match(sent[1], /estimated at 2\.5 minutes; the film is 1 minutes.*at most 1\.3/);
-  assert.match(sent[1], /keep every page and every main point/);
-});
-
-test('a narration short of the chosen length is sent back once to be filled out', async () => {
-  const sent = await timed(() => 50);
-  assert.equal(sent.length, 2);
-  assert.match(sent[1], /estimated at 0\.8 minutes; the film is 1 minutes.*between 1\.1 and 1\.3/);
-  assert.equal((await timed((n) => (n === 1 ? 50 : 150))).length, 2, 'once only: a second answer stands, short or long');
-});
-
-test('a narration within a third over is kept, and the user\'s own changes are not pushed back', async () => {
-  assert.equal((await timed(() => 80)).length, 1);
-  assert.equal((await timed(() => 60)).length, 1);
+test('a narration is never sent back for its length, long or short', async () => {
+  for (const sec of [150, 50, 80, 60]) assert.equal((await timed(() => sec)).length, 1, `${sec} s`);
   assert.equal((await timed(() => 150, 'add a page on the history')).length, 1);
 });
 

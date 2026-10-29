@@ -12,7 +12,8 @@ import type { PageIssue, PageStatus, Stage, StudioEvent } from './events.js';
 import { designedFonts, designedIssues, designedLook, type Look } from './look.js';
 import { BRAND_DIR, SIGN_OFF_HOLD, cornerMark, signsOff } from './brand.js';
 import { assetPath, assetsOn, userAssets } from './assets.js';
-import { PICTURES_DIR, PICTURES_MANIFEST, cutOut, cutOutTrouble, lookPrefix, pictureFile, pictureIssues, pictureKey, picturePageNote, picturePath, picturePlan, picturePlanNote, picturePrompt, pictureReviewNote, pictureSize, pictureStyle, picturesOn, readPictures, sniffPicture, type ImageProvider, type Picture, type PicturePlan, type Pictures } from './pictures.js';
+import { inkScript } from './ink.js';
+import { PICTURES_DIR, PICTURES_MANIFEST, cutOut, inkPath, cutOutTrouble, lookPrefix, pictureFile, pictureIssues, pictureKey, picturePageNote, picturePath, picturePlan, picturePlanNote, picturePrompt, pictureReviewNote, pictureSize, pictureStyle, picturesOn, readPictures, sniffPicture, type ImageProvider, type Picture, type PicturePlan, type Pictures } from './pictures.js';
 import { ENGINE_DIR } from '@frametell/engine/tools/project.mjs';
 import { freeze, openIn, readIn, writeIn } from './projectfs.js';
 import { briefFile, runResearch, type ResearchLimits } from './research/research.js';
@@ -183,9 +184,12 @@ This page is new: the film is finished and the user's change adds it. What it sh
 // Pages are drawn at low thinking, drafts and check rounds alike; on a gateway's …-high model that means its …-low
 // sibling. Most of a page's time and cost was the model thinking before writing: on the same pages a -high draft took
 // 170–220 s and a -medium one 37–74 s, with no worse a page; at medium a page still wrote ~8k output tokens for ~1k of
-// code, most of it thought, and low draws pages as good for a fraction of it. The storyboard and the narration keep
-// the model's own level.
+// code, most of it thought, and low draws pages as good for a fraction of it.
 const PAGE_THINKING: Thinking = 'low';
+/** the storyboard, the narration and a change's plan: at the model's own level (medium) a one-minute storyboard thought
+ *  12k tokens before writing and 15k more while writing, ~5½ minutes and ~$1 before the user saw anything (2026-10-29);
+ *  its check rounds catch what a quicker draft misses, as the pages' do */
+const PLAN_THINKING: Thinking = 'low';
 /** the film's components: a few small drawings every page is waiting on (at medium, one kettle took 44k tokens and
  *  7½ minutes of thought); the kit's check and reviewer catch what a quicker draft gets wrong */
 const KIT_THINKING: Thinking = 'low';
@@ -236,8 +240,8 @@ async function pool<T>(items: T[], n: number, fn: (x: T) => Promise<unknown>) {
   const queue = [...items];
   await Promise.all(Array.from({ length: Math.min(n, queue.length) }, async () => { for (let x = queue.shift(); x !== undefined; x = queue.shift()) await fn(x); }));
 }
-/** pictures drawn at once: the image service takes ~30 s for each */
-const PICTURES_AT_ONCE = 4;
+/** pictures drawn at once: the image service takes ~30 s for each (the Cloud's gateway lets a film draw 10 at once) */
+const PICTURES_AT_ONCE = 10;
 // pageChecks: a drawn page is checked at most 3 times (2 rounds of fixes); a revision starts from a checked page, 2.
 /** the length a film is held to: the user's choice, which they pay for by the minute. At most 4 pages a minute (one
  *  more for a short film), and a narration whose estimate runs at most a third over and at least the length (the
@@ -494,10 +498,10 @@ export class Director {
     const all = fs.existsSync(this.project.file('materials')) ? fs.readdirSync(this.project.file('materials')).filter((f) => !f.startsWith('.')) : [];
     const materials = all.filter((f) => /\.(md|markdown|txt|png|jpe?g|webp|gif)$/i.test(f));
     const s = await this.session('planner', plannerSystem(this.o.style, this.o.brief.preferences, this.o.brief.styleNotes, this.o.brief.brand, userAssets(this.project.dir)), MAX.planTurns, this.state.planner);
-    let r = await this.send(s, storyboardPrompt(this.o.brief, this.o.style, materials, picturePlanNote(this.pictureStyle(), this.own())));
+    let r = await this.send(s, storyboardPrompt(this.o.brief, this.o.style, materials, picturePlanNote(this.pictureStyle(), this.own())), undefined, PLAN_THINKING);
     this.state.planner = s.ref; this.save();
     // a turn can end without the file (seen: a gateway answering a one-token "." mid-turn); ask once more, as for pages
-    if (!this.project.exists('storyboard.json') && r.stopReason !== 'max_turns') r = await this.send(s, 'storyboard.json does not exist yet; write it, then stop and report. ' + replyNote(this.o.brief.replyLang, this.o.brief.lang));
+    if (!this.project.exists('storyboard.json') && r.stopReason !== 'max_turns') r = await this.send(s, 'storyboard.json does not exist yet; write it, then stop and report. ' + replyNote(this.o.brief.replyLang, this.o.brief.lang), undefined, PLAN_THINKING);
     if (!this.project.exists('storyboard.json')) this.fail('storyboard', this.say(`没有写出分镜：${r.error || r.text}`, `No storyboard was written: ${r.error || r.text}`));
     // the film's language and length are the server's to say (the page agents and the checks read them from here): a
     // planner once raised its own target from 1 minute to 2
@@ -511,7 +515,7 @@ export class Director {
       this.emit({ type: 'storyboard_check', round, issues });
       const reds = issues.filter((i) => i.level === 'red');
       if (!reds.length || round > MAX.storyboardFix) break;
-      r = await this.send(s, storyboardFixPrompt(issues, this.o.brief));
+      r = await this.send(s, storyboardFixPrompt(issues, this.o.brief), undefined, PLAN_THINKING);
     }
     await this.commit(this.say('分镜', 'Storyboard'));
     await s.close();
@@ -528,10 +532,9 @@ export class Director {
     this.state.stage = 'script'; this.save();
     this.serverMeta();
     const s = await this.session('planner', plannerSystem(this.o.style, this.o.brief.preferences, this.o.brief.styleNotes, this.o.brief.brand, userAssets(this.project.dir)), MAX.planTurns, this.state.planner);
-    let r = await this.send(s, scriptPrompt(feedback, this.o.brief) + this.unseen('planner'));
+    let r = await this.send(s, scriptPrompt(feedback, this.o.brief) + this.unseen('planner'), undefined, PLAN_THINKING);
     this.state.planner = s.ref; this.save();
     let check: Awaited<ReturnType<Project['scriptCheck']>>;
-    let resized = false;
     for (let ask = 0; ; ask++) {
       // the planner rewrites script.js: put the server-owned fields back (a lost META.voice once rendered a silent film)
       this.serverMeta();
@@ -542,26 +545,12 @@ export class Director {
       const timeline = await this.project.timeline();
       const narrated = new Set(timeline.pages.map((p) => p.id));
       const missing = this.project.storyboard().pages.map((p) => p.id).filter((id) => !narrated.has(id));
-      // the length the user chose is kept to: a narration that runs well over is sent back once to be condensed (not
-      // after the user's own changes to the storyboard: what they asked for comes first)
-      // and one that falls short of it is sent back once to be filled out (a film of fewer, longer pages came out at 48 s
-      // of 60: the planner wrote as many lines a page as before)
-      const target = this.o.brief.durationSec, sized = !missing.length && !feedback && !resized && target > 0;
-      const over = sized && timeline.duration > lengthBudget(target).estimateSec, short = sized && timeline.duration < lengthBudget(target).leastSec;
-      const m = (sec: number) => Math.round(sec / 6) / 10;
-      if (short) {
-        resized = true;
-        r = await this.send(s, `script.js is estimated at ${m(timeline.duration)} minutes; the film is ${m(target)} minutes, the length the user chose and pays for, and real narration comes out shorter than the estimate, so the estimate should land between ${m(target * 1.1)} and ${m(lengthBudget(target).estimateSec)}. Fill it out on the pages you have: more of the explanation, a concrete example or number, the step the viewer would ask about (more cues on a page, never padding or repetition), keeping the storyboard's beats. Then run node engine/tools/script.mjs and stop. If the narration is the user's own, written out in their brief, leave it as it is and stop: their words are not padded. ` + replyNote(this.o.brief.replyLang, this.o.brief.lang));
-        continue;
-      }
-      if (over) {
-        resized = true;
-        r = await this.send(s, `script.js is estimated at ${m(timeline.duration)} minutes; the film is ${m(target)} minutes, the length the user chose and pays for, and the estimate may run at most ${m(lengthBudget(target).estimateSec)}. Condense the narration to fit: keep every page and every main point, and cut secondary detail, extra examples, repetition and asides (fewer cues on a page, shorter lines). Then run node engine/tools/script.mjs, stop, and say in your report what was condensed. ` + replyNote(this.o.brief.replyLang, this.o.brief.lang));
-        continue;
-      }
+      // the narration is never sent back for its length: the planner fits it as it writes (the storyboard's pages are
+      // held to the length), and a rewrite to trim or fill it cost more than the film's own words (2026-10-29: ten
+      // rounds of trimming a pasted script, ~100 credits)
       if (!missing.length) break;
       if (ask === MAX.scriptFix) this.fail('script', this.say(`口播没有写完：分镜里的 ${missing.join('、')} 没有口播`, `The narration is unfinished: ${missing.join(', ')} of the storyboard ha${missing.length > 1 ? 've' : 's'} no narration`) + (r.error ? ` (${r.error})` : ''));
-      r = await this.send(s, `script.js has no narration for ${missing.join(', ')}: every page of storyboard.json needs its entry in PAGES, in the storyboard's order, with the same id. Add the missing pages and keep the ones already written, then run node engine/tools/script.mjs and stop. ` + replyNote(this.o.brief.replyLang, this.o.brief.lang));
+      r = await this.send(s, `script.js has no narration for ${missing.join(', ')}: every page of storyboard.json needs its entry in PAGES, in the storyboard's order, with the same id. Add the missing pages and keep the ones already written, then run node engine/tools/script.mjs and stop. ` + replyNote(this.o.brief.replyLang, this.o.brief.lang), undefined, PLAN_THINKING);
     }
     await this.commit(this.say('口播', 'Narration'));
     await s.close();
@@ -668,8 +657,9 @@ export class Director {
     const sb = this.project.storyboard();
     const designed = this.designed();
     const items = kitPlan(sb.look);
-    // a film drawn in one lane needs none: one session draws every page and sees what it drew
-    if (!kitWanted(sb.pages.length, items) || (this.lanesOn() && laneCount(sb.pages.length) === 1)) { this.state.kit = { status: 'none', components: [] }; this.save(); return; }
+    // a film drawn in one lane needs none: one session draws every page and sees what it drew; nor does a film drawn in
+    // pictures (its pages only draw its pictures in)
+    if (!kitWanted(sb.pages.length, items) || (this.lanesOn() && laneCount(sb.pages.length) === 1) || this.pictureStyle()?.led) { this.state.kit = { status: 'none', components: [] }; this.save(); return; }
     this.emit({ type: 'kit', status: 'start', components: items.map((x) => x.name) });
     // sessions side by side, each writing up to KIT_PER_SESSION components one after the other: the pages wait on the
     // slowest session, not on the sum (one session writing a 6-page film's two components took 10 minutes, at medium)
@@ -815,7 +805,11 @@ export class Director {
     now.items = [...now.items.filter((x) => x.id !== pic.id), pic];
     if (notes) now.notes = notes;
     this.project.write(PICTURES_MANIFEST, JSON.stringify(now, null, 2) + '\n');
-    if (old && old.file !== pic.file) { try { fs.rmSync(this.project.file(picturePath(old))); } catch { /* gone */ } }
+    if (old && old.file !== pic.file) for (const f of [picturePath(old), inkPath(old)]) { try { fs.rmSync(this.project.file(f)); } catch { /* gone */ } }
+    // a style that draws its pictures in on the page reads where each one's ink is (ink.ts)
+    if (this.pictureStyle()?.led) {
+      try { const js = inkScript(pic.file, new Uint8Array(readIn(this.o.dir, picturePath(pic), { record: true }))); if (js) writeIn(this.o.dir, inkPath(pic), js, { record: true }); } catch (e) { console.warn(`[pictures] ${pic.id}: no ink map: ${(e as Error).message}`); }
+    }
     freeze(this.o.dir, picturePath(pic));
     return old;
   }
@@ -834,7 +828,7 @@ export class Director {
     if (!style || !plan.length) { this.state.pictures = 'none'; this.save(); return; }
     const pics = readPictures(this.o.dir);
     const drawn = new Map<string, Picture>();
-    const one = async (p: PicturePlan, refs: (Picture | string)[], mode: 'none' | 'look' | 'same' | 'own') => {
+    const one = async (p: PicturePlan, refs: (Picture | string)[], mode: 'none' | 'look' | 'same' | 'own' | 'cast') => {
       // a picture of the person's own subject is drawn from their file, whatever else it would be drawn from
       if (p.from) { refs = [p.from]; mode = 'own'; }
       const prompt = picturePrompt(style, p, pics.notes, mode), key = pictureKey(p, pics.notes);
@@ -855,16 +849,18 @@ export class Director {
     const [first, ...rest] = plan;
     await one(first, [], 'none');
     const sample = drawn.get(first.id);
-    const look = (): [Picture[], 'none' | 'look'] => (sample ? [[sample], 'look'] : [[], 'none']);
-    await pool(rest.filter((p) => !p.like), PICTURES_AT_ONCE, (p) => one(p, ...look()));
-    await pool(rest.filter((p) => p.like), PICTURES_AT_ONCE, (p) => { const base = drawn.get(p.like!); return base ? one(p, [base], 'same') : one(p, ...look()); });
+    // in a style with a cast sheet the sample is the sheet: every picture is drawn from it, its people as they are there
+    const look = (): [Picture[], 'none' | 'look' | 'cast'] => (sample ? [[sample], style.cast ? 'cast' : 'look'] : [[], 'none']);
+    const many = PICTURES_AT_ONCE;
+    await pool(rest.filter((p) => !p.like), many, (p) => one(p, ...look()));
+    await pool(rest.filter((p) => p.like), many, (p) => { const base = drawn.get(p.like!); return base ? one(p, [base], 'same') : one(p, ...look()); });
     // pictures the storyboard no longer asks for are let go
     const now = readPictures(this.o.dir);
     const gone = now.items.filter((x) => !plan.some((p) => p.id === x.id));
     if (gone.length) {
       now.items = now.items.filter((x) => !gone.includes(x));
       this.project.write(PICTURES_MANIFEST, JSON.stringify(now, null, 2) + '\n');
-      for (const g of gone) { try { fs.rmSync(this.project.file(picturePath(g))); } catch { /* gone */ } }
+      for (const g of gone) for (const f of [picturePath(g), inkPath(g)]) { try { fs.rmSync(this.project.file(f)); } catch { /* gone */ } }
     }
     this.state.pictures = 'done'; this.save();
     this.freezePictures();
@@ -909,7 +905,7 @@ export class Director {
       ?? pics.items.map((x) => (plan.find((q) => q.id === x.id)?.like === id ? clean(x) : undefined)).find(Boolean);
     const look = [plan[0].id, ...plan.map((q) => q.id)].map((pid) => (pid === id ? undefined : clean(pics.items.find((x) => x.id === pid)))).find(Boolean);
     // another pose of it is drawn from as the same one, not copied: its hat and props stay with it ('kin')
-    const [refs, mode]: [(Picture | string)[], 'none' | 'look' | 'same' | 'own' | 'kin'] = itself ? [[itself], 'same'] : kin ? [[kin], p.like ? 'same' : 'kin'] : p.from ? [[p.from], 'own'] : look ? [[look], 'look'] : [[], 'none'];
+    const [refs, mode]: [(Picture | string)[], 'none' | 'look' | 'same' | 'own' | 'kin' | 'cast'] = itself ? [[itself], 'same'] : kin ? [[kin], p.like ? 'same' : 'kin'] : p.from ? [[p.from], 'own'] : look ? [[look], style.cast && look.id === plan[0].id ? 'cast' : 'look'] : [[], 'none'];
     this.pictureEvent(p, 'drawing', { note: change });
     let pic: Picture;
     // drawn from another pose of it: what that one adds (a hat, a prop) is named, or the image model copies it
@@ -1328,7 +1324,7 @@ export class Director {
       const unchanged = () => before !== undefined && this.project.read(`pages/${id}.js`) === before;
       let r: TurnResult | undefined, declined: string | undefined;
       if (!was) {
-        r = await this.send(s, next + pagePrompt(sb, id, t, this.o.brief.lang, this.o.brief.replyLang, !!fix, this.o.brief.brand, this.assetsOn(sb, id), picturePageNote(this.picturesOn(sb, id))) + (fix ? revisionNote(id, fix, this.project.read(`pages/${id}.js`), this.state.firstPage === 'waiting') : added ? addedNote(this.state.revision![id]) : '') + directionsNote(this.directions(`page-${id}`)), undefined, PAGE_THINKING);
+        r = await this.send(s, next + pagePrompt(sb, id, t, this.o.brief.lang, this.o.brief.replyLang, !!fix, this.o.brief.brand, this.assetsOn(sb, id), picturePageNote(this.picturesOn(sb, id), this.pictureStyle())) + (fix ? revisionNote(id, fix, this.project.read(`pages/${id}.js`), this.state.firstPage === 'waiting') : added ? addedNote(this.state.revision![id]) : '') + directionsNote(this.directions(`page-${id}`)), undefined, PAGE_THINKING);
         if (!this.project.exists(`pages/${id}.js`)) r = await this.send(s, `pages/${id}.js does not exist yet; write it, then stop.`, undefined, PAGE_THINKING);
         if (!this.project.exists(`pages/${id}.js`)) throw new Error(r.error || this.say('没有写出页面文件', 'No page file was written'));
         // the agent found nothing to change (already so, or nothing this page can do): it says why instead of searching
@@ -1489,7 +1485,8 @@ export class Director {
         if (/stopped answering twice/.test(e.message)) throw new Error(this.say('浏览器两次没有响应，导出停下了。再导出一次通常就好，已经画好的片段会直接用上', 'The browser stopped responding twice, so the export stopped. Exporting again usually works, and the parts already drawn are reused'));
         throw e;
       });
-    const duration = await this.project.duration(out.withSubs);
+    // the film is made: a length ffmpeg can't read here (it couldn't start in this process) is the time line's, not a failed export
+    const duration = await this.project.duration(out.withSubs).catch(async () => (await this.project.timeline()).duration);
     this.state.video = out.withSubs; this.state.exported = true; this.save();
     const saved = this.saveCopies(out);
     this.emit({ type: 'stage', stage: 'render', status: 'done' });
@@ -1651,16 +1648,16 @@ export class Director {
     fs.rmSync(this.project.file(PLAN_FILE), { force: true });   // last change's plan is not this one's
     const read = () => readRevisionPlan(this.project.exists(PLAN_FILE) ? this.project.read(PLAN_FILE) : undefined, this.project.storyboard().pages.map((p) => p.id));
     try {
-      let r = await this.send(s, first ? this.firstPagePlanPrompt(request, first) : this.planPrompt(request, named));
+      let r = await this.send(s, first ? this.firstPagePlanPrompt(request, first) : this.planPrompt(request, named), undefined, PLAN_THINKING);
       let got = read();
       if ('plan' in got) return got;
       if (r.stopReason === 'error') {
         // the model gave no answer (its service failed): the same question again, in a session of its own
         await s.close();
         s = await this.session('reviser', system, MAX.planTurns);
-        r = await this.send(s, first ? this.firstPagePlanPrompt(request, first) : this.planPrompt(request, named));
+        r = await this.send(s, first ? this.firstPagePlanPrompt(request, first) : this.planPrompt(request, named), undefined, PLAN_THINKING);
       } else {
-        r = await this.send(s, `${got.problem}, so the change can't go ahead. Write ${PLAN_FILE} now, as { "pages": [{ "id": "p03", "note": "…" }] } with the storyboard's page ids, or { "pages": [] } when no page's picture changes. Keep what you already changed in the files; don't do it again.`);
+        r = await this.send(s, `${got.problem}, so the change can't go ahead. Write ${PLAN_FILE} now, as { "pages": [{ "id": "p03", "note": "…" }] } with the storyboard's page ids, or { "pages": [] } when no page's picture changes. Keep what you already changed in the files; don't do it again.`, undefined, PLAN_THINKING);
       }
       got = read();
       if ('plan' in got) return got;

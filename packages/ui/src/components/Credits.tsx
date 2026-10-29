@@ -1,7 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { ArrowUpRight, Coins, X } from 'lucide-react';
 import { hosted, shortOf } from '../lib/client';
-import { isWorking, money, type RunView } from '../lib/run';
+import { finished, isWorking, money, type RunView } from '../lib/run';
 import { useT } from '../i18n';
 
 /** a hosted service's credits, read on load, every half minute and whenever the tab comes back into view (a film spends
@@ -26,7 +26,7 @@ export function useCredits() {
 export function useFilmCredits(project: string, run: RunView) {
   const spent = hosted?.credits?.spent;
   const working = isWorking(run);
-  const [v, setV] = useState<{ spent: number; goAhead?: number; cost?: number } | null>(null);
+  const [v, setV] = useState<{ spent: number; quote?: number; goAhead?: number; cost?: number } | null>(null);
   useEffect(() => {
     if (!spent) return;
     let alive = true;
@@ -48,14 +48,18 @@ export function useSpent(project: string, run: RunView) {
   return v == null ? null : t('common.credits', { n: v.spent.toLocaleString(locale === 'zh' ? 'zh-CN' : 'en-US') });
 }
 
-/** on a hosted service, what this film has spent; its admins also see what it cost the service */
+/** on a hosted service, what this film has spent; its admins also see what it cost the service. Until the film is first
+ *  ready it says what the whole film is quoted at instead: a count running up through the storyboard (most of a film's
+ *  thinking) read as a film costing far more than it does */
 export function FilmCredits({ project, run }: { project: string; run: RunView }) {
   const { t, locale } = useT();
   const v = useFilmCredits(project, run);
   if (!v) return null;
+  const fmt = (n: number) => n.toLocaleString(locale === 'zh' ? 'zh-CN' : 'en-US');
+  const quoted = !finished(run) && v.quote != null;
   return (
-    <span className="shrink-0 text-[12.5px] text-ink-3 tabular" title={t('common.filmSpentTitle')}>
-      {t('common.filmSpent', { n: v.spent.toLocaleString(locale === 'zh' ? 'zh-CN' : 'en-US') })}
+    <span className="shrink-0 text-[12.5px] text-ink-3 tabular" title={t(quoted ? 'common.filmQuoteTitle' : 'common.filmSpentTitle')}>
+      {quoted ? t('common.filmQuote', { n: fmt(v.quote!) }) : t('common.filmSpent', { n: fmt(v.spent) })}
       {v.cost != null && <span title={t('common.filmCostTitle')}>{` · ${money({ amount: v.cost, currency: 'USD' })}`}</span>}
     </span>
   );

@@ -111,7 +111,7 @@ export interface Hosted {
     /** the credits one film has spent so far, shown instead of what it cost in money, and what its go-ahead needs in the
      * balance (a storyboard waiting for it says so before the button is pressed); null when nothing is metered. `cost`:
      * what the film cost the service in US dollars, given only to its admins, to trace costs */
-    spent?(project: string): Promise<{ spent: number; goAhead?: number; cost?: number } | null>;
+    spent?(project: string): Promise<{ spent: number; quote?: number; goAhead?: number; cost?: number } | null>;
   };
   /** what the person does in the workbench (lib/track.ts): a short name and a few small plain fields, never what was
    *  typed; absent: nothing is told to anyone */

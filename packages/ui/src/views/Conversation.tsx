@@ -35,13 +35,14 @@ function Said({ text }: { text: string }) {
   );
 }
 
-/** a stage's work in plain words, folded: “Steps · Read “Pomodoro”, Wrote the storyboard, Checked the storyboard ×2” */
+/** a stage's work in plain words, folded: “Steps · Read “Pomodoro”, Wrote the storyboard, Checked the storyboard ×2”.
+ *  The model's own thinking stays out: its summaries open with "The user is asking…" and read as the model doubting the
+ *  person; what the director decided is in its reply */
 function Process({ items }: { items: FeedItem[] }) {
   const { locale } = useT();
   const [open, setOpen] = useState(false);
   const steps = useMemo(() => summarizeTools(items.flatMap((i) => (i.kind === 'tools' ? i.calls : []))), [items, locale]);
-  const thoughts = items.filter((i): i is Extract<FeedItem, { kind: 'think' }> => i.kind === 'think');
-  if (!steps.length && !thoughts.length) return null;
+  if (!steps.length) return null;
   const preview = steps.slice(0, 3).map(stepText).join(t('conversation.listJoin'));
   return (
     <div>
@@ -52,7 +53,6 @@ function Process({ items }: { items: FeedItem[] }) {
       {open && (
         <ol className="mt-2 space-y-1.5 animate-fade pl-5">
           {steps.map((s, i) => <li key={i} className="text-[12.5px] text-ink-2">{s.text}{s.count > 1 && <span className="ml-1 text-ink-3">{t('conversation.times', { n: s.count })}</span>}</li>)}
-          {thoughts.map((t) => <li key={t.key} className="line-clamp-3 border-l border-line pl-2.5 text-[12px] italic leading-relaxed text-ink-3">{t.text}</li>)}
         </ol>
       )}
     </div>
