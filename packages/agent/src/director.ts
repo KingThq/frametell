@@ -184,9 +184,12 @@ This page is new: the film is finished and the user's change adds it. What it sh
 // Pages are drawn at low thinking, drafts and check rounds alike; on a gateway's …-high model that means its …-low
 // sibling. Most of a page's time and cost was the model thinking before writing: on the same pages a -high draft took
 // 170–220 s and a -medium one 37–74 s, with no worse a page; at medium a page still wrote ~8k output tokens for ~1k of
-// code, most of it thought, and low draws pages as good for a fraction of it. The storyboard and the narration keep
-// the model's own level.
+// code, most of it thought, and low draws pages as good for a fraction of it.
 const PAGE_THINKING: Thinking = 'low';
+/** the storyboard, the narration and a change's plan: at the model's own level (medium) a one-minute storyboard thought
+ *  12k tokens before writing and 15k more while writing, ~5½ minutes and ~$1 before the user saw anything (2026-10-29);
+ *  its check rounds catch what a quicker draft misses, as the pages' do */
+const PLAN_THINKING: Thinking = 'low';
 /** the film's components: a few small drawings every page is waiting on (at medium, one kettle took 44k tokens and
  *  7½ minutes of thought); the kit's check and reviewer catch what a quicker draft gets wrong */
 const KIT_THINKING: Thinking = 'low';
@@ -495,10 +498,10 @@ export class Director {
     const all = fs.existsSync(this.project.file('materials')) ? fs.readdirSync(this.project.file('materials')).filter((f) => !f.startsWith('.')) : [];
     const materials = all.filter((f) => /\.(md|markdown|txt|png|jpe?g|webp|gif)$/i.test(f));
     const s = await this.session('planner', plannerSystem(this.o.style, this.o.brief.preferences, this.o.brief.styleNotes, this.o.brief.brand, userAssets(this.project.dir)), MAX.planTurns, this.state.planner);
-    let r = await this.send(s, storyboardPrompt(this.o.brief, this.o.style, materials, picturePlanNote(this.pictureStyle(), this.own())));
+    let r = await this.send(s, storyboardPrompt(this.o.brief, this.o.style, materials, picturePlanNote(this.pictureStyle(), this.own())), undefined, PLAN_THINKING);
     this.state.planner = s.ref; this.save();
     // a turn can end without the file (seen: a gateway answering a one-token "." mid-turn); ask once more, as for pages
-    if (!this.project.exists('storyboard.json') && r.stopReason !== 'max_turns') r = await this.send(s, 'storyboard.json does not exist yet; write it, then stop and report. ' + replyNote(this.o.brief.replyLang, this.o.brief.lang));
+    if (!this.project.exists('storyboard.json') && r.stopReason !== 'max_turns') r = await this.send(s, 'storyboard.json does not exist yet; write it, then stop and report. ' + replyNote(this.o.brief.replyLang, this.o.brief.lang), undefined, PLAN_THINKING);
     if (!this.project.exists('storyboard.json')) this.fail('storyboard', this.say(`没有写出分镜：${r.error || r.text}`, `No storyboard was written: ${r.error || r.text}`));
     // the film's language and length are the server's to say (the page agents and the checks read them from here): a
     // planner once raised its own target from 1 minute to 2
@@ -512,7 +515,7 @@ export class Director {
       this.emit({ type: 'storyboard_check', round, issues });
       const reds = issues.filter((i) => i.level === 'red');
       if (!reds.length || round > MAX.storyboardFix) break;
-      r = await this.send(s, storyboardFixPrompt(issues, this.o.brief));
+      r = await this.send(s, storyboardFixPrompt(issues, this.o.brief), undefined, PLAN_THINKING);
     }
     await this.commit(this.say('分镜', 'Storyboard'));
     await s.close();
@@ -529,7 +532,7 @@ export class Director {
     this.state.stage = 'script'; this.save();
     this.serverMeta();
     const s = await this.session('planner', plannerSystem(this.o.style, this.o.brief.preferences, this.o.brief.styleNotes, this.o.brief.brand, userAssets(this.project.dir)), MAX.planTurns, this.state.planner);
-    let r = await this.send(s, scriptPrompt(feedback, this.o.brief) + this.unseen('planner'));
+    let r = await this.send(s, scriptPrompt(feedback, this.o.brief) + this.unseen('planner'), undefined, PLAN_THINKING);
     this.state.planner = s.ref; this.save();
     let check: Awaited<ReturnType<Project['scriptCheck']>>;
     for (let ask = 0; ; ask++) {
@@ -547,7 +550,7 @@ export class Director {
       // rounds of trimming a pasted script, ~100 credits)
       if (!missing.length) break;
       if (ask === MAX.scriptFix) this.fail('script', this.say(`口播没有写完：分镜里的 ${missing.join('、')} 没有口播`, `The narration is unfinished: ${missing.join(', ')} of the storyboard ha${missing.length > 1 ? 've' : 's'} no narration`) + (r.error ? ` (${r.error})` : ''));
-      r = await this.send(s, `script.js has no narration for ${missing.join(', ')}: every page of storyboard.json needs its entry in PAGES, in the storyboard's order, with the same id. Add the missing pages and keep the ones already written, then run node engine/tools/script.mjs and stop. ` + replyNote(this.o.brief.replyLang, this.o.brief.lang));
+      r = await this.send(s, `script.js has no narration for ${missing.join(', ')}: every page of storyboard.json needs its entry in PAGES, in the storyboard's order, with the same id. Add the missing pages and keep the ones already written, then run node engine/tools/script.mjs and stop. ` + replyNote(this.o.brief.replyLang, this.o.brief.lang), undefined, PLAN_THINKING);
     }
     await this.commit(this.say('口播', 'Narration'));
     await s.close();
@@ -1644,16 +1647,16 @@ export class Director {
     fs.rmSync(this.project.file(PLAN_FILE), { force: true });   // last change's plan is not this one's
     const read = () => readRevisionPlan(this.project.exists(PLAN_FILE) ? this.project.read(PLAN_FILE) : undefined, this.project.storyboard().pages.map((p) => p.id));
     try {
-      let r = await this.send(s, first ? this.firstPagePlanPrompt(request, first) : this.planPrompt(request, named));
+      let r = await this.send(s, first ? this.firstPagePlanPrompt(request, first) : this.planPrompt(request, named), undefined, PLAN_THINKING);
       let got = read();
       if ('plan' in got) return got;
       if (r.stopReason === 'error') {
         // the model gave no answer (its service failed): the same question again, in a session of its own
         await s.close();
         s = await this.session('reviser', system, MAX.planTurns);
-        r = await this.send(s, first ? this.firstPagePlanPrompt(request, first) : this.planPrompt(request, named));
+        r = await this.send(s, first ? this.firstPagePlanPrompt(request, first) : this.planPrompt(request, named), undefined, PLAN_THINKING);
       } else {
-        r = await this.send(s, `${got.problem}, so the change can't go ahead. Write ${PLAN_FILE} now, as { "pages": [{ "id": "p03", "note": "…" }] } with the storyboard's page ids, or { "pages": [] } when no page's picture changes. Keep what you already changed in the files; don't do it again.`);
+        r = await this.send(s, `${got.problem}, so the change can't go ahead. Write ${PLAN_FILE} now, as { "pages": [{ "id": "p03", "note": "…" }] } with the storyboard's page ids, or { "pages": [] } when no page's picture changes. Keep what you already changed in the files; don't do it again.`, undefined, PLAN_THINKING);
       }
       got = read();
       if ('plan' in got) return got;
